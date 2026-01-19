@@ -1089,3 +1089,114 @@ fn empty_tally_approval_is_zero() {
 		);
 	});
 }
+
+#[test]
+fn zero_balance_vote_is_rejected() {
+	new_test_ext().execute_with(|| {
+		assert_noop!(
+			Voting::vote(RuntimeOrigin::signed(1), 3, aye(0, 0)),
+			Error::<Test>::ZeroVote
+		);
+		assert_noop!(
+			Voting::vote(RuntimeOrigin::signed(1), 3, nay(0, 0)),
+			Error::<Test>::ZeroVote
+		);
+	});
+}
+
+#[test]
+fn zero_balance_delegation_is_rejected() {
+	new_test_ext().execute_with(|| {
+		assert_noop!(
+			Voting::delegate(RuntimeOrigin::signed(1), 0, 2, Conviction::None, 0),
+			Error::<Test>::ZeroVote
+		);
+	});
+}
+
+#[test]
+fn cleanup_empty_storage_works() {
+	new_test_ext().execute_with(|| {
+		// Create an empty vote by voting and then removing it immediately
+		assert_ok!(Voting::vote(RuntimeOrigin::signed(1), 3, aye(10, 0)));
+		assert_ok!(Voting::remove_vote(RuntimeOrigin::signed(1), None, 3));
+		assert_ok!(Voting::unlock(RuntimeOrigin::signed(1), class(3), 1));
+
+		// Verify the entry has been automatically cleaned up by unlock
+		assert!(!VotingFor::<Test>::contains_key(&1, &class(3)));
+
+		// Try to clean it up again — should fail since nothing remains
+		assert_noop!(
+			Voting::cleanup_empty_storage(RuntimeOrigin::signed(2), 1, class(3)),
+			Error::<Test>::NotVoter
+		);
+	});
+}
+
+#[test]
+fn cleanup_rejects_non_empty_storage() {
+	new_test_ext().execute_with(|| {
+		assert_ok!(Voting::vote(RuntimeOrigin::signed(1), 3, aye(10, 0)));
+
+		// Should fail because there's an active vote
+		assert_noop!(
+			Voting::cleanup_empty_storage(RuntimeOrigin::signed(2), 1, class(3)),
+			Error::<Test>::NotVoter
+		);
+	});
+}
+
+#[test]
+fn automatic_cleanup_on_undelegate() {
+	new_test_ext().execute_with(|| {
+		// Delegate and then undelegate
+		assert_ok!(Voting::delegate(RuntimeOrigin::signed(1), 0, 2, Conviction::None, 5));
+		assert_ok!(Voting::undelegate(RuntimeOrigin::signed(1), 0));
+		assert_ok!(Voting::unlock(RuntimeOrigin::signed(1), 0, 1));
+
+		// After unlock the entry should have been automatically cleaned up
+		assert!(!VotingFor::<Test>::contains_key(&1, &0u8));
+	});
+}
+
+#[test]
+fn class_locks_cleanup_works() {
+	new_test_ext().execute_with(|| {
+		Polls::set(
+			vec![(0, Ongoing(Tally::new(0), 0)), (1, Ongoing(Tally::new(0), 1))]
+				.into_iter()
+				.collect(),
+		);
+
+		// Vote on multiple classes
+		assert_ok!(Voting::vote(RuntimeOrigin::signed(1), 0, aye(5, 1)));
+		assert_ok!(Voting::vote(RuntimeOrigin::signed(1), 1, aye(10, 1)));
+
+		// Remove all votes and unlock
+		assert_ok!(Voting::remove_vote(RuntimeOrigin::signed(1), Some(0), 0));
+		assert_ok!(Voting::remove_vote(RuntimeOrigin::signed(1), Some(1), 1));
+		assert_ok!(Voting::unlock(RuntimeOrigin::signed(1), 0, 1));
+		assert_ok!(Voting::unlock(RuntimeOrigin::signed(1), 1, 1));
+
+		// After unlock, ClassLocksFor should have been cleaned up
+		assert!(!ClassLocksFor::<Test>::contains_key(&1));
+	});
+}
+
+#[test]
+fn cleanup_empty_storage_cleans_class_locks_only() {
+	new_test_ext().execute_with(|| {
+		// Manually insert a stale ClassLocksFor entry with a zero-balance lock,
+		// simulating legacy state that pre-dates the automatic cleanup logic.
+		ClassLocksFor::<Test>::mutate(&1u64, |locks| {
+			let _ = locks.try_push((0u8, 0u64));
+		});
+
+		// cleanup_empty_storage should succeed even without a matching VotingFor entry,
+		// because it also handles ClassLocksFor-only cleanup.
+		assert_ok!(Voting::cleanup_empty_storage(RuntimeOrigin::signed(2), 1, class(3)));
+
+		// The stale entry should now be gone
+		assert!(!ClassLocksFor::<Test>::contains_key(&1));
+	});
+}

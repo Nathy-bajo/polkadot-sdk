@@ -94,7 +94,7 @@ pub mod pallet {
 	use super::*;
 	use frame_support::{
 		pallet_prelude::{
-			DispatchResultWithPostInfo, IsType, StorageDoubleMap, StorageMap, ValueQuery,
+			DispatchResultWithPostInfo, IsType, Pays, StorageDoubleMap, StorageMap, ValueQuery,
 		},
 		traits::ClassCountOf,
 		Twox64Concat,
@@ -234,6 +234,8 @@ pub mod pallet {
 		ClassNeeded,
 		/// The class ID supplied is invalid.
 		BadClass,
+		/// A vote with zero balance has no effect and is not allowed.
+		ZeroVote,
 	}
 
 	#[pallet::call]
@@ -419,6 +421,65 @@ pub mod pallet {
 			Self::try_remove_vote(&target, index, Some(class), scope)?;
 			Ok(())
 		}
+
+		/// Remove an empty/stale `VotingFor` entry and/or zero-balance `ClassLocksFor` entries
+		/// for the given account and class.
+		///
+		/// A `VotingFor` entry is considered empty when it contains no active votes, no
+		/// delegations, and no prior lock balance. Such entries can accumulate over time and
+		/// unnecessarily bloat chain storage.
+		///
+		/// Any signed account may call this on behalf of any other account, since the operation
+		/// is always in the interest of the chain. On success, the transaction fee is refunded to
+		/// incentivise callers to participate in storage cleanup.
+		///
+		/// - `who`: The account whose stale storage entry should be removed.
+		/// - `class`: The voting class of the `VotingFor` entry to remove.
+		///
+		/// Emits nothing. Returns `Pays::No` on success so the caller is fee-refunded.
+		///
+		/// Weight: `O(C)` where C is the number of voting classes the account has locks for.
+		#[pallet::call_index(6)]
+		#[pallet::weight(T::WeightInfo::cleanup_empty_storage())]
+		pub fn cleanup_empty_storage(
+			origin: OriginFor<T>,
+			who: AccountIdLookupOf<T>,
+			class: ClassOf<T, I>,
+		) -> DispatchResultWithPostInfo {
+			ensure_signed(origin)?;
+			let who = T::Lookup::lookup(who)?;
+
+			// Remove the VotingFor entry only if it is truly empty.
+			let voting_cleaned = VotingFor::<T, I>::mutate_exists(&who, &class, |voting_opt| {
+				if let Some(voting) = voting_opt {
+					if Self::is_empty_voting(voting) {
+						*voting_opt = None;
+						return true;
+					}
+				}
+				false
+			});
+
+			// Also prune any zero-balance class lock entries for this account.
+			let locks_cleaned = ClassLocksFor::<T, I>::mutate_exists(&who, |locks_opt| {
+				if let Some(locks) = locks_opt {
+					let len_before = locks.len();
+					locks.retain(|(_, balance)| !balance.is_zero());
+					let cleaned = locks.len() < len_before;
+					if locks.is_empty() {
+						*locks_opt = None;
+					}
+					cleaned
+				} else {
+					false
+				}
+			});
+
+			ensure!(voting_cleaned || locks_cleaned, Error::<T, I>::NotVoter);
+
+			// Refund the fee on success to incentivise third parties to clean up stale storage.
+			Ok(Pays::No.into())
+		}
 	}
 }
 
@@ -429,6 +490,8 @@ impl<T: Config<I>, I: 'static> Pallet<T, I> {
 		poll_index: PollIndexOf<T, I>,
 		vote: AccountVote<BalanceOf<T, I>>,
 	) -> DispatchResult {
+		// Votes with zero balance serve no purpose and would create empty storage entries.
+		ensure!(!vote.balance().is_zero(), Error::<T, I>::ZeroVote);
 		ensure!(
 			vote.balance() <= T::Currency::total_balance(who),
 			Error::<T, I>::InsufficientFunds
@@ -487,7 +550,8 @@ impl<T: Config<I>, I: 'static> Pallet<T, I> {
 		let class = class_hint
 			.or_else(|| Some(T::Polls::as_ongoing(poll_index)?.1))
 			.ok_or(Error::<T, I>::ClassNeeded)?;
-		VotingFor::<T, I>::try_mutate(who, class, |voting| {
+
+		VotingFor::<T, I>::try_mutate(who, &class, |voting| {
 			if let Voting::Casting(Casting { ref mut votes, delegations, ref mut prior }) = voting {
 				let i = votes
 					.binary_search_by_key(&poll_index, |i| i.0)
@@ -560,7 +624,12 @@ impl<T: Config<I>, I: 'static> Pallet<T, I> {
 			} else {
 				Ok(())
 			}
-		})
+		})?;
+
+		// Clean up if voting is now empty
+		Self::maybe_clean_voting(who, &class);
+
+		Ok(())
 	}
 
 	/// Return the number of votes for `who`.
@@ -631,6 +700,7 @@ impl<T: Config<I>, I: 'static> Pallet<T, I> {
 	) -> Result<u32, DispatchError> {
 		ensure!(who != target, Error::<T, I>::Nonsense);
 		T::Polls::classes().binary_search(&class).map_err(|_| Error::<T, I>::BadClass)?;
+		ensure!(!balance.is_zero(), Error::<T, I>::ZeroVote);
 		ensure!(balance <= T::Currency::total_balance(&who), Error::<T, I>::InsufficientFunds);
 		let votes =
 			VotingFor::<T, I>::try_mutate(&who, &class, |voting| -> Result<u32, DispatchError> {
@@ -701,7 +771,12 @@ impl<T: Config<I>, I: 'static> Pallet<T, I> {
 					Voting::Casting(_) => Err(Error::<T, I>::NotDelegating.into()),
 				}
 			})?;
-		Self::deposit_event(Event::<T, I>::Undelegated(who, class));
+
+		Self::deposit_event(Event::<T, I>::Undelegated(who.clone(), class.clone()));
+
+		// Clean up if voting is now empty
+		Self::maybe_clean_voting(&who, &class);
+
 		Ok(votes)
 	}
 
@@ -735,6 +810,7 @@ impl<T: Config<I>, I: 'static> Pallet<T, I> {
 			voting.rejig(T::BlockNumberProvider::current_block_number());
 			voting.locked_balance()
 		});
+
 		let lock_needed = ClassLocksFor::<T, I>::mutate(who, |locks| {
 			locks.retain(|x| &x.0 != class);
 			if !class_lock_needed.is_zero() {
@@ -748,6 +824,7 @@ impl<T: Config<I>, I: 'static> Pallet<T, I> {
 			}
 			locks.iter().map(|x| x.1).max().unwrap_or(Zero::zero())
 		});
+
 		if lock_needed.is_zero() {
 			T::Currency::remove_lock(CONVICTION_VOTING_ID, who);
 		} else {
@@ -758,5 +835,51 @@ impl<T: Config<I>, I: 'static> Pallet<T, I> {
 				WithdrawReasons::except(WithdrawReasons::RESERVE),
 			);
 		}
+
+		// Clean up empty storage entries
+		Self::maybe_clean_voting(who, class);
+		Self::maybe_clean_class_locks(who);
+	}
+
+	/// Check if a VotingFor entry is empty and should be removed from storage
+	fn is_empty_voting(voting: &VotingOf<T, I>) -> bool {
+		match voting {
+			Voting::Casting(Casting { votes, delegations, prior }) =>
+				votes.is_empty() &&
+					delegations.votes.is_zero() &&
+					delegations.capital.is_zero() &&
+					prior.locked().is_zero(),
+			Voting::Delegating(Delegating { balance, delegations, prior, .. }) =>
+				balance.is_zero() &&
+					delegations.votes.is_zero() &&
+					delegations.capital.is_zero() &&
+					prior.locked().is_zero(),
+		}
+	}
+
+	/// Clean up VotingFor storage if it's empty
+	fn maybe_clean_voting(who: &T::AccountId, class: &ClassOf<T, I>) {
+		VotingFor::<T, I>::mutate_exists(who, class, |voting_opt| {
+			if let Some(voting) = voting_opt {
+				if Self::is_empty_voting(voting) {
+					*voting_opt = None;
+				}
+			}
+		});
+	}
+
+	/// Clean up ClassLocksFor storage if all locks are zero
+	fn maybe_clean_class_locks(who: &T::AccountId) {
+		ClassLocksFor::<T, I>::mutate_exists(who, |locks_opt| {
+			if let Some(locks) = locks_opt {
+				// Remove all zero-balance locks
+				locks.retain(|(_, balance)| !balance.is_zero());
+
+				// If no locks remain, remove the entire entry
+				if locks.is_empty() {
+					*locks_opt = None;
+				}
+			}
+		});
 	}
 }
