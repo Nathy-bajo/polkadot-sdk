@@ -250,13 +250,13 @@ pub mod pallet {
 		/// - `call`: The call to be made by the `real` account.
 		#[pallet::call_index(0)]
 		#[pallet::weight({
-            let di = call.get_dispatch_info();
-            (T::WeightInfo::proxy(T::MaxProxies::get())
-                 // AccountData for inner call origin accountdata.
-                .saturating_add(T::DbWeight::get().reads_writes(1, 1))
-                .saturating_add(di.call_weight),
-            di.class)
-        })]
+			let di = call.get_dispatch_info();
+			(T::WeightInfo::proxy(T::MaxProxies::get())
+				 // AccountData for inner call origin accountdata.
+				.saturating_add(T::DbWeight::get().reads_writes(1, 1))
+				.saturating_add(di.call_weight),
+			di.class)
+		})]
 		pub fn proxy(
 			origin: OriginFor<T>,
 			real: AccountIdLookupOf<T>,
@@ -562,13 +562,13 @@ pub mod pallet {
 		/// - `call`: The call to be made by the `real` account.
 		#[pallet::call_index(9)]
 		#[pallet::weight({
-            let di = call.get_dispatch_info();
-            (T::WeightInfo::proxy_announced(T::MaxPending::get(), T::MaxProxies::get())
-                 // AccountData for inner call origin accountdata.
-                .saturating_add(T::DbWeight::get().reads_writes(1, 1))
-                .saturating_add(di.call_weight),
-            di.class)
-        })]
+			let di = call.get_dispatch_info();
+			(T::WeightInfo::proxy_announced(T::MaxPending::get(), T::MaxProxies::get())
+				 // AccountData for inner call origin accountdata.
+				.saturating_add(T::DbWeight::get().reads_writes(1, 1))
+				.saturating_add(di.call_weight),
+			di.class)
+		})]
 		pub fn proxy_announced(
 			origin: OriginFor<T>,
 			delegate: AccountIdLookupOf<T>,
@@ -1053,12 +1053,16 @@ impl<T: Config> Pallet<T> {
 				Some(Call::add_proxy { ref proxy_type, .. }) |
 				Some(Call::remove_proxy { ref proxy_type, .. })
 					if !def.proxy_type.is_superset(proxy_type) =>
-					false,
+				{
+					false
+				},
 				// Proxy call cannot remove all proxies or kill pure proxies unless it has full
 				// permissions.
 				Some(Call::remove_proxies { .. }) | Some(Call::kill_pure { .. })
 					if def.proxy_type != T::ProxyType::default() =>
-					false,
+				{
+					false
+				},
 				_ => def.proxy_type.filter_with_data(c, &def.proxy_data),
 			}
 		});

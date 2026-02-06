@@ -1103,6 +1103,8 @@ impl Default for ProxyType {
 }
 
 impl frame_support::traits::InstanceFilter<RuntimeCall> for ProxyType {
+	type ProxyData = (); // Add this line
+
 	fn filter(&self, c: &RuntimeCall) -> bool {
 		match self {
 			ProxyType::Any => true,
@@ -1115,6 +1117,11 @@ impl frame_support::traits::InstanceFilter<RuntimeCall> for ProxyType {
 					)
 			),
 		}
+	}
+
+	fn filter_with_data(&self, c: &RuntimeCall, _data: &Self::ProxyData) -> bool {
+		// For now, just use the same logic as filter()
+		self.filter(c)
 	}
 
 	fn is_superset(&self, o: &Self) -> bool {
@@ -1131,6 +1138,7 @@ impl pallet_proxy::Config for Runtime {
 	type RuntimeCall = RuntimeCall;
 	type Currency = Balances;
 	type ProxyType = ProxyType;
+	type ProxyData = ();
 	type ProxyDepositBase = ConstU128<1>;
 	type ProxyDepositFactor = ConstU128<1>;
 	type MaxProxies = ConstU32<32>;

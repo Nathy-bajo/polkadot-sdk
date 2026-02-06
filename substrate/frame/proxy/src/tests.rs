@@ -138,9 +138,6 @@ impl InstanceFilter<RuntimeCall> for ProxyType {
 					..
 				}) = c
 				{
-					// For testing, we'll track usage in a thread-local variable
-					// This is a hack for tests only!
-
 					// Get current block
 					let current_block = System::block_number();
 
@@ -353,7 +350,6 @@ fn proxy_call_struct_variant_works() {
 
 		let call = Box::new(call_transfer(3, 1));
 
-		// Use the struct variant syntax for Call::proxy
 		let proxy_call = RuntimeCall::Proxy(super::Call::proxy {
 			real: 1,
 			force_proxy_type: None,
@@ -1311,7 +1307,6 @@ fn transfer_limit_resets_after_period() {
 		// Try to transfer more in same period
 		let call = Box::new(call_transfer(6, 1));
 		assert_ok!(Proxy::proxy(RuntimeOrigin::signed(2), 1, None, call.clone()));
-		// The transfer might fail due to balance or other reasons
 
 		// Move to next period (block 11)
 		System::set_block_number(11);

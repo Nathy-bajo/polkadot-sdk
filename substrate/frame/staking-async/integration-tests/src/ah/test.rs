@@ -1621,6 +1621,7 @@ mod session_keys {
 				RuntimeOrigin::signed(stash),
 				proxy,
 				ProxyType::Staking,
+				Default::default(),
 				0, // no delay
 			));
 
