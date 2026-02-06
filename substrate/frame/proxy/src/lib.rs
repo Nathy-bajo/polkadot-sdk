@@ -369,7 +369,7 @@ pub mod pallet {
 			let proxy_def = ProxyDefinition {
 				delegate: who.clone(),
 				proxy_type: proxy_type.clone(),
-				proxy_data: T::ProxyData::default(), // Add default proxy data
+				proxy_data: T::ProxyData::default(),
 				delay,
 			};
 			let bounded_proxies: BoundedVec<_, T::MaxProxies> =
