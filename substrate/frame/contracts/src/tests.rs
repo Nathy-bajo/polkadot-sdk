@@ -391,6 +391,7 @@ impl pallet_proxy::Config for Test {
 	type RuntimeCall = RuntimeCall;
 	type Currency = Balances;
 	type ProxyType = ();
+	type ProxyData = ();
 	type ProxyDepositBase = ConstU64<1>;
 	type ProxyDepositFactor = ConstU64<1>;
 	type MaxProxies = ConstU32<32>;
@@ -2539,7 +2540,13 @@ fn failed_deposit_charge_should_roll_back_call() {
 				.build_and_unwrap_account_id();
 
 			// Give caller proxy access to Alice.
-			assert_ok!(Proxy::add_proxy(RuntimeOrigin::signed(ALICE), addr_caller.clone(), (), 0));
+			assert_ok!(Proxy::add_proxy(
+				RuntimeOrigin::signed(ALICE),
+				addr_caller.clone(),
+				(),
+				Default::default(),
+				0
+			));
 
 			// Create a Proxy call that will attempt to transfer away Alice's balance.
 			let transfer_call =
