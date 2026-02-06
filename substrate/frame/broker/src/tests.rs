@@ -2829,6 +2829,7 @@ fn reset_base_price_updates_sellout_price() {
 	});
 }
 
+#[test]
 fn remove_potential_renewal_rejects_non_admin_origin() {
 	TestExt::new().execute_with(|| {
 		assert_noop!(
@@ -2883,6 +2884,7 @@ fn reset_base_price_works() {
 	});
 }
 
+#[test]
 fn remove_potential_renewal_works() {
 	TestExt::new().endow(1, 1000).execute_with(|| {
 		assert_ok!(Broker::do_start_sales(100, 2));
@@ -3046,6 +3048,7 @@ fn reset_base_price_no_sales_fails() {
 	});
 }
 
+#[test]
 fn remove_potential_renewal_makes_auto_renewal_die() {
 	TestExt::new().endow(1, 1000).execute_with(|| {
 		assert_ok!(Broker::do_start_sales(100, 2));
