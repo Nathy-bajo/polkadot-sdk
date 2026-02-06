@@ -1331,6 +1331,7 @@ mod benches {
 		Ok(())
 	}
 
+	#[benchmark]
 	fn remove_potential_renewal() -> Result<(), BenchmarkError> {
 		let sale_data = setup_and_start_sale::<T>()?;
 		advance_to::<T>(2);
