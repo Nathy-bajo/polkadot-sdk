@@ -1120,7 +1120,6 @@ impl frame_support::traits::InstanceFilter<RuntimeCall> for ProxyType {
 	}
 
 	fn filter_with_data(&self, c: &RuntimeCall, _data: &Self::ProxyData) -> bool {
-		// For now, just use the same logic as filter()
 		self.filter(c)
 	}
 
