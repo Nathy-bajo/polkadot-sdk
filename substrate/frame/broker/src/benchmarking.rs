@@ -1324,9 +1324,16 @@ mod benches {
 		#[extrinsic_call]
 		_(admin_origin as T::RuntimeOrigin, new_base_price);
 
-		let sale = SaleInfo::<T>::get().unwrap();
+		// Advance to the next sale boundary to apply the new base price
+		let config = Configuration::<T>::get().ok_or(BenchmarkError::Weightless)?;
+		let timeslice_period: u32 =
+			T::TimeslicePeriod::get().try_into().map_err(|_| BenchmarkError::Weightless)?;
+		advance_to::<T>(config.region_length * timeslice_period);
+
+		let sale = SaleInfo::<T>::get().ok_or(BenchmarkError::Weightless)?;
 		assert_eq!(sale.end_price, new_base_price);
-		assert_last_event::<T>(Event::BasePriceReset { new_base_price }.into());
+
+		assert_has_event::<T>(Event::BasePriceReset { new_base_price }.into());
 
 		Ok(())
 	}
