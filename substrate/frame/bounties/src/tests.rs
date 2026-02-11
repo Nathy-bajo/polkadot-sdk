@@ -2197,7 +2197,7 @@ fn dust_bounty_acc_works_with_additional_assets() {
 		Balances::make_free_balance_be(&bounty_account, 100);
 		assert_ok!(Assets::transfer(RuntimeOrigin::signed(0), 1, bounty_account, 10));
 
-		// Forcibly remove the bounty record (simulating the bug).
+		// Forcibly remove the bounty record.
 		pallet_bounties::Bounties::<Test>::remove(0);
 		pallet_bounties::BountyDescriptions::<Test>::remove(0);
 
@@ -2231,7 +2231,7 @@ fn dust_bounty_acc_works_after_close_bounty() {
 		assert_ok!(Bounties::approve_bounty(RuntimeOrigin::root(), 0));
 		go_to_block(2);
 
-		// Extra funds added to the bounty account (the historical bug scenario).
+		// Extra funds added to the bounty account.
 		let bounty_account = Bounties::bounty_account_id(0);
 		Balances::make_free_balance_be(&bounty_account, 60);
 
