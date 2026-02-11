@@ -383,6 +383,46 @@ mod benchmarks {
 
 		Ok(())
 	}
+
+	#[benchmark]
+	fn dust_bounty_acc() -> Result<(), BenchmarkError> {
+		setup_pot_account::<T, I>();
+
+		let (caller, _, fee, value, reason) =
+			setup_bounty::<T, I>(0, T::MaximumReasonLength::get());
+		Bounties::<T, I>::propose_bounty(RawOrigin::Signed(caller).into(), value, reason)?;
+		let bounty_id = BountyCount::<T, I>::get() - 1;
+		let approve_origin =
+			T::SpendOrigin::try_successful_origin().map_err(|_| BenchmarkError::Weightless)?;
+		Bounties::<T, I>::approve_bounty(approve_origin.clone(), bounty_id)?;
+		set_block_number::<T, I>(T::SpendPeriod::get());
+		Treasury::<T, I>::on_initialize(frame_system::Pallet::<T>::block_number());
+
+		let bounty_account = Bounties::<T, I>::bounty_account_id(bounty_id);
+		Bounties::<T, I>::remove(bounty_id);
+		BountyDescriptions::<T, I>::remove(bounty_id);
+
+		// Confirm the pre-conditions.
+		assert!(
+			!crate::Bounties::<T, I>::contains_key(bounty_id),
+			"Bounty should be absent from storage"
+		);
+		assert!(
+			!T::Currency::free_balance(&bounty_account).is_zero(),
+			"Bounty account should have a balance to dust"
+		);
+
+		let dust_caller: T::AccountId = whitelisted_caller();
+
+		#[extrinsic_call]
+		_(RawOrigin::Signed(dust_caller), bounty_id);
+
+		assert_last_event::<T, I>(
+			Event::BountyAccDusted { bounty_id, who: whitelisted_caller() }.into(),
+		);
+
+		Ok(())
+	}
 	impl_benchmark_test_suite!(
 		Bounties,
 		crate::tests::ExtBuilder::default().build(),

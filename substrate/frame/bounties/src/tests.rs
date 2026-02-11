@@ -2022,3 +2022,255 @@ fn poke_deposit_works_for_non_proposer() {
 		assert_eq!(pallet_bounties::BountyCount::<Test>::get(), 1);
 	});
 }
+
+#[test]
+fn dust_bounty_acc_works_for_funded_bounty() {
+	ExtBuilder::default().build_and_execute(|| {
+		Balances::make_free_balance_be(&Treasury::account_id(), 101);
+
+		// Propose and approve a bounty so it gets funded.
+		assert_ok!(Bounties::propose_bounty(RuntimeOrigin::signed(0), 50, b"12345".to_vec()));
+		assert_ok!(Bounties::approve_bounty(RuntimeOrigin::root(), 0));
+		go_to_block(2);
+
+		// Bounty is now Funded; its sub-account holds 50.
+		let bounty_account = Bounties::bounty_account_id(0);
+		assert_eq!(Balances::free_balance(&bounty_account), 50);
+
+		// Simulate the historical bug: forcibly remove the bounty record while
+		// leaving the account funded.
+		pallet_bounties::Bounties::<Test>::remove(0);
+		pallet_bounties::BountyDescriptions::<Test>::remove(0);
+
+		let treasury_before = Treasury::pot();
+
+		// Anyone can call dust_bounty_acc.
+		assert_ok!(Bounties::dust_bounty_acc(RuntimeOrigin::signed(1), 0));
+
+		assert_eq!(last_event(), BountiesEvent::BountyAccDusted { bounty_id: 0, who: 1 },);
+
+		// Bounty account is now empty.
+		assert_eq!(Balances::free_balance(&bounty_account), 0);
+
+		// Treasury received the funds (minus any burn that happened at go_to_block(2)).
+		assert!(Treasury::pot() > treasury_before);
+	});
+}
+
+#[test]
+fn dust_bounty_acc_works_after_accidental_refund() {
+	ExtBuilder::default().build_and_execute(|| {
+		Balances::make_free_balance_be(&Treasury::account_id(), 101);
+
+		// Full lifecycle: propose → approve → fund → curator → award → claim
+		assert_ok!(Bounties::propose_bounty(RuntimeOrigin::signed(0), 50, b"12345".to_vec()));
+		assert_ok!(Bounties::approve_bounty(RuntimeOrigin::root(), 0));
+		go_to_block(2);
+
+		let fee = 4;
+		Balances::make_free_balance_be(&4, 10);
+		assert_ok!(Bounties::propose_curator(RuntimeOrigin::root(), 0, 4, fee));
+		assert_ok!(Bounties::accept_curator(RuntimeOrigin::signed(4), 0));
+		assert_ok!(Bounties::award_bounty(RuntimeOrigin::signed(4), 0, 3));
+		go_to_block(5);
+		assert_ok!(Bounties::claim_bounty(RuntimeOrigin::signed(1), 0));
+
+		// Bounty is now fully closed; verify it is gone from storage.
+		assert!(pallet_bounties::Bounties::<Test>::get(0).is_none());
+
+		let bounty_account = Bounties::bounty_account_id(0);
+		// Account should already be empty after claim.
+		assert_eq!(Balances::free_balance(&bounty_account), 0);
+
+		// Simulate someone accidentally sending funds to the closed bounty account.
+		Balances::make_free_balance_be(&bounty_account, 25);
+		assert_eq!(Balances::free_balance(&bounty_account), 25);
+
+		let treasury_before = Treasury::pot();
+
+		// Dust the account.
+		assert_ok!(Bounties::dust_bounty_acc(RuntimeOrigin::signed(99), 0));
+		assert_eq!(last_event(), BountiesEvent::BountyAccDusted { bounty_id: 0, who: 99 },);
+
+		assert_eq!(Balances::free_balance(&bounty_account), 0);
+		assert!(Treasury::pot() > treasury_before);
+	});
+}
+
+#[test]
+fn dust_bounty_acc_fails_when_bounty_still_active() {
+	ExtBuilder::default().build_and_execute(|| {
+		Balances::make_free_balance_be(&Treasury::account_id(), 101);
+		assert_ok!(Bounties::propose_bounty(RuntimeOrigin::signed(0), 50, b"12345".to_vec()));
+		assert_ok!(Bounties::approve_bounty(RuntimeOrigin::root(), 0));
+		go_to_block(2);
+
+		// Bounty is in Funded state (still exists in storage).
+		assert_noop!(
+			Bounties::dust_bounty_acc(RuntimeOrigin::signed(1), 0),
+			Error::<Test>::UnexpectedStatus
+		);
+	});
+}
+
+#[test]
+fn dust_bounty_acc_fails_when_bounty_in_proposed_state() {
+	ExtBuilder::default().build_and_execute(|| {
+		Balances::make_free_balance_be(&Treasury::account_id(), 101);
+		assert_ok!(Bounties::propose_bounty(RuntimeOrigin::signed(0), 50, b"12345".to_vec()));
+
+		// Bounty is in Proposed state (still exists in storage).
+		assert_noop!(
+			Bounties::dust_bounty_acc(RuntimeOrigin::signed(1), 0),
+			Error::<Test>::UnexpectedStatus
+		);
+	});
+}
+
+#[test]
+fn dust_bounty_acc_fails_when_bounty_in_curator_proposed_state() {
+	ExtBuilder::default().build_and_execute(|| {
+		Balances::make_free_balance_be(&Treasury::account_id(), 101);
+		assert_ok!(Bounties::propose_bounty(RuntimeOrigin::signed(0), 50, b"12345".to_vec()));
+		assert_ok!(Bounties::approve_bounty(RuntimeOrigin::root(), 0));
+		go_to_block(2);
+		assert_ok!(Bounties::propose_curator(RuntimeOrigin::root(), 0, 4, 4));
+
+		// Bounty is in CuratorProposed state.
+		assert_noop!(
+			Bounties::dust_bounty_acc(RuntimeOrigin::signed(1), 0),
+			Error::<Test>::UnexpectedStatus
+		);
+	});
+}
+
+#[test]
+fn dust_bounty_acc_fails_when_account_already_empty() {
+	ExtBuilder::default().build_and_execute(|| {
+		// There is no bounty at index 99 (never created) and no balance on the
+		// derived account → should return BountyAccountAlreadyEmpty.
+		assert_noop!(
+			Bounties::dust_bounty_acc(RuntimeOrigin::signed(1), 99),
+			Error::<Test>::BountyAccountAlreadyEmpty
+		);
+	});
+}
+
+#[test]
+fn dust_bounty_acc_fails_for_unsigned_origin() {
+	ExtBuilder::default().build_and_execute(|| {
+		assert_noop!(Bounties::dust_bounty_acc(RuntimeOrigin::none(), 0), DispatchError::BadOrigin);
+	});
+}
+
+#[test]
+fn dust_bounty_acc_can_be_called_by_anyone() {
+	ExtBuilder::default().build_and_execute(|| {
+		Balances::make_free_balance_be(&Treasury::account_id(), 101);
+		assert_ok!(Bounties::propose_bounty(RuntimeOrigin::signed(0), 50, b"12345".to_vec()));
+		assert_ok!(Bounties::approve_bounty(RuntimeOrigin::root(), 0));
+		go_to_block(2);
+
+		// Forcibly remove bounty, leave account funded.
+		pallet_bounties::Bounties::<Test>::remove(0);
+		pallet_bounties::BountyDescriptions::<Test>::remove(0);
+
+		// A random account (2) with only 1 token should be able to call this.
+		assert_ok!(Bounties::dust_bounty_acc(RuntimeOrigin::signed(2), 0));
+		assert_eq!(last_event(), BountiesEvent::BountyAccDusted { bounty_id: 0, who: 2 },);
+	});
+}
+
+#[test]
+fn dust_bounty_acc_works_with_additional_assets() {
+	ExtBuilder::default().build_and_execute(|| {
+		Balances::make_free_balance_be(&Treasury::account_id(), 101);
+		assert_ok!(Bounties::propose_bounty(RuntimeOrigin::signed(0), 50, b"12345".to_vec()));
+		assert_ok!(Bounties::approve_bounty(RuntimeOrigin::root(), 0));
+		go_to_block(2);
+		assert_ok!(Bounties::propose_curator(RuntimeOrigin::root(), 0, 0, 1));
+		assert_ok!(Bounties::accept_curator(RuntimeOrigin::signed(0), 0));
+
+		let bounty_account = Bounties::bounty_account_id(0);
+
+		// Load the bounty account with both native and asset 1 (a RelevantAsset).
+		Balances::make_free_balance_be(&bounty_account, 100);
+		assert_ok!(Assets::transfer(RuntimeOrigin::signed(0), 1, bounty_account, 10));
+
+		// Forcibly remove the bounty record (simulating the bug).
+		pallet_bounties::Bounties::<Test>::remove(0);
+		pallet_bounties::BountyDescriptions::<Test>::remove(0);
+
+		let treasury_native_before = Balances::free_balance(Bounties::account_id());
+		let treasury_asset1_before = Assets::balance(1, &Bounties::account_id());
+
+		assert_ok!(Bounties::dust_bounty_acc(RuntimeOrigin::signed(5), 0));
+
+		assert_eq!(last_event(), BountiesEvent::BountyAccDusted { bounty_id: 0, who: 5 },);
+
+		// Bounty account native balance is now zero (or at most ED).
+		assert!(
+			Balances::free_balance(&bounty_account) == 0 ||
+				Balances::free_balance(&bounty_account) <= 1
+		);
+
+		// Asset 1 has been swept to treasury.
+		assert_eq!(Assets::balance(1, &bounty_account), 0);
+		assert!(Assets::balance(1, &Bounties::account_id()) > treasury_asset1_before);
+
+		// Treasury received native funds.
+		assert!(Balances::free_balance(Bounties::account_id()) > treasury_native_before);
+	});
+}
+
+#[test]
+fn dust_bounty_acc_works_after_close_bounty() {
+	ExtBuilder::default().build_and_execute(|| {
+		Balances::make_free_balance_be(&Treasury::account_id(), 101);
+		assert_ok!(Bounties::propose_bounty(RuntimeOrigin::signed(0), 50, b"12345".to_vec()));
+		assert_ok!(Bounties::approve_bounty(RuntimeOrigin::root(), 0));
+		go_to_block(2);
+
+		// Extra funds added to the bounty account (the historical bug scenario).
+		let bounty_account = Bounties::bounty_account_id(0);
+		Balances::make_free_balance_be(&bounty_account, 60);
+
+		// Close the bounty through the normal path.
+		assert_ok!(Bounties::close_bounty(RuntimeOrigin::root(), 0));
+
+		// After close_bounty the bounty no longer exists in storage.
+		assert!(pallet_bounties::Bounties::<Test>::get(0).is_none());
+
+		// close_bounty calls TransferAllAssets so the account should already be
+		// clean. Dusting it again must return BountyAccountAlreadyEmpty.
+		assert_noop!(
+			Bounties::dust_bounty_acc(RuntimeOrigin::signed(1), 0),
+			Error::<Test>::BountyAccountAlreadyEmpty
+		);
+	});
+}
+
+#[test]
+fn dust_bounty_acc_is_free_for_caller() {
+	// Verify Pays::No is returned on success so the caller isn't charged.
+	ExtBuilder::default().build_and_execute(|| {
+		Balances::make_free_balance_be(&Treasury::account_id(), 101);
+		assert_ok!(Bounties::propose_bounty(RuntimeOrigin::signed(0), 50, b"12345".to_vec()));
+		assert_ok!(Bounties::approve_bounty(RuntimeOrigin::root(), 0));
+		go_to_block(2);
+
+		pallet_bounties::Bounties::<Test>::remove(0);
+		pallet_bounties::BountyDescriptions::<Test>::remove(0);
+
+		let result = Bounties::dust_bounty_acc(RuntimeOrigin::signed(1), 0);
+		assert_ok!(result.as_ref());
+		// The extrinsic must return Pays::No.
+		assert_eq!(
+			result.unwrap(),
+			frame_support::dispatch::PostDispatchInfo {
+				actual_weight: None,
+				pays_fee: frame_support::pallet_prelude::Pays::No,
+			}
+		);
+	});
+}

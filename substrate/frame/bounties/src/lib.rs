@@ -368,6 +368,8 @@ pub mod pallet {
 		TooManyQueued,
 		/// User is not the proposer of the bounty.
 		NotProposer,
+		/// The bounty account holds no remaining balance; nothing to dust.
+		BountyAccountAlreadyEmpty,
 	}
 
 	#[pallet::event]
@@ -402,6 +404,9 @@ pub mod pallet {
 			old_deposit: BalanceOf<T, I>,
 			new_deposit: BalanceOf<T, I>,
 		},
+		/// A closed bounty account's remaining balance/assets were transferred
+		/// to the treasury by `who`.
+		BountyAccDusted { bounty_id: BountyIndex, who: T::AccountId },
 	}
 
 	/// Number of bounty proposals that have been made.
@@ -984,6 +989,51 @@ pub mod pallet {
 			let deposit_updated = Self::poke_bounty_deposit(bounty_id)?;
 
 			Ok(if deposit_updated { Pays::No } else { Pays::Yes }.into())
+		}
+
+		/// Dust a closed bounty account by transferring all remaining tokens and
+		/// assets to the treasury.
+		///
+		/// Due to a historical bug, some bounty accounts may retain a balance
+		/// after being closed. This extrinsic allows anyone to clean up such
+		/// stale accounts, sending all funds back to the treasury.
+		///
+		/// The call succeeds only if **no active bounty** exists at `bounty_id`.
+		/// If the bounty account is already empty this call returns
+		/// `BountyAccountAlreadyEmpty`.
+		///
+		/// ## Complexity
+		/// - O(1) for the native token; O(A) where A is the number of relevant assets configured in
+		///   `TransferAllAssets`.
+		#[pallet::call_index(11)]
+		#[pallet::weight(<T as Config<I>>::WeightInfo::dust_bounty_acc())]
+		pub fn dust_bounty_acc(
+			origin: OriginFor<T>,
+			#[pallet::compact] bounty_id: BountyIndex,
+		) -> DispatchResultWithPostInfo {
+			let who = ensure_signed(origin)?;
+
+			// If a bounty still exists for this ID we must not touch its account
+			// because it is still actively managed.
+			ensure!(!Bounties::<T, I>::contains_key(bounty_id), Error::<T, I>::UnexpectedStatus);
+
+			let bounty_account = Self::bounty_account_id(bounty_id);
+			let treasury_account = Self::account_id();
+
+			// Check whether the native currency balance is non-zero before
+			// attempting any transfer.
+			let native_balance = T::Currency::free_balance(&bounty_account);
+
+			if native_balance.is_zero() {
+				return Err(Error::<T, I>::BountyAccountAlreadyEmpty.into());
+			}
+
+			// Transfer all assets (including native token via TransferAllAssets).
+			T::TransferAllAssets::force_transfer_all_assets(&bounty_account, &treasury_account)?;
+
+			Self::deposit_event(Event::<T, I>::BountyAccDusted { bounty_id, who });
+
+			Ok(Pays::No.into()) // Reward callers for performing cleanup work
 		}
 	}
 
