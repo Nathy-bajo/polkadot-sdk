@@ -808,16 +808,18 @@ impl<T: Config<I>, I: 'static> Pallet<T, I> {
 	/// Check if a VotingFor entry is empty and should be removed from storage
 	fn is_empty_voting(voting: &VotingOf<T, I>) -> bool {
 		match voting {
-			Voting::Casting(Casting { votes, delegations, prior }) =>
+			Voting::Casting(Casting { votes, delegations, prior }) => {
 				votes.is_empty() &&
 					delegations.votes.is_zero() &&
 					delegations.capital.is_zero() &&
-					prior.locked().is_zero(),
-			Voting::Delegating(Delegating { balance, delegations, prior, .. }) =>
+					prior.locked().is_zero()
+			},
+			Voting::Delegating(Delegating { balance, delegations, prior, .. }) => {
 				balance.is_zero() &&
 					delegations.votes.is_zero() &&
 					delegations.capital.is_zero() &&
-					prior.locked().is_zero(),
+					prior.locked().is_zero()
+			},
 		}
 	}
 
