@@ -19,6 +19,8 @@ use super::*;
 use frame_support::{pallet_prelude::*, traits::OnRuntimeUpgrade};
 
 pub mod v1 {
+	use alloc::vec::Vec;
+
 	use super::*;
 
 	/// Migration to remove empty VotingFor and ClassLocksFor entries
