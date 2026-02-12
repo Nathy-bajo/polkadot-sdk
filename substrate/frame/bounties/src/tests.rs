@@ -2037,8 +2037,6 @@ fn dust_bounty_acc_works_for_funded_bounty() {
 		let bounty_account = Bounties::bounty_account_id(0);
 		assert_eq!(Balances::free_balance(&bounty_account), 50);
 
-		// Simulate the historical bug: forcibly remove the bounty record while
-		// leaving the account funded.
 		pallet_bounties::Bounties::<Test>::remove(0);
 		pallet_bounties::BountyDescriptions::<Test>::remove(0);
 
