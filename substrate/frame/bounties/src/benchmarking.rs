@@ -388,8 +388,7 @@ mod benchmarks {
 	fn dust_bounty_acc() -> Result<(), BenchmarkError> {
 		setup_pot_account::<T, I>();
 
-		let (caller, _, fee, value, reason) =
-			setup_bounty::<T, I>(0, T::MaximumReasonLength::get());
+		let (caller, _, _, value, reason) = setup_bounty::<T, I>(0, T::MaximumReasonLength::get());
 		Bounties::<T, I>::propose_bounty(RawOrigin::Signed(caller).into(), value, reason)?;
 		let bounty_id = BountyCount::<T, I>::get() - 1;
 		let approve_origin =
@@ -399,7 +398,7 @@ mod benchmarks {
 		Treasury::<T, I>::on_initialize(frame_system::Pallet::<T>::block_number());
 
 		let bounty_account = Bounties::<T, I>::bounty_account_id(bounty_id);
-		Bounties::<T, I>::remove(bounty_id);
+		crate::Bounties::<T, I>::remove(bounty_id);
 		BountyDescriptions::<T, I>::remove(bounty_id);
 
 		// Confirm the pre-conditions.
