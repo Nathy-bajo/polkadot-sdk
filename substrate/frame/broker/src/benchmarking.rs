@@ -1365,6 +1365,7 @@ mod benches {
 		assert_last_event::<T>(
 			Event::PotentialRenewalRemoved { core: region_id.core, timeslice: region.end }.into(),
 		);
+
 		Ok(())
 	}
 

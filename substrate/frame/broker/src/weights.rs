@@ -107,7 +107,7 @@ pub trait WeightInfo {
 	fn disable_auto_renew() -> Weight;
 	fn on_new_timeslice() -> Weight;
 	fn remove_assignment() -> Weight;
-  fn reset_base_price() -> Weight;
+    fn reset_base_price() -> Weight;
 	fn remove_potential_renewal() -> Weight;
 }
 
@@ -611,7 +611,7 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 	fn reset_base_price() -> Weight {
         Weight::from_parts(2_000_000, 0)
             .saturating_add(T::DbWeight::get().writes(1_u64))
-  }
+    }
 	/// Storage: `Broker::PotentialRenewals` (r:1 w:1)
 	/// Proof: `Broker::PotentialRenewals` (`max_values`: None, `max_size`: Some(1233), added: 3708, mode: `MaxEncodedLen`)
 	fn remove_potential_renewal() -> Weight {
@@ -1124,7 +1124,7 @@ impl WeightInfo for () {
 	fn reset_base_price() -> Weight {
         Weight::from_parts(2_000_000, 0)
             .saturating_add(RocksDbWeight::get().writes(1_u64))
-  }
+    }
 	/// Storage: `Broker::PotentialRenewals` (r:1 w:1)
 	/// Proof: `Broker::PotentialRenewals` (`max_values`: None, `max_size`: Some(1233), added: 3708, mode: `MaxEncodedLen`)
 	fn remove_potential_renewal() -> Weight {

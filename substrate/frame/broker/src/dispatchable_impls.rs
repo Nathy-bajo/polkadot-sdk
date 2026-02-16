@@ -657,6 +657,9 @@ impl<T: Config> Pallet<T> {
 		// Should fail if sales haven't started
 		SaleInfo::<T>::get().ok_or(Error::<T>::NoSales)?;
 
+		// Ensure the new base price is greater than zero to prevent price adapter issues
+		ensure!(!new_base_price.is_zero(), Error::<T>::InvalidConfig);
+
 		// Schedule the price change for the next sale rotation
 		ScheduledBasePrice::<T>::put(new_base_price);
 
