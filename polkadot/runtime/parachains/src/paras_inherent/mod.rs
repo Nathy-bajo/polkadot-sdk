@@ -490,6 +490,26 @@ impl<T: Config> Pallet<T> {
 		// I.e. 010100 would indicate, the candidates on Core 1 and 3 would be disputed.
 		let disputed_bitfield = create_disputed_bitfield(expected_bits, freed_disputed.iter());
 
+		// Extend the disputed bitfield to also cover cores occupied by frozen parachains.
+		// This ensures that availability votes for frozen para cores are dropped.
+		let disputed_bitfield = {
+			let frozen = paras::FrozenParas::<T>::get();
+			if !frozen.is_empty() {
+				let mut bitvec = disputed_bitfield.0;
+				for (core_idx, candidate) in inclusion::Pallet::<T>::get_occupied_cores() {
+					if frozen.contains(&candidate.candidate_descriptor().para_id()) {
+						let idx = core_idx.0 as usize;
+						if idx < bitvec.len() {
+							bitvec.set(idx, true);
+						}
+					}
+				}
+				DisputedBitfield::from(bitvec)
+			} else {
+				disputed_bitfield
+			}
+		};
+
 		let bitfields = sanitize_bitfields::<T>(
 			bitfields,
 			disputed_bitfield,
@@ -600,6 +620,13 @@ impl<T: Config> Pallet<T> {
 
 			let mut eligible: BTreeMap<ParaId, BTreeSet<CoreIndex>> = BTreeMap::new();
 			let mut total_eligible_cores = 0;
+
+			// Filter out frozen parachains. They cannot back any new candidates.
+			let frozen = paras::FrozenParas::<T>::get();
+			if !frozen.is_empty() {
+				eligible.retain(|para_id, _| !frozen.contains(para_id));
+				total_eligible_cores = eligible.values().map(|cores| cores.len()).sum();
+			}
 
 			for (core_idx, para_id) in Self::eligible_paras(&occupied_cores) {
 				total_eligible_cores += 1;

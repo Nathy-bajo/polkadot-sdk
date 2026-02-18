@@ -747,6 +747,10 @@ pub mod pallet {
 			/// Block at which authorization expires and will be removed.
 			expire_at: BlockNumberFor<T>,
 		},
+		/// A parachain has been frozen.
+		ParaFrozen(ParaId),
+		/// A parachain has been unfrozen.
+		ParaUnfrozen(ParaId),
 	}
 
 	#[pallet::error]
@@ -783,6 +787,10 @@ pub mod pallet {
 		Unauthorized,
 		/// Invalid block number.
 		InvalidBlockNumber,
+		/// Para cannot be frozen, e.g. it is not registered or is onboarding/offboarding.
+		CannotFreeze,
+		/// Para is not currently frozen.
+		NotFrozen,
 	}
 
 	/// All currently active PVF pre-checking votes.
@@ -951,6 +959,12 @@ pub mod pallet {
 	/// [`PastCodeHash`].
 	#[pallet::storage]
 	pub type CodeByHash<T: Config> = StorageMap<_, Identity, ValidationCodeHash, ValidationCode>;
+
+	/// The set of parachains that are frozen.
+	/// A frozen parachain cannot make progress: no new candidates are accepted,
+	/// pending candidates are dropped, and messages originating from it are not processed.
+	#[pallet::storage]
+	pub type FrozenParas<T: Config> = StorageValue<_, BTreeSet<ParaId>, ValueQuery>;
 
 	#[pallet::genesis_config]
 	#[derive(DefaultNoBound)]
@@ -1340,6 +1354,34 @@ pub mod pallet {
 
 			Ok(Pays::No.into())
 		}
+
+		/// Freeze a parachain. After freezing, the parachain cannot make any progress.
+		/// Any candidates waiting for availability will be dropped, new backed candidates
+		/// will be rejected, and messages originating from this parachain will not be processed.
+		/// Only callable by root.
+		#[pallet::call_index(12)]
+		#[pallet::weight(T::DbWeight::get().reads_writes(1, 1))]
+		pub fn freeze_parachain(origin: OriginFor<T>, para: ParaId) -> DispatchResult {
+			ensure_root(origin)?;
+			ensure!(Self::is_valid_para(para), Error::<T>::CannotFreeze);
+			FrozenParas::<T>::mutate(|frozen| {
+				frozen.insert(para);
+			});
+			Self::deposit_event(Event::ParaFrozen(para));
+			Ok(())
+		}
+
+		/// Unfreeze a previously frozen parachain, allowing it to resume progress.
+		/// Only callable by root.
+		#[pallet::call_index(13)]
+		#[pallet::weight(T::DbWeight::get().reads_writes(1, 1))]
+		pub fn unfreeze_parachain(origin: OriginFor<T>, para: ParaId) -> DispatchResult {
+			ensure_root(origin)?;
+			let was_frozen = FrozenParas::<T>::mutate(|frozen| frozen.remove(&para));
+			ensure!(was_frozen, Error::<T>::NotFrozen);
+			Self::deposit_event(Event::ParaUnfrozen(para));
+			Ok(())
+		}
 	}
 
 	impl<T: Config> Pallet<T> {
@@ -1362,6 +1404,11 @@ pub mod pallet {
 				.find(|(p, _)| p == &para)
 				.map(|(_, c)| Self::calculate_remove_upgrade_cooldown_cost(*c))
 				.unwrap_or_default()
+		}
+
+		/// Returns true if the given para is currently frozen.
+		pub fn is_para_frozen(id: ParaId) -> bool {
+			FrozenParas::<T>::get().contains(&id)
 		}
 	}
 
@@ -1607,6 +1654,12 @@ impl<T: Config> Pallet<T> {
 					}
 
 					outgoing.push(para);
+
+					// If the para was frozen, remove it from the frozen set since it no longer
+					// exists.
+					FrozenParas::<T>::mutate(|frozen| {
+						frozen.remove(&para);
+					});
 				},
 			}
 		}

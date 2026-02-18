@@ -341,6 +341,8 @@ pub mod pallet {
 		/// The `para_head` hash in the candidate descriptor doesn't match the hash of the actual
 		/// para head in the commitments.
 		ParaHeadMismatch,
+		/// A para-chain cannot send UMP messages while it is frozen.
+		IsFrozen,
 	}
 
 	/// Candidates pending availability by `ParaId`. They form a chain starting from the latest
@@ -420,6 +422,8 @@ pub(crate) enum UmpAcceptanceCheckErr {
 	TotalSizeExceeded { total_size: u64, limit: u64 },
 	/// A para-chain cannot send UMP messages while it is offboarding.
 	IsOffboarding,
+	/// A para-chain cannot send UMP messages while it is frozen.
+	IsFrozen,
 }
 
 impl fmt::Debug for UmpAcceptanceCheckErr {
@@ -448,6 +452,9 @@ impl fmt::Debug for UmpAcceptanceCheckErr {
 			UmpAcceptanceCheckErr::IsOffboarding => {
 				write!(fmt, "upward message rejected because the para is off-boarding")
 			},
+			UmpAcceptanceCheckErr::IsFrozen => {
+				write!(fmt, "upward message rejected because the para is frozen")
+			},
 		}
 	}
 }
@@ -455,11 +462,28 @@ impl fmt::Debug for UmpAcceptanceCheckErr {
 impl<T: Config> Pallet<T> {
 	/// Block initialization logic, called by initializer.
 	pub(crate) fn initializer_initialize(_now: BlockNumberFor<T>) -> Weight {
-		Weight::zero()
+		Self::free_frozen_paras()
 	}
 
 	/// Block finalization logic, called by initializer.
 	pub(crate) fn initializer_finalize() {}
+
+	/// Free all pending availability candidates for frozen parachains.
+	/// Called during block initialization.
+	pub(crate) fn free_frozen_paras() -> Weight {
+		let mut weight = T::DbWeight::get().reads(1);
+		let frozen = paras::FrozenParas::<T>::get();
+		if frozen.is_empty() {
+			return weight;
+		}
+		for para_id in &frozen {
+			if PendingAvailability::<T>::contains_key(para_id) {
+				weight.saturating_accrue(T::DbWeight::get().writes(1));
+				PendingAvailability::<T>::remove(para_id);
+			}
+		}
+		weight
+	}
 
 	/// Handle an incoming session change.
 	pub(crate) fn initializer_on_new_session(
@@ -924,6 +948,11 @@ impl<T: Config> Pallet<T> {
 		// Cannot send UMP messages while off-boarding.
 		if paras::Pallet::<T>::is_offboarding(para) {
 			ensure!(upward_messages.is_empty(), UmpAcceptanceCheckErr::IsOffboarding);
+		}
+
+		// Cannot send UMP messages while frozen.
+		if paras::Pallet::<T>::is_para_frozen(para) {
+			ensure!(upward_messages.is_empty(), UmpAcceptanceCheckErr::IsFrozen);
 		}
 
 		let additional_msgs = upward_messages.len() as u32;
