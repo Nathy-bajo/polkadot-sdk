@@ -582,6 +582,8 @@ pub trait WeightInfo {
 	fn include_pvf_check_statement() -> Weight;
 	fn authorize_force_set_current_code_hash() -> Weight;
 	fn apply_authorized_force_set_current_code(c: u32) -> Weight;
+	fn freeze_parachain() -> Weight;
+	fn unfreeze_parachain() -> Weight;
 }
 
 pub struct TestWeightInfo;
@@ -634,6 +636,12 @@ impl WeightInfo for TestWeightInfo {
 		Weight::MAX
 	}
 	fn apply_authorized_force_set_current_code(_c: u32) -> Weight {
+		Weight::MAX
+	}
+	fn freeze_parachain() -> Weight {
+		Weight::MAX
+	}
+	fn unfreeze_parachain() -> Weight {
 		Weight::MAX
 	}
 }
@@ -1360,7 +1368,7 @@ pub mod pallet {
 		/// will be rejected, and messages originating from this parachain will not be processed.
 		/// Only callable by root.
 		#[pallet::call_index(12)]
-		#[pallet::weight(T::DbWeight::get().reads_writes(1, 1))]
+		#[pallet::weight(<T as Config>::WeightInfo::freeze_parachain())]
 		pub fn freeze_parachain(origin: OriginFor<T>, para: ParaId) -> DispatchResult {
 			ensure_root(origin)?;
 			ensure!(Self::is_valid_para(para), Error::<T>::CannotFreeze);
@@ -1374,7 +1382,7 @@ pub mod pallet {
 		/// Unfreeze a previously frozen parachain, allowing it to resume progress.
 		/// Only callable by root.
 		#[pallet::call_index(13)]
-		#[pallet::weight(T::DbWeight::get().reads_writes(1, 1))]
+		#[pallet::weight(<T as Config>::WeightInfo::unfreeze_parachain())]
 		pub fn unfreeze_parachain(origin: OriginFor<T>, para: ParaId) -> DispatchResult {
 			ensure_root(origin)?;
 			let was_frozen = FrozenParas::<T>::mutate(|frozen| frozen.remove(&para));
