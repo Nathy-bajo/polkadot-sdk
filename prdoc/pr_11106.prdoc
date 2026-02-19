@@ -1,0 +1,16 @@
+title: 'paras: add freeze/unfreeze parachain functionality'
+doc:
+- audience: Runtime Dev
+  description: |-
+    Resolves https://github.com/paritytech/polkadot-sdk/issues/7635
+
+    This PR Implements the ability to freeze and unfreeze a parachain via root-only extrinsics,
+    as described in the feature request. A frozen parachain is completely halted: it cannot
+    make progress, produce new blocks, or communicate with the relay chain until unfrozen.
+crates:
+- name: polkadot-runtime-parachains
+  bump: minor
+- name: rococo-runtime
+  bump: minor
+- name: westend-runtime
+  bump: minor
