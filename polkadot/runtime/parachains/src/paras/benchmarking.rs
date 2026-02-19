@@ -321,6 +321,33 @@ mod benchmarks {
 		assert_last_event::<T>(Event::CurrentCodeUpdated(para_id).into());
 	}
 
+	#[benchmark]
+	fn freeze_parachain() {
+		let para_id = ParaId::from(1000);
+		// Para must be in a valid (stable) lifecycle state to be freezable.
+		ParaLifecycles::<T>::insert(&para_id, ParaLifecycle::Parachain);
+
+		#[extrinsic_call]
+		_(RawOrigin::Root, para_id);
+
+		assert_last_event::<T>(Event::ParaFrozen(para_id).into());
+	}
+
+	#[benchmark]
+	fn unfreeze_parachain() {
+		let para_id = ParaId::from(1000);
+		// Para must be in a valid (stable) lifecycle state and already frozen.
+		ParaLifecycles::<T>::insert(&para_id, ParaLifecycle::Parachain);
+		FrozenParas::<T>::mutate(|frozen| {
+			frozen.insert(para_id);
+		});
+
+		#[extrinsic_call]
+		_(RawOrigin::Root, para_id);
+
+		assert_last_event::<T>(Event::ParaUnfrozen(para_id).into());
+	}
+
 	impl_benchmark_test_suite!(
 		Pallet,
 		crate::mock::new_test_ext(Default::default()),
