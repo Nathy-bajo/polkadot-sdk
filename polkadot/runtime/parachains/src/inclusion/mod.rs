@@ -341,8 +341,6 @@ pub mod pallet {
 		/// The `para_head` hash in the candidate descriptor doesn't match the hash of the actual
 		/// para head in the commitments.
 		ParaHeadMismatch,
-		/// A para-chain cannot send UMP messages while it is frozen.
-		IsFrozen,
 	}
 
 	/// Candidates pending availability by `ParaId`. They form a chain starting from the latest
