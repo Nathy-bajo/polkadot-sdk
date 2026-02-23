@@ -504,7 +504,6 @@ pub mod pallet {
 		/// This should never happen, given that enable_auto_renew checks for this before enabling
 		/// auto-renewal.
 		AutoRenewalLimitReached,
-
 		/// The base/minimum price has been reset by administrative action.
 		BasePriceReset {
 			/// The new base/minimum price.
