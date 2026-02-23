@@ -1051,8 +1051,7 @@ pub mod pallet {
 		) -> DispatchResult {
 			T::AdminOrigin::ensure_origin_or_root(origin)?;
 
-			Self::do_reset_base_price(new_base_price)?;
-			Ok(())
+			Self::do_reset_base_price(new_base_price)
 		}
 
 		/// Remove an assignment from the Workplan.
