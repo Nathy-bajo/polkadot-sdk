@@ -180,18 +180,10 @@ impl<T: Config> Pallet<T> {
 		if let Some(pending_price) = ScheduledBasePrice::<T>::take() {
 			// Use the pending price for end_price, but calculate target_price normally
 			// This ensures renewals are priced correctly based on market performance
-			let mut adapted_prices =
-				T::PriceAdapter::adapt_price(SalePerformance::from_sale(&old_sale));
-			adapted_prices.end_price = pending_price;
+			new_prices.end_price = pending_price;
 			// Ensure target_price is at least as high as end_price
-			if adapted_prices.target_price < pending_price {
-				adapted_prices.target_price = pending_price;
-			}
-			adapted_prices
-		} else {
-			// Use normal price adaptation
-			T::PriceAdapter::adapt_price(SalePerformance::from_sale(&old_sale))
-		};
+			new_prices.target_price = new_prices.target_price.max(pending_price);
+		}
 
 		log::debug!(
 			"Rotated sale, new prices: {:?}, {:?}",
