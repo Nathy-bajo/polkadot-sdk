@@ -238,9 +238,6 @@ pub trait SubstrateClientT: Send + Sync + Clone + 'static {
 }
 
 /// Client backed by a `subxt` connection to a remote Substrate node.
-///
-/// This is the original implementation and is still required by the standalone
-/// `eth-rpc` binary
 #[derive(Clone)]
 pub struct SubxtClient {
 	pub(crate) api: OnlineClient<SrcChainConfig>,

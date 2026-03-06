@@ -581,7 +581,7 @@ impl<C: SubstrateClientT> Client<C> {
 			return self.block_by_hash(&substrate_hash).await;
 		}
 
-		// Fallback: treat the provided hash as a Substrate hash (backward compatibility)
+		// Fallback: treat the provided hash as a Substrate hash
 		self.block_by_hash(ethereum_hash).await
 	}
 

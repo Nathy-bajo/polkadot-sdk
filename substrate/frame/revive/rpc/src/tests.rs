@@ -59,30 +59,51 @@ async fn ws_client_with_retry(url: &str) -> WsClient {
 		}
 	})
 	.await
-	.expect("Hit timeout")
+	.expect("Hit timeout waiting for WS client to connect")
 }
 
 struct SharedResources {
-	_node_handle: std::thread::JoinHandle<()>,
+	_node_handle: std::process::Child,
 	_rpc_handle: std::thread::JoinHandle<()>,
+}
+
+impl Drop for SharedResources {
+	fn drop(&mut self) {
+		// Best-effort cleanup: kill the child node process when the test finishes.
+		let _ = self._node_handle.kill();
+	}
 }
 
 impl SharedResources {
 	fn start() -> Self {
-		// Start revive-dev-node
-		let _node_handle = thread::spawn(move || {
-			if let Err(e) = revive_dev_node::command::run_with_args(vec![
-				"--dev".to_string(),
-				"--rpc-port=45789".to_string(),
-				"-lerror,sc_rpc_server=info,runtime::revive=debug".to_string(),
-			]) {
-				panic!("Node exited with error: {e:?}");
+		let omni_node_bin = std::env::var("OMNI_NODE_BIN").unwrap_or_else(|_| {
+			let mut path = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"));
+			for _ in 0..4 {
+				path.pop();
 			}
+			path.push("target/debug/polkadot-omni-node");
+			path.to_string_lossy().into_owned()
 		});
 
-		// Start the rpc server.
+		// Spawn polkadot-omni-node as a child process in --dev mode.
+		// The node exposes its Substrate JSON-RPC on port 45789.
+		let _node_handle = std::process::Command::new(&omni_node_bin)
+			.args(["--dev", "--rpc-port=45789", "-lerror,sc_rpc_server=info,runtime::revive=debug"])
+			.spawn()
+			.unwrap_or_else(|e| {
+				panic!(
+					"Failed to spawn polkadot-omni-node at `{omni_node_bin}`: {e}.\n\
+					 Build it with `cargo build -p polkadot-omni-node` or set \
+					 OMNI_NODE_BIN to the correct path."
+				)
+			});
+
+		// Use our standalone `--dev` flag (not SharedParams `--dev`) so we don't
+		// trigger a chain-spec file lookup.  Also pass `--no-prometheus` to avoid
+		// binding a metrics port in tests.
 		let args = CliCommand::parse_from([
-			"--dev",
+			"eth-rpc", // argv[0] — program name
+			"--dev",   // our standalone dev flag
 			"--rpc-port=45788",
 			"--node-rpc-url=ws://localhost:45789",
 			"--no-prometheus",
@@ -274,9 +295,9 @@ async fn run_all_eth_rpc_tests() -> anyhow::Result<()> {
 
 	match result {
 		Ok(inner_result) => inner_result,
-		Err(_) => {
+		Err(_elapsed) => {
 			log::error!(target: LOG_TARGET, "Test timed out after 2 minutes!");
-			std::process::exit(1);
+			Err(anyhow::anyhow!("run_all_eth_rpc_tests timed out after 120 seconds"))
 		},
 	}
 }
@@ -295,7 +316,7 @@ async fn run_all_eth_rpc_tests_inner() -> anyhow::Result<()> {
 					log::debug!(target: LOG_TARGET, "Running test: {}", test_name);
 					match $test().await {
 						Ok(()) => log::debug!(target: LOG_TARGET, "Test passed: {}", test_name),
-						Err(err) => panic!("Test {} failed: {err:?}", test_name),
+						Err(err) => return Err(anyhow::anyhow!("Test {} failed: {err:?}", test_name)),
 					}
 				}
 			)+
