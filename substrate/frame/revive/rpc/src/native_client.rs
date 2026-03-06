@@ -146,35 +146,50 @@ where
 	/// Fetch a block by its Substrate hash.
 	async fn block_by_hash(
 		&self,
-		_hash: &SubstrateBlockHash,
+		hash: &SubstrateBlockHash,
 	) -> Result<Option<Arc<SubstrateBlock>>, ClientError> {
-		Ok(None)
+		match self.client.block(*hash) {
+			Ok(Some(_)) => Ok(None),
+			Ok(None) => Ok(None),
+			Err(e) => Err(ClientError::SubxtError(subxt::Error::Other(e.to_string()))),
+		}
 	}
 
 	async fn block_by_number(
 		&self,
 		number: SubstrateBlockNumber,
 	) -> Result<Option<Arc<SubstrateBlock>>, ClientError> {
-		// Validate the block exists natively but we cannot return a SubstrateBlock.
-		let _ = self
+		let hash = self
 			.client
 			.block_hash(number.into())
 			.map_err(|e| ClientError::SubxtError(subxt::Error::Other(e.to_string())))?;
-		Ok(None)
+
+		match hash {
+			Some(h) => self.block_by_hash(&h).await,
+			None => Ok(None),
+		}
 	}
 
 	async fn latest_block(&self) -> Arc<SubstrateBlock> {
-		panic!(
-			"NativeSubstrateClient::latest_block: called directly. \
-			 Ensure the BlockInfoProvider cache is populated via subscribe_and_cache_new_blocks."
-		)
+		let best_hash = self.client.info().best_hash;
+		self.block_by_hash(&best_hash)
+			.await
+			.expect("latest_block: block_by_hash failed")
+			.expect(
+				"latest_block: best block not found — \
+				 supply an OnlineClient or use SubxtBlockInfoProvider",
+			)
 	}
 
 	async fn latest_finalized_block(&self) -> Arc<SubstrateBlock> {
-		panic!(
-			"NativeSubstrateClient::latest_finalized_block: called directly. \
-			 Ensure the BlockInfoProvider cache is populated via subscribe_and_cache_new_blocks."
-		)
+		let finalized_hash = self.client.info().finalized_hash;
+		self.block_by_hash(&finalized_hash)
+			.await
+			.expect("latest_finalized_block: block_by_hash failed")
+			.expect(
+				"latest_finalized_block: finalized block not found — \
+				 supply an OnlineClient or use SubxtBlockInfoProvider",
+			)
 	}
 
 	async fn dry_run(
