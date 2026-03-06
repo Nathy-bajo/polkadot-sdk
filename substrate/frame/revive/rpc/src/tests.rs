@@ -85,8 +85,6 @@ impl SharedResources {
 			path.to_string_lossy().into_owned()
 		});
 
-		// Spawn polkadot-omni-node as a child process in --dev mode.
-		// The node exposes its Substrate JSON-RPC on port 45789.
 		let _node_handle = std::process::Command::new(&omni_node_bin)
 			.args(["--dev", "--rpc-port=45789", "-lerror,sc_rpc_server=info,runtime::revive=debug"])
 			.spawn()
@@ -98,9 +96,6 @@ impl SharedResources {
 				)
 			});
 
-		// Use our standalone `--dev` flag (not SharedParams `--dev`) so we don't
-		// trigger a chain-spec file lookup.  Also pass `--no-prometheus` to avoid
-		// binding a metrics port in tests.
 		let args = CliCommand::parse_from([
 			"eth-rpc", // argv[0] — program name
 			"--dev",   // our standalone dev flag
