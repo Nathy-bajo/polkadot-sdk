@@ -27,6 +27,7 @@ use crate::{
 	subxt_client::SrcChainConfig,
 };
 use codec::{Decode, Encode};
+use futures::StreamExt;
 use jsonrpsee::core::async_trait;
 use pallet_revive::{
 	EthTransactInfo, ReviveApi,
@@ -78,6 +79,7 @@ where
 	pool: Arc<Pool>,
 	chain_id: u64,
 	max_block_weight: Weight,
+	online_client: Option<OnlineClient<SrcChainConfig>>,
 	_block: PhantomData<Block>,
 	_moment: PhantomData<Moment>,
 }
@@ -96,8 +98,18 @@ where
 	Client::Api: ReviveRuntimeApiT<Block, Moment>,
 	Pool: TransactionPool<Block = Block> + Send + Sync + 'static,
 {
-	/// Create a new native client.
+	/// Create a new native client without a subxt `OnlineClient`.
 	pub fn new(client: Arc<Client>, pool: Arc<Pool>, chain_id: u64) -> Result<Self, ClientError> {
+		Self::new_with_online_client(client, pool, chain_id, None)
+	}
+
+	/// Create a new native client with an optional subxt `OnlineClient`.
+	pub fn new_with_online_client(
+		client: Arc<Client>,
+		pool: Arc<Pool>,
+		chain_id: u64,
+		online_client: Option<OnlineClient<SrcChainConfig>>,
+	) -> Result<Self, ClientError> {
 		let best_hash = client.info().best_hash;
 		let runtime_api = client.runtime_api();
 
@@ -114,6 +126,7 @@ where
 			// Use the EVM block gas limit as the ref_time upper bound.
 			// Set proof_size to u64::MAX so we never artificially limit PoV.
 			max_block_weight: Weight::from_parts(block_gas_limit, u64::MAX),
+			online_client,
 			_block: PhantomData,
 			_moment: PhantomData,
 		})
@@ -146,34 +159,67 @@ where
 		self.max_block_weight
 	}
 
+	/// Fetch a block by its Substrate hash.
 	async fn block_by_hash(
 		&self,
-		_hash: &SubstrateBlockHash,
+		hash: &SubstrateBlockHash,
 	) -> Result<Option<Arc<SubstrateBlock>>, ClientError> {
-		// Cannot return a subxt `SubstrateBlock` without a live `OnlineClient`.
-		// Return `None` so the `SubxtBlockInfoProvider` fallback handles cache misses.
-		Ok(None)
+		let Some(ref api) = self.online_client else {
+			return Ok(None);
+		};
+
+		// Confirm the block exists in the native backend before hitting subxt.
+		match self.client.block(*hash) {
+			Ok(None) | Err(_) => return Ok(None),
+			Ok(Some(_)) => {},
+		}
+
+		match api.blocks().at(*hash).await {
+			Ok(b) => Ok(Some(Arc::new(b))),
+			Err(subxt::Error::Block(subxt::error::BlockError::NotFound(_))) => Ok(None),
+			Err(e) => Err(ClientError::SubxtError(e)),
+		}
 	}
 
+	/// Fetch a block by its block number.
 	async fn block_by_number(
 		&self,
-		_number: SubstrateBlockNumber,
+		number: SubstrateBlockNumber,
 	) -> Result<Option<Arc<SubstrateBlock>>, ClientError> {
-		Ok(None)
+		// Resolve block number → hash using the native BlockBackend.
+		let hash = self
+			.client
+			.block_hash(number.into())
+			.map_err(|e| ClientError::SubxtError(subxt::Error::Other(e.to_string())))?;
+
+		match hash {
+			Some(h) => self.block_by_hash(&h).await,
+			None => Ok(None),
+		}
 	}
 
+	/// Return the latest best block.
 	async fn latest_block(&self) -> Arc<SubstrateBlock> {
-		panic!(
-			"NativeSubstrateClient::latest_block must not be called directly; \
-			 use SubxtBlockInfoProvider"
-		)
+		let best_hash = self.client.info().best_hash;
+		self.block_by_hash(&best_hash)
+			.await
+			.expect("latest_block: block_by_hash failed")
+			.expect(
+				"latest_block: best block not found — \
+				 supply an OnlineClient or use SubxtBlockInfoProvider",
+			)
 	}
 
+	/// Return the latest finalized block.
 	async fn latest_finalized_block(&self) -> Arc<SubstrateBlock> {
-		panic!(
-			"NativeSubstrateClient::latest_finalized_block must not be called directly; \
-			 use SubxtBlockInfoProvider"
-		)
+		let finalized_hash = self.client.info().finalized_hash;
+		self.block_by_hash(&finalized_hash)
+			.await
+			.expect("latest_finalized_block: block_by_hash failed")
+			.expect(
+				"latest_finalized_block: finalized block not found — \
+				 supply an OnlineClient or use SubxtBlockInfoProvider",
+			)
 	}
 
 	async fn dry_run(
@@ -354,22 +400,55 @@ where
 		false
 	}
 
+	/// Subscribe to new best or finalized blocks.
 	async fn subscribe_blocks<F, Fut>(
 		&self,
-		_subscription_type: SubscriptionType,
-		_callback: F,
+		subscription_type: SubscriptionType,
+		callback: F,
 	) -> Result<(), ClientError>
 	where
 		F: Fn(SubstrateBlock) -> Fut + Send + Sync,
 		Fut: Future<Output = Result<(), ClientError>> + Send,
 	{
-		// TODO: implement a proper native block notification path. For now callers
-		// that need block subscriptions in the embedded path should use the
-		// SubxtClient-backed block provider.
-		log::warn!(
-			target: crate::LOG_TARGET,
-			"NativeSubstrateClient: block subscription not yet implemented for in-process path"
-		);
+		let online_client = self.online_client.clone();
+
+		match subscription_type {
+			SubscriptionType::BestBlocks => {
+				let mut stream = self.client.import_notification_stream();
+				while let Some(notification) = stream.next().await {
+					// Only process notifications for the current best chain.
+					if !notification.is_new_best {
+						continue;
+					}
+					let hash = notification.hash;
+					let block = Self::fetch_subxt_block(&online_client, hash).await?;
+					if let Some(b) = block {
+						if let Err(err) = callback(b).await {
+							log::error!(
+								target: crate::LOG_TARGET,
+								"best-block callback failed for {hash:?}: {err:?}"
+							);
+						}
+					}
+				}
+			},
+			SubscriptionType::FinalizedBlocks => {
+				let mut stream = self.client.finality_notification_stream();
+				while let Some(notification) = stream.next().await {
+					let hash = notification.hash;
+					let block = Self::fetch_subxt_block(&online_client, hash).await?;
+					if let Some(b) = block {
+						if let Err(err) = callback(b).await {
+							log::error!(
+								target: crate::LOG_TARGET,
+								"finalized-block callback failed for {hash:?}: {err:?}"
+							);
+						}
+					}
+				}
+			},
+		}
+
 		Ok(())
 	}
 
@@ -399,18 +478,73 @@ where
 
 	async fn block_extrinsics(
 		&self,
-		_block_hash: SubstrateBlockHash,
+		block_hash: SubstrateBlockHash,
 	) -> Result<
 		Vec<subxt::blocks::ExtrinsicDetails<SrcChainConfig, OnlineClient<SrcChainConfig>>>,
 		ClientError,
 	> {
-		// The subxt `ExtrinsicDetails` wrapper is not constructible without an
-		// `OnlineClient`. A future refactor should introduce a native receipt
-		// extractor that works with `sc_client_api` directly.
-		Err(ClientError::SubxtError(subxt::Error::Other(
-			"NativeSubstrateClient: ExtrinsicDetails not available in native path; \
-			 use SubxtClient for receipt extraction"
-				.into(),
-		)))
+		match self.client.block_body(block_hash) {
+			Err(e) => {
+				return Err(ClientError::SubxtError(subxt::Error::Other(format!(
+					"block_body({block_hash:?}) failed: {e}"
+				))));
+			},
+			Ok(None) => return Err(ClientError::BlockNotFound),
+			Ok(Some(_)) => {},
+		}
+
+		let Some(ref api) = self.online_client else {
+			return Err(ClientError::SubxtError(subxt::Error::Other(
+				"NativeSubstrateClient: no OnlineClient available for ExtrinsicDetails \
+				 construction; supply one via new_with_online_client or use SubxtClient \
+				 for receipt extraction"
+					.into(),
+			)));
+		};
+
+		let block = api.blocks().at(block_hash).await.map_err(ClientError::SubxtError)?;
+		let extrinsics = block.extrinsics().await.map_err(ClientError::SubxtError)?;
+
+		Ok(extrinsics.iter().collect())
+	}
+}
+
+impl<Client, Pool, Block, Moment> NativeSubstrateClient<Client, Pool, Block, Moment>
+where
+	Block: BlockT<Hash = H256, Extrinsic = OpaqueExtrinsic> + Send + Sync + 'static,
+	Block::Header: HeaderT<Number = u32, Hash = H256> + Send + Sync,
+	Moment: codec::Codec + Clone + Send + Sync + 'static,
+	Client: HeaderBackend<Block>
+		+ ProvideRuntimeApi<Block>
+		+ BlockBackend<Block>
+		+ BlockchainEvents<Block>
+		+ Clone
+		+ Send
+		+ Sync
+		+ 'static,
+	Client::Api: ReviveRuntimeApiT<Block, Moment>,
+	Pool: TransactionPool<Block = Block> + Clone + Send + Sync + 'static,
+{
+	/// Attempt to fetch a `SubstrateBlock` from the subxt `OnlineClient`.
+	///
+	/// Returns `Ok(None)` when no client is available or the block is not found,
+	/// allowing callers to decide whether to skip or error.
+	async fn fetch_subxt_block(
+		online_client: &Option<OnlineClient<SrcChainConfig>>,
+		hash: H256,
+	) -> Result<Option<SubstrateBlock>, ClientError> {
+		let Some(api) = online_client else {
+			log::debug!(
+				target: crate::LOG_TARGET,
+				"NativeSubstrateClient: no OnlineClient available, skipping block fetch for {hash:?}"
+			);
+			return Ok(None);
+		};
+
+		match api.blocks().at(hash).await {
+			Ok(b) => Ok(Some(b)),
+			Err(subxt::Error::Block(subxt::error::BlockError::NotFound(_))) => Ok(None),
+			Err(e) => Err(ClientError::SubxtError(e)),
+		}
 	}
 }
