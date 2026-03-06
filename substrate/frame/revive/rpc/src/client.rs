@@ -21,7 +21,9 @@ pub(crate) mod runtime_api;
 pub(crate) mod storage_api;
 use crate::{
 	BlockInfoProvider, BlockTag, FeeHistoryProvider, ReceiptProvider, SubxtBlockInfoProvider,
-	TracerType, TransactionInfo, substrate_client::SubstrateClientT, subxt_client::SrcChainConfig,
+	TracerType, TransactionInfo,
+	substrate_client::{NodeHealth, SubmitResult, SubstrateClientT},
+	subxt_client::SrcChainConfig,
 };
 use jsonrpsee::types::{ErrorObjectOwned, error::CALL_EXECUTION_FAILED_CODE};
 use pallet_revive::{
@@ -125,7 +127,7 @@ pub enum ClientError {
 	/// author_submitExtrinsic failed.
 	#[error("Invalid transaction: {0}")]
 	SubmitError(SubmitError),
-	/// Transcact call failed.
+	/// Transact call failed.
 	#[error("contract reverted: {0:?}")]
 	TransactError(EthTransactError),
 	/// A decimal conversion failed.
@@ -139,7 +141,7 @@ pub enum ClientError {
 	ContractNotFound,
 	#[error("No Ethereum extrinsic found")]
 	EthExtrinsicNotFound,
-	/// The transaction fee could not be found
+	/// The transaction fee could not be found.
 	#[error("transactionFeePaid event not found")]
 	TxFeeNotFound,
 	/// Failed to decode a raw payload into a signed transaction.
@@ -198,9 +200,6 @@ impl From<ClientError> for ErrorObjectOwned {
 }
 
 /// A client that connects to a substrate node and maintains a receipt/block cache.
-///
-/// `C` is the underlying Substrate client backend (either [`crate::substrate_client::SubxtClient`]
-/// for the standalone binary or a native in-process implementation for embedded use).
 #[derive(Clone)]
 pub struct Client<C: SubstrateClientT = crate::substrate_client::SubxtClient> {
 	/// The underlying substrate client backend.
@@ -282,12 +281,12 @@ impl<C: SubstrateClientT> Client<C> {
 		self.block_notifier = Some(tokio::sync::broadcast::channel::<H256>(NOTIFIER_CAPACITY).0);
 	}
 
-	/// Sets a block notifier
+	/// Sets a block notifier.
 	pub fn set_block_notifier(&mut self, notifier: Option<tokio::sync::broadcast::Sender<H256>>) {
 		self.block_notifier = notifier;
 	}
 
-	/// Subscribe to past blocks executing the callback for each block in `range`.
+	/// Subscribe to past blocks, executing the callback for each block in `range`.
 	async fn subscribe_past_blocks<F, Fut>(
 		&self,
 		range: Range<SubstrateBlockNumber>,
@@ -305,7 +304,10 @@ impl<C: SubstrateClientT> Client<C> {
 
 		loop {
 			let block_number = block.number();
-			log::trace!(target: "eth-rpc::subscription", "Processing past block #{block_number}");
+			log::trace!(
+				target: "eth-rpc::subscription",
+				"Processing past block #{block_number}"
+			);
 
 			let parent_hash = block.header().parent_hash;
 			callback(block.clone()).await.inspect_err(|err| {
@@ -457,10 +459,7 @@ impl<C: SubstrateClientT> Client<C> {
 	}
 
 	/// Submit an ethereum transaction payload.
-	pub async fn submit(
-		&self,
-		payload: Vec<u8>,
-	) -> Result<TransactionStatus<SubstrateBlockHash>, ClientError> {
+	pub async fn submit(&self, payload: Vec<u8>) -> Result<SubmitResult, ClientError> {
 		self.backend.submit_extrinsic(payload).await
 	}
 
@@ -514,9 +513,7 @@ impl<C: SubstrateClientT> Client<C> {
 	}
 
 	/// Get the system health.
-	pub async fn system_health(
-		&self,
-	) -> Result<subxt::backend::legacy::rpc_methods::SystemHealth, ClientError> {
+	pub async fn system_health(&self) -> Result<NodeHealth, ClientError> {
 		self.backend.system_health().await
 	}
 
@@ -550,7 +547,7 @@ impl<C: SubstrateClientT> Client<C> {
 		}
 	}
 
-	/// Get a block by hash
+	/// Get a block by hash.
 	pub async fn block_by_hash(
 		&self,
 		hash: &SubstrateBlockHash,
@@ -558,20 +555,17 @@ impl<C: SubstrateClientT> Client<C> {
 		self.block_provider.block_by_hash(hash).await
 	}
 
-	/// Resolve Ethereum block hash to Substrate block hash, then get the block.
-	/// This method provides the abstraction layer needed by the RPC APIs.
+	/// Resolve Ethereum block hash to Substrate block hash.
 	pub async fn resolve_substrate_hash(&self, ethereum_hash: &H256) -> Option<H256> {
 		self.receipt_provider.get_substrate_hash(ethereum_hash).await
 	}
 
-	/// Resolve Substrate block hash to Ethereum block hash, then get the block.
-	/// This method provides the abstraction layer needed by the RPC APIs.
+	/// Resolve Substrate block hash to Ethereum block hash.
 	pub async fn resolve_ethereum_hash(&self, substrate_hash: &H256) -> Option<H256> {
 		self.receipt_provider.get_ethereum_hash(substrate_hash).await
 	}
 
-	/// Get a block by Ethereum hash with automatic resolution to Substrate hash.
-	/// Falls back to treating the hash as a Substrate hash if no mapping exists.
+	/// Get a block by Ethereum hash, falling back to treating it as a Substrate hash.
 	pub async fn block_by_ethereum_hash(
 		&self,
 		ethereum_hash: &H256,
@@ -674,7 +668,11 @@ impl<C: SubstrateClientT> Client<C> {
 		);
 		match self.backend.eth_block(block.hash()).await {
 			Ok(mut eth_block) => {
-				log::trace!(target: LOG_TARGET, "Ethereum block from runtime API hash {:?}", eth_block.hash);
+				log::trace!(
+					target: LOG_TARGET,
+					"Ethereum block from runtime API hash {:?}",
+					eth_block.hash
+				);
 
 				if hydrated_transactions {
 					// Hydrate the block.

@@ -14,7 +14,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-use crate::{SubstrateClientT, client::Client, *};
+use crate::{client::Client, substrate_client::SubstrateClientT, *};
 use jsonrpsee::{core::RpcResult, proc_macros::rpc};
 
 /// Debug Ethereum JSON-RPC APIs.

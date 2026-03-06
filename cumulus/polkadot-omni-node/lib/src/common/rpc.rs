@@ -93,15 +93,16 @@ pub struct BuildAssetHubRpcExtensions<Block, RuntimeApi>(PhantomData<(Block, Run
 #[cfg(feature = "revive-rpc")]
 #[derive(Clone, Debug)]
 pub struct EthRpcConfig {
-	/// WebSocket URL of the local node used by the ETH RPC server.
-	/// Defaults to `ws://127.0.0.1:9944`.
+	/// WebSocket URL of the local node.
 	pub node_rpc_url: String,
 	/// Number of blocks to keep in the receipt cache.
 	pub cache_size: usize,
 	/// Whether to allow unprotected (chain-id-less) transactions.
 	pub allow_unprotected_txs: bool,
-	/// SQLite database URL for receipt storage (`sqlite::memory:` for in-memory).
+	/// SQLite database URL for receipt storage.
 	pub database_url: String,
+	/// EVM chain ID.
+	pub chain_id: u64,
 }
 
 #[cfg(feature = "revive-rpc")]
@@ -112,22 +113,37 @@ impl Default for EthRpcConfig {
 			cache_size: 256,
 			allow_unprotected_txs: false,
 			database_url: "sqlite::memory:".into(),
+			chain_id: 420420421,
 		}
 	}
 }
 
-/// Build the ETH RPC [`RpcExtension`] module and spawn the block-subscription
-/// background task.
+/// Build the ETH RPC [`RpcExtension`] using the **native** in-process Substrate client.
 #[cfg(feature = "revive-rpc")]
-pub fn build_revive_eth_rpc_module(
+pub fn build_revive_eth_rpc_module_native<Block, RuntimeApi, Pool>(
 	config: EthRpcConfig,
+	native_client: Arc<ParachainClient<Block, RuntimeApi>>,
+	pool: Arc<Pool>,
 	is_dev: bool,
 	spawn_handle: Arc<dyn sp_core::traits::SpawnNamed>,
-) -> sc_service::error::Result<RpcExtension> {
+) -> sc_service::error::Result<RpcExtension>
+where
+	Block: sp_runtime::traits::Block<Hash = sp_core::H256, Extrinsic = sp_runtime::OpaqueExtrinsic>
+		+ Send
+		+ Sync
+		+ 'static,
+	Block::Header: sp_runtime::traits::Header<Number = u32, Hash = sp_core::H256> + Send + Sync,
+	RuntimeApi:
+		ConstructNodeRuntimeApi<Block, ParachainClient<Block, RuntimeApi>> + Send + Sync + 'static,
+	RuntimeApi::RuntimeApi: pallet_revive_eth_rpc::native_client::ReviveRuntimeApiT<Block, u64>
+		+ sp_api::Core<Block>
+		+ sp_api::Metadata<Block>,
+	Pool: sc_transaction_pool_api::TransactionPool<Block = Block> + Send + Sync + 'static,
+{
 	use pallet_revive_eth_rpc::{
 		cli::build_eth_rpc_module,
 		client::{connect, Client, SubscriptionType},
-		substrate_client::SubxtClient,
+		native_client::NativeSubstrateClient,
 		ReceiptExtractor, ReceiptProvider, SubxtBlockInfoProvider,
 	};
 	use sqlx::sqlite::SqlitePoolOptions;
@@ -136,44 +152,51 @@ pub fn build_revive_eth_rpc_module(
 
 	let tokio_handle = tokio::runtime::Handle::current();
 
-	let client = tokio_handle
+	let eth_client = tokio_handle
 		.block_on(async {
-			let (api, rpc_client, rpc) =
+			let (api, _rpc_client, rpc) =
 				connect(&config.node_rpc_url, 64 * 1024 * 1024, 64 * 1024 * 1024).await?;
 			let block_provider = SubxtBlockInfoProvider::new(api.clone(), rpc.clone()).await?;
 
-			let (pool, keep_latest_n_blocks) = if config.database_url == IN_MEMORY_DB {
-				let pool = SqlitePoolOptions::new()
+			let (pool_db, keep_latest_n_blocks) = if config.database_url == IN_MEMORY_DB {
+				let p = SqlitePoolOptions::new()
 					.max_connections(1)
 					.idle_timeout(None)
 					.max_lifetime(None)
 					.connect(&config.database_url)
 					.await?;
-				(pool, Some(config.cache_size))
+				(p, Some(config.cache_size))
 			} else {
 				(SqlitePoolOptions::new().connect(&config.database_url).await?, None)
 			};
 
 			let receipt_extractor = ReceiptExtractor::new(api.clone(), None).await?;
 			let receipt_provider = ReceiptProvider::new(
-				pool,
+				pool_db,
 				block_provider.clone(),
 				receipt_extractor,
 				keep_latest_n_blocks,
 			)
 			.await?;
 
-			let backend = SubxtClient::new(api.clone(), rpc_client.clone(), rpc.clone()).await?;
-			let automine = backend.get_automine().await;
-			let eth_client =
-				Client::from_backend(backend, block_provider, receipt_provider, automine)?;
+			let backend = NativeSubstrateClient::new(native_client, pool, config.chain_id)
+				.map_err(|e| {
+					pallet_revive_eth_rpc::client::ClientError::SubxtError(subxt::Error::Other(
+						e.to_string(),
+					))
+				})?;
 
-			Ok::<_, pallet_revive_eth_rpc::client::ClientError>(eth_client)
+			let automine = false;
+			let client = Client::from_backend(backend, block_provider, receipt_provider, automine)?;
+
+			Ok::<_, pallet_revive_eth_rpc::client::ClientError>(client)
 		})
-		.map_err(|e| sc_service::Error::Application(Box::new(e) as _))?;
+		.map_err(|e: pallet_revive_eth_rpc::client::ClientError| {
+			sc_service::Error::Application(Box::new(e) as _)
+		})?;
 
 	// Spawn the block-subscription background task.
-	let client_for_sub = client.clone();
+	let client_for_sub = eth_client.clone();
 	spawn_handle.spawn(
 		"eth-rpc-block-subscription",
 		Some("eth-rpc"),
@@ -197,7 +220,7 @@ pub fn build_revive_eth_rpc_module(
 		}),
 	);
 
-	build_eth_rpc_module(is_dev, client, config.allow_unprotected_txs)
+	build_eth_rpc_module(is_dev, eth_client, config.allow_unprotected_txs)
 		.map_err(|e| sc_service::Error::Application(Box::new(e) as _))
 }
 
@@ -209,6 +232,11 @@ impl<Block: BlockT, RuntimeApi>
 		sc_statement_store::Store,
 	> for BuildAssetHubRpcExtensions<Block, RuntimeApi>
 where
+	Block: sp_runtime::traits::Block<Hash = sp_core::H256, Extrinsic = sp_runtime::OpaqueExtrinsic>
+		+ Send
+		+ Sync
+		+ 'static,
+	Block::Header: sp_runtime::traits::Header<Number = u32, Hash = sp_core::H256> + Send + Sync,
 	RuntimeApi:
 		ConstructNodeRuntimeApi<Block, ParachainClient<Block, RuntimeApi>> + Send + Sync + 'static,
 	RuntimeApi::RuntimeApi: pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi<Block, Balance>
@@ -226,23 +254,22 @@ where
 		let build = || -> Result<RpcExtension, Box<dyn std::error::Error + Send + Sync>> {
 			let mut module = RpcExtension::new(());
 
-			// Standard parachain RPCs.
-			module.merge(System::new(client.clone(), pool).into_rpc())?;
+			module.merge(System::new(client.clone(), pool.clone()).into_rpc())?;
 			module.merge(TransactionPayment::new(client.clone()).into_rpc())?;
 			module.merge(StateMigration::new(client.clone(), backend).into_rpc())?;
 			if let Some(statement_store) = statement_store {
 				module
 					.merge(StatementStore::new(statement_store, spawn_handle.clone()).into_rpc())?;
 			}
-			module.merge(Dev::new(client).into_rpc())?;
+			module.merge(Dev::new(client.clone()).into_rpc())?;
 
-			// ETH RPC — only enabled when the revive-rpc feature is present.
 			#[cfg(feature = "revive-rpc")]
 			{
-				let eth_module = build_revive_eth_rpc_module(
+				let eth_module = build_revive_eth_rpc_module_native(
 					EthRpcConfig::default(),
-					// is_dev =
-					false,
+					client,
+					pool,
+					false, // is_dev
 					spawn_handle,
 				)
 				.map_err(|e| format!("Failed to build ETH RPC module: {e}"))?;

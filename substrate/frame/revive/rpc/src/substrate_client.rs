@@ -23,7 +23,7 @@
 //! connection.
 use crate::{
 	client::{Balance, SubscriptionType, SubstrateBlock, SubstrateBlockHash, SubstrateBlockNumber},
-	subxt_client::{self, SrcChainConfig},
+	subxt_client::SrcChainConfig,
 };
 use futures::TryStreamExt;
 use jsonrpsee::core::async_trait;
@@ -46,6 +46,54 @@ use subxt::{
 	},
 	ext::subxt_rpcs::rpc_params,
 };
+
+/// A raw extrinsic payload with its index in the block.
+#[derive(Clone, Debug)]
+pub struct RawExtrinsic {
+	/// The SCALE-encoded extrinsic bytes.
+	pub payload: Vec<u8>,
+	/// The extrinsic index within the block.
+	pub index: usize,
+}
+
+#[derive(Clone, Debug)]
+pub struct NodeHealth {
+	pub peers: usize,
+	pub is_syncing: bool,
+	pub should_have_peers: bool,
+}
+
+impl From<subxt::backend::legacy::rpc_methods::SystemHealth> for NodeHealth {
+	fn from(h: subxt::backend::legacy::rpc_methods::SystemHealth) -> Self {
+		Self { peers: h.peers, is_syncing: h.is_syncing, should_have_peers: h.should_have_peers }
+	}
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum SubmitResult {
+	Ready,
+	Future,
+	InBlock(SubstrateBlockHash),
+	Finalized(SubstrateBlockHash),
+	Invalid,
+	Dropped,
+	Usurped,
+}
+
+impl From<TransactionStatus<SubstrateBlockHash>> for SubmitResult {
+	fn from(status: TransactionStatus<SubstrateBlockHash>) -> Self {
+		match status {
+			TransactionStatus::Ready => SubmitResult::Ready,
+			TransactionStatus::Future => SubmitResult::Future,
+			TransactionStatus::InBlock(h) => SubmitResult::InBlock(h),
+			TransactionStatus::Finalized(h) => SubmitResult::Finalized(h),
+			TransactionStatus::Invalid => SubmitResult::Invalid,
+			TransactionStatus::Dropped => SubmitResult::Dropped,
+			TransactionStatus::Usurped(_) => SubmitResult::Usurped,
+			_ => SubmitResult::Ready,
+		}
+	}
+}
 
 /// The core trait that the ETH RPC server requires from the underlying Substrate node.
 #[async_trait]
@@ -167,11 +215,12 @@ pub trait SubstrateClientT: Send + Sync + Clone + 'static {
 		config: TracerType,
 	) -> Result<Trace, crate::client::ClientError>;
 
-	/// Submit an unsigned `eth_transact` extrinsic and return the first status.
+	/// Submit an unsigned `eth_transact` extrinsic.
+	/// Returns a [`SubmitResult`] — a subxt-free abstraction over transaction status.
 	async fn submit_extrinsic(
 		&self,
 		payload: Vec<u8>,
-	) -> Result<TransactionStatus<SubstrateBlockHash>, crate::client::ClientError>;
+	) -> Result<SubmitResult, crate::client::ClientError>;
 
 	/// Return the node sync state.
 	async fn sync_state(
@@ -179,9 +228,7 @@ pub trait SubstrateClientT: Send + Sync + Clone + 'static {
 	) -> Result<sc_rpc::system::SyncState<SubstrateBlockNumber>, crate::client::ClientError>;
 
 	/// Return the node health.
-	async fn system_health(
-		&self,
-	) -> Result<subxt::backend::legacy::rpc_methods::SystemHealth, crate::client::ClientError>;
+	async fn system_health(&self) -> Result<NodeHealth, crate::client::ClientError>;
 
 	/// Return whether the node has automine enabled.
 	async fn get_automine(&self) -> bool;
@@ -208,18 +255,13 @@ pub trait SubstrateClientT: Send + Sync + Clone + 'static {
 		crate::client::ClientError,
 	>;
 
-	/// Return all extrinsics in the given block.
+	/// Return all raw extrinsics in the given block.
 	async fn block_extrinsics(
 		&self,
 		block_hash: SubstrateBlockHash,
-	) -> Result<
-		Vec<subxt::blocks::ExtrinsicDetails<SrcChainConfig, OnlineClient<SrcChainConfig>>>,
-		crate::client::ClientError,
-	>;
+	) -> Result<Vec<RawExtrinsic>, crate::client::ClientError>;
 
 	/// Scan block events for the given extrinsic and return its post-dispatch weight.
-	///
-	/// Returns `None` for backends that do not support event scanning.
 	async fn extrinsic_post_dispatch_weight(
 		&self,
 		_block_hash: SubstrateBlockHash,
@@ -248,7 +290,6 @@ pub struct SubxtClient {
 }
 
 impl SubxtClient {
-	/// Create from already-connected `subxt` components.
 	pub async fn new(
 		api: OnlineClient<SrcChainConfig>,
 		rpc_client: RpcClient,
@@ -258,12 +299,12 @@ impl SubxtClient {
 		let _runtime_api = api.runtime_api().at(latest.hash());
 
 		let chain_id = {
-			let query = subxt_client::constants().revive().chain_id();
+			let query = crate::subxt_client::constants().revive().chain_id();
 			api.constants().at(&query)?
 		};
 
 		let max_block_weight = {
-			let query = subxt_client::constants().system().block_weights();
+			let query = crate::subxt_client::constants().system().block_weights();
 			let weights = api.constants().at(&query)?;
 			let max_block = weights.per_class.normal.max_extrinsic.unwrap_or(weights.max_block);
 			max_block.0
@@ -445,7 +486,7 @@ impl SubstrateClientT for SubxtClient {
 	async fn submit_extrinsic(
 		&self,
 		payload: Vec<u8>,
-	) -> Result<TransactionStatus<SubstrateBlockHash>, crate::client::ClientError> {
+	) -> Result<SubmitResult, crate::client::ClientError> {
 		use crate::subxt_client::tx;
 		let call = tx().revive().eth_transact(payload);
 		let ext = self.api.tx().create_unsigned(&call).map_err(crate::client::ClientError::from)?;
@@ -473,12 +514,16 @@ impl SubstrateClientT for SubxtClient {
 						TransactionStatus::FinalityTimeout(_) |
 						TransactionStatus::Retracted(_) |
 						TransactionStatus::Finalized(_)),
-					) => return Ok(tx),
+					) => return Ok(tx.into()),
 					Ok(
 						tx @ (TransactionStatus::Usurped(_) |
 						TransactionStatus::Dropped |
 						TransactionStatus::Invalid),
-					) => return Err(crate::client::ClientError::SubmitError(tx.into())),
+					) => {
+						return Err(crate::client::ClientError::SubmitError(
+							crate::client::SubmitError::from(tx),
+						));
+					},
 					Err(e) => return Err(crate::client::ClientError::from(e)),
 				}
 			}
@@ -496,10 +541,8 @@ impl SubstrateClientT for SubxtClient {
 		Ok(sync_state)
 	}
 
-	async fn system_health(
-		&self,
-	) -> Result<subxt::backend::legacy::rpc_methods::SystemHealth, crate::client::ClientError> {
-		Ok(self.rpc.system_health().await?)
+	async fn system_health(&self) -> Result<NodeHealth, crate::client::ClientError> {
+		Ok(self.rpc.system_health().await?.into())
 	}
 
 	async fn get_automine(&self) -> bool {
@@ -569,13 +612,14 @@ impl SubstrateClientT for SubxtClient {
 	async fn block_extrinsics(
 		&self,
 		block_hash: SubstrateBlockHash,
-	) -> Result<
-		Vec<subxt::blocks::ExtrinsicDetails<SrcChainConfig, OnlineClient<SrcChainConfig>>>,
-		crate::client::ClientError,
-	> {
+	) -> Result<Vec<RawExtrinsic>, crate::client::ClientError> {
 		let block = self.api.blocks().at(block_hash).await?;
 		let extrinsics = block.extrinsics().await?;
-		Ok(extrinsics.iter().collect())
+		Ok(extrinsics
+			.iter()
+			.enumerate()
+			.map(|(index, ext)| RawExtrinsic { payload: ext.bytes().to_vec(), index })
+			.collect())
 	}
 
 	async fn extrinsic_post_dispatch_weight(

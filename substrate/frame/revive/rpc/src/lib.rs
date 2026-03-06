@@ -46,14 +46,13 @@ mod fee_history_provider;
 pub use fee_history_provider::*;
 
 mod receipt_extractor;
-pub use receipt_extractor::*;
+pub use receipt_extractor::ReceiptExtractor;
 
 mod apis;
 pub use apis::*;
 
 pub use native_client::NativeSubstrateClient;
-pub use substrate_client::SubstrateClientT;
-use substrate_client::SubxtClient;
+pub use substrate_client::{SubstrateClientT, SubxtClient};
 
 pub const LOG_TARGET: &str = "eth-rpc";
 
@@ -266,7 +265,7 @@ impl<C: SubstrateClientT> EthRpcServer for EthRpcServerImpl<C> {
 			err
 		})?;
 
-		if matches!(tx_status, subxt::backend::legacy::rpc_methods::TransactionStatus::Future) {
+		if matches!(tx_status, crate::substrate_client::SubmitResult::Future) {
 			return Ok(hash);
 		}
 
