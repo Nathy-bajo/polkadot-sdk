@@ -13330,6 +13330,8 @@ name = "pallet-revive-eth-rpc"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "asset-hub-westend-runtime",
+ "async-trait",
  "clap",
  "env_logger 0.11.3",
  "futures",
@@ -13341,16 +13343,18 @@ dependencies = [
  "pallet-revive-fixtures",
  "parity-scale-codec",
  "pretty_assertions",
- "revive-dev-node",
- "revive-dev-runtime",
  "rlp 0.6.1",
  "sc-cli",
+ "sc-client-api 28.0.0",
  "sc-rpc",
  "sc-rpc-api",
  "sc-service",
+ "sc-transaction-pool-api 28.0.0",
  "serde",
  "serde_json",
+ "sp-api 26.0.0",
  "sp-arithmetic 23.0.0",
+ "sp-blockchain 28.0.0",
  "sp-core 28.0.0",
  "sp-crypto-hashing 0.1.0",
  "sp-io 30.0.0",
@@ -16062,6 +16066,7 @@ dependencies = [
  "jsonrpsee",
  "log",
  "nix 0.29.0",
+ "pallet-revive-eth-rpc",
  "pallet-transaction-payment",
  "pallet-transaction-payment-rpc",
  "pallet-transaction-payment-rpc-runtime-api",
@@ -16114,6 +16119,7 @@ dependencies = [
  "sp-transaction-storage-proof",
  "sp-version 29.0.0",
  "sp-weights 27.0.0",
+ "sqlx",
  "staging-chain-spec-builder",
  "substrate-frame-rpc-system",
  "substrate-prometheus-endpoint 0.17.0",
@@ -18710,31 +18716,6 @@ checksum = "52e44394d2086d010551b14b53b1f24e31647570cd1deb0379e2c21b329aba00"
 dependencies = [
  "hostname",
  "quick-error",
-]
-
-[[package]]
-name = "revive-dev-node"
-version = "0.0.0"
-dependencies = [
- "clap",
- "docify",
- "futures",
- "futures-timer",
- "jsonrpsee",
- "polkadot-sdk",
- "revive-dev-runtime",
-]
-
-[[package]]
-name = "revive-dev-runtime"
-version = "0.1.0"
-dependencies = [
- "array-bytes 6.2.2",
- "parity-scale-codec",
- "polkadot-sdk",
- "scale-info",
- "serde_json",
- "sp-debug-derive 14.0.0",
 ]
 
 [[package]]

@@ -117,40 +117,40 @@ fn build_client(
 	abort_signal: Signals,
 ) -> anyhow::Result<Client> {
 	let fut = async {
-		let (api, rpc_client, rpc) = connect(node_rpc_url, max_request_size, max_response_size).await?;
-		let block_provider = SubxtBlockInfoProvider::new( api.clone(), rpc.clone()).await?;
+		let (api, rpc_client, rpc) =
+			connect(node_rpc_url, max_request_size, max_response_size).await?;
+
+		let block_provider = SubxtBlockInfoProvider::new(api.clone(), rpc.clone()).await?;
 
 		let (pool, keep_latest_n_blocks) = if database_url == IN_MEMORY_DB {
-			log::warn!( target: LOG_TARGET, "💾 Using in-memory database, keeping only {cache_size} blocks in memory");
-			// see sqlite in-memory issue: https://github.com/launchbadge/sqlx/issues/2510
+			log::warn!(
+				target: LOG_TARGET,
+				"💾 Using in-memory database, keeping only {cache_size} blocks in memory"
+			);
 			let pool = SqlitePoolOptions::new()
-					.max_connections(1)
-					.idle_timeout(None)
-					.max_lifetime(None)
-					.connect(database_url).await?;
-
+				.max_connections(1)
+				.idle_timeout(None)
+				.max_lifetime(None)
+				.connect(database_url)
+				.await?;
 			(pool, Some(cache_size))
 		} else {
 			(SqlitePoolOptions::new().connect(database_url).await?, None)
 		};
 
-		let receipt_extractor = ReceiptExtractor::new(
-			api.clone(),
-			earliest_receipt_block,
-		).await?;
+		let receipt_extractor = ReceiptExtractor::new(api.clone(), earliest_receipt_block).await?;
 
 		let receipt_provider = ReceiptProvider::new(
-				pool,
-				block_provider.clone(),
-				receipt_extractor.clone(),
-				keep_latest_n_blocks,
-			)
-			.await?;
+			pool,
+			block_provider.clone(),
+			receipt_extractor.clone(),
+			keep_latest_n_blocks,
+		)
+		.await?;
 
-		let client =
-			Client::new(api, rpc_client, rpc, block_provider, receipt_provider).await?;
+		let client = Client::new(api, rpc_client, rpc, block_provider, receipt_provider).await?;
 
-		Ok(client)
+		anyhow::Ok(client)
 	}
 	.fuse();
 	pin_mut!(fut);
@@ -241,7 +241,7 @@ pub fn run(cmd: CliCommand) -> anyhow::Result<()> {
 	task_manager
 		.spawn_essential_handle()
 		.spawn("block-subscription", None, async move {
-			let mut futures: Vec<BoxFuture<'_, Result<(), _>>> = vec![
+			let mut futures: Vec<BoxFuture<'_, Result<(), crate::client::ClientError>>> = vec![
 				Box::pin(client.subscribe_and_cache_new_blocks(SubscriptionType::BestBlocks)),
 				Box::pin(client.subscribe_and_cache_new_blocks(SubscriptionType::FinalizedBlocks)),
 			];
@@ -251,7 +251,7 @@ pub fn run(cmd: CliCommand) -> anyhow::Result<()> {
 			}
 
 			if let Err(err) = futures::future::try_join_all(futures).await {
-				panic!("Block subscription task failed: {err:?}",)
+				panic!("Block subscription task failed: {err:?}")
 			}
 		});
 

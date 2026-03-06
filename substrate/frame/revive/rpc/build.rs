@@ -55,7 +55,8 @@ fn generate_git_revision() {
 fn generate_metadata_file() {
 	let mut ext = sp_io::TestExternalities::new(Default::default());
 	ext.execute_with(|| {
-		let metadata = revive_dev_runtime::Runtime::metadata_at_version(16).unwrap();
+		let metadata = asset_hub_westend_runtime::Runtime::metadata_at_version(16)
+			.expect("metadata v16 must be present in Asset Hub Westend runtime");
 		let bytes: &[u8] = &metadata;
 		let out_dir = std::env::var("OUT_DIR").expect("OUT_DIR not set");
 		let out_path = std::path::Path::new(&out_dir).join("revive_chain.scale");

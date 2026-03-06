@@ -26,5 +26,5 @@ mod nodes;
 
 pub use cli::CliConfig;
 pub use command::{run, run_with_custom_cli, RunConfig};
-pub use common::{chain_spec, runtime};
+pub use common::{chain_spec, rpc::BuildAssetHubRpcExtensions, runtime};
 pub use nodes::NODE_VERSION;
