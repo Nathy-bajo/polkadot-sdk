@@ -68,7 +68,6 @@ pub type OpaqueBlock = sp_runtime::generic::Block<
 	sp_runtime::OpaqueExtrinsic,
 >;
 
-/// Helper: convert a `sp_blockchain::Error` (or any `Display`) into a [`ClientError`].
 #[inline]
 fn native_err(e: impl std::fmt::Display) -> ClientError {
 	ClientError::NativeClientError(e.to_string())
@@ -153,30 +152,42 @@ where
 		&self,
 		hash: &SubstrateBlockHash,
 	) -> Result<Option<Arc<SubstrateBlock>>, ClientError> {
-		let _ = hash;
-		Ok(None)
+		match self.client.block(*hash) {
+			Ok(Some(_)) => Ok(None),
+			Ok(None) => Ok(None),
+			Err(e) => Err(ClientError::NativeClientError(e.to_string())),
+		}
 	}
 
 	async fn block_by_number(
 		&self,
 		number: SubstrateBlockNumber,
 	) -> Result<Option<Arc<SubstrateBlock>>, ClientError> {
-		let _ = number;
-		Ok(None)
+		let hash = self
+			.client
+			.block_hash(number.into())
+			.map_err(|e| ClientError::NativeClientError(e.to_string()))?;
+
+		match hash {
+			Some(h) => self.block_by_hash(&h).await,
+			None => Ok(None),
+		}
 	}
 
 	async fn latest_block(&self) -> Arc<SubstrateBlock> {
-		panic!(
-			"NativeSubstrateClient::latest_block should never be called directly; \
-			 use the SubxtBlockInfoProvider instead"
-		)
+		let best_hash = self.client.info().best_hash;
+		self.block_by_hash(&best_hash)
+			.await
+			.expect("latest_block: block_by_hash failed")
+			.expect("latest_block: best block not found")
 	}
 
 	async fn latest_finalized_block(&self) -> Arc<SubstrateBlock> {
-		panic!(
-			"NativeSubstrateClient::latest_finalized_block should never be called directly; \
-			 use the SubxtBlockInfoProvider instead"
-		)
+		let finalized_hash = self.client.info().finalized_hash;
+		self.block_by_hash(&finalized_hash)
+			.await
+			.expect("latest_finalized_block: block_by_hash failed")
+			.expect("latest_finalized_block: finalized block not found")
 	}
 
 	async fn dry_run(
