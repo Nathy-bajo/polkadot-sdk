@@ -216,7 +216,6 @@ pub trait SubstrateClientT: Send + Sync + Clone + 'static {
 	) -> Result<Trace, crate::client::ClientError>;
 
 	/// Submit an unsigned `eth_transact` extrinsic.
-	/// Returns a [`SubmitResult`] — a subxt-free abstraction over transaction status.
 	async fn submit_extrinsic(
 		&self,
 		payload: Vec<u8>,

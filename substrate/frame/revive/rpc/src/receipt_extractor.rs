@@ -22,13 +22,12 @@ use crate::{
 };
 
 use pallet_revive::{
-	create1,
+	ReviveApi, create1,
 	evm::{GenericTransaction, H256, Log, ReceiptGasInfo, ReceiptInfo, TransactionSigned, U256},
 };
 use sp_core::keccak_256;
 use std::{future::Future, pin::Pin, sync::Arc};
 use subxt::OnlineClient;
-
 const PALLET_REVIVE_INDEX: u8 = 253;
 const ETH_TRANSACT_CALL_INDEX: u8 = 0;
 
@@ -75,7 +74,7 @@ impl ReceiptExtractor {
 		block_number < self.earliest_receipt_block.unwrap_or_default()
 	}
 
-	/// Create a new `ReceiptExtractor` with the given native to eth ratio.
+	/// Create a new `ReceiptExtractor` backed by a **subxt** `OnlineClient`.
 	pub async fn new(
 		api: OnlineClient<SrcChainConfig>,
 		earliest_receipt_block: Option<SubstrateBlockNumber>,
@@ -151,7 +150,8 @@ impl ReceiptExtractor {
 		})
 	}
 
-	pub fn new_native<F, Fut>(
+	/// Create a `ReceiptExtractor` for the **native in-process** path.
+	pub fn new_native(
 		fetch_receipt_data_fn: impl Fn(
 			H256,
 		) -> Pin<
@@ -167,16 +167,68 @@ impl ReceiptExtractor {
 		+ Sync
 		+ 'static,
 		earliest_receipt_block: Option<SubstrateBlockNumber>,
+		fetch_block_events_fn: Option<
+			impl Fn(H256) -> Pin<Box<dyn Future<Output = Option<BlockEvents>> + Send>>
+			+ Send
+			+ Sync
+			+ 'static,
+		>,
 	) -> Self {
 		Self {
 			fetch_receipt_data: Arc::new(fetch_receipt_data_fn),
 			fetch_eth_block_hash: Arc::new(fetch_eth_block_hash_fn),
-			fetch_block_events: None,
+			fetch_block_events: fetch_block_events_fn.map(|f| Arc::new(f) as FetchBlockEventsFn),
 			earliest_receipt_block,
 			recover_eth_address: Arc::new(|signed_tx: &TransactionSigned| {
 				signed_tx.recover_eth_address()
 			}),
 		}
+	}
+
+	/// Convenience wrapper: build a native `ReceiptExtractor` directly from a
+	/// Substrate `client` that implements `ProvideRuntimeApi` + `HeaderBackend`.
+	pub fn new_native_from_client<Client, Block, Moment>(
+		client: Arc<Client>,
+		earliest_receipt_block: Option<SubstrateBlockNumber>,
+	) -> Self
+	where
+		Block: sp_runtime::traits::Block<Hash = sp_core::H256> + Send + Sync + 'static,
+		Moment: codec::Codec + Clone + Send + Sync + 'static,
+		Client: sp_api::ProvideRuntimeApi<Block>
+			+ sc_client_api::HeaderBackend<Block>
+			+ Send
+			+ Sync
+			+ 'static,
+		Client::Api: crate::native_client::ReviveRuntimeApiT<Block, Moment>,
+	{
+		// ── receipt-data closure ─────────────────────────────────────────────
+		let client_for_data = client.clone();
+		let fetch_receipt_data_fn = move |block_hash: H256| {
+			let client = client_for_data.clone();
+			let fut = async move { client.runtime_api().eth_receipt_data(block_hash).ok() };
+			Box::pin(fut) as Pin<Box<dyn Future<Output = Option<Vec<ReceiptGasInfo>>> + Send>>
+		};
+
+		let client_for_hash = client.clone();
+		let fetch_eth_block_hash_fn = move |block_hash: H256, block_number: u64| {
+			let client = client_for_hash.clone();
+			let fut = async move {
+				client
+					.runtime_api()
+					.eth_block_hash(block_hash, U256::from(block_number))
+					.ok()
+					.flatten()
+			};
+			Box::pin(fut) as Pin<Box<dyn Future<Output = Option<H256>> + Send>>
+		};
+
+		Self::new_native(
+			fetch_receipt_data_fn,
+			fetch_eth_block_hash_fn,
+			earliest_receipt_block,
+			// No block-event scanning in the native path.
+			None::<fn(H256) -> Pin<Box<dyn Future<Output = Option<BlockEvents>> + Send>>>,
+		)
 	}
 
 	#[cfg(test)]

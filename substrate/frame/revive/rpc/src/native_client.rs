@@ -68,6 +68,12 @@ pub type OpaqueBlock = sp_runtime::generic::Block<
 	sp_runtime::OpaqueExtrinsic,
 >;
 
+/// Helper: convert a `sp_blockchain::Error` (or any `Display`) into a [`ClientError`].
+#[inline]
+fn native_err(e: impl std::fmt::Display) -> ClientError {
+	ClientError::NativeClientError(e.to_string())
+}
+
 /// A [`SubstrateClientT`] backed by the node's native in-process Substrate client.
 #[derive(Clone)]
 pub struct NativeSubstrateClient<Client, Pool, Block = OpaqueBlock, Moment = u64>
@@ -143,53 +149,34 @@ where
 		self.max_block_weight
 	}
 
-	/// Fetch a block by its Substrate hash.
 	async fn block_by_hash(
 		&self,
 		hash: &SubstrateBlockHash,
 	) -> Result<Option<Arc<SubstrateBlock>>, ClientError> {
-		match self.client.block(*hash) {
-			Ok(Some(_)) => Ok(None),
-			Ok(None) => Ok(None),
-			Err(e) => Err(ClientError::SubxtError(subxt::Error::Other(e.to_string()))),
-		}
+		let _ = hash;
+		Ok(None)
 	}
 
 	async fn block_by_number(
 		&self,
 		number: SubstrateBlockNumber,
 	) -> Result<Option<Arc<SubstrateBlock>>, ClientError> {
-		let hash = self
-			.client
-			.block_hash(number.into())
-			.map_err(|e| ClientError::SubxtError(subxt::Error::Other(e.to_string())))?;
-
-		match hash {
-			Some(h) => self.block_by_hash(&h).await,
-			None => Ok(None),
-		}
+		let _ = number;
+		Ok(None)
 	}
 
 	async fn latest_block(&self) -> Arc<SubstrateBlock> {
-		let best_hash = self.client.info().best_hash;
-		self.block_by_hash(&best_hash)
-			.await
-			.expect("latest_block: block_by_hash failed")
-			.expect(
-				"latest_block: best block not found — \
-				 supply an OnlineClient or use SubxtBlockInfoProvider",
-			)
+		panic!(
+			"NativeSubstrateClient::latest_block should never be called directly; \
+			 use the SubxtBlockInfoProvider instead"
+		)
 	}
 
 	async fn latest_finalized_block(&self) -> Arc<SubstrateBlock> {
-		let finalized_hash = self.client.info().finalized_hash;
-		self.block_by_hash(&finalized_hash)
-			.await
-			.expect("latest_finalized_block: block_by_hash failed")
-			.expect(
-				"latest_finalized_block: finalized block not found — \
-				 supply an OnlineClient or use SubxtBlockInfoProvider",
-			)
+		panic!(
+			"NativeSubstrateClient::latest_finalized_block should never be called directly; \
+			 use the SubxtBlockInfoProvider instead"
+		)
 	}
 
 	async fn dry_run(
@@ -201,15 +188,12 @@ where
 		self.client
 			.runtime_api()
 			.eth_transact(block_hash, tx)
-			.map_err(|e| ClientError::SubxtError(subxt::Error::Other(e.to_string())))?
+			.map_err(native_err)?
 			.map_err(ClientError::TransactError)
 	}
 
 	async fn gas_price(&self, block_hash: SubstrateBlockHash) -> Result<U256, ClientError> {
-		self.client
-			.runtime_api()
-			.gas_price(block_hash)
-			.map_err(|e| ClientError::SubxtError(subxt::Error::Other(e.to_string())))
+		self.client.runtime_api().gas_price(block_hash).map_err(native_err)
 	}
 
 	async fn balance(
@@ -217,10 +201,7 @@ where
 		block_hash: SubstrateBlockHash,
 		address: H160,
 	) -> Result<U256, ClientError> {
-		self.client
-			.runtime_api()
-			.balance(block_hash, address)
-			.map_err(|e| ClientError::SubxtError(subxt::Error::Other(e.to_string())))
+		self.client.runtime_api().balance(block_hash, address).map_err(native_err)
 	}
 
 	async fn nonce(
@@ -232,7 +213,7 @@ where
 			.runtime_api()
 			.nonce(block_hash, address)
 			.map(|n: u32| U256::from(n))
-			.map_err(|e| ClientError::SubxtError(subxt::Error::Other(e.to_string())))
+			.map_err(native_err)
 	}
 
 	async fn code(
@@ -240,10 +221,7 @@ where
 		block_hash: SubstrateBlockHash,
 		address: H160,
 	) -> Result<Vec<u8>, ClientError> {
-		self.client
-			.runtime_api()
-			.code(block_hash, address)
-			.map_err(|e| ClientError::SubxtError(subxt::Error::Other(e.to_string())))
+		self.client.runtime_api().code(block_hash, address).map_err(native_err)
 	}
 
 	async fn get_storage(
@@ -255,15 +233,12 @@ where
 		self.client
 			.runtime_api()
 			.get_storage(block_hash, address, key)
-			.map_err(|e| ClientError::SubxtError(subxt::Error::Other(e.to_string())))?
+			.map_err(native_err)?
 			.map_err(|_| ClientError::ContractNotFound)
 	}
 
 	async fn eth_block(&self, block_hash: SubstrateBlockHash) -> Result<EthBlock, ClientError> {
-		self.client
-			.runtime_api()
-			.eth_block(block_hash)
-			.map_err(|e| ClientError::SubxtError(subxt::Error::Other(e.to_string())))
+		self.client.runtime_api().eth_block(block_hash).map_err(native_err)
 	}
 
 	async fn eth_block_hash(
@@ -271,20 +246,14 @@ where
 		block_hash: SubstrateBlockHash,
 		number: U256,
 	) -> Result<Option<H256>, ClientError> {
-		self.client
-			.runtime_api()
-			.eth_block_hash(block_hash, number)
-			.map_err(|e| ClientError::SubxtError(subxt::Error::Other(e.to_string())))
+		self.client.runtime_api().eth_block_hash(block_hash, number).map_err(native_err)
 	}
 
 	async fn eth_receipt_data(
 		&self,
 		block_hash: SubstrateBlockHash,
 	) -> Result<Vec<ReceiptGasInfo>, ClientError> {
-		self.client
-			.runtime_api()
-			.eth_receipt_data(block_hash)
-			.map_err(|e| ClientError::SubxtError(subxt::Error::Other(e.to_string())))
+		self.client.runtime_api().eth_receipt_data(block_hash).map_err(native_err)
 	}
 
 	async fn trace_block(
@@ -297,12 +266,11 @@ where
 		config: TracerType,
 	) -> Result<Vec<(u32, Trace)>, ClientError> {
 		let parent = *block.header().parent_hash();
-		let block_generic: Block = Block::decode(&mut &block.encode()[..])
-			.map_err(|e| ClientError::SubxtError(subxt::Error::Other(e.to_string())))?;
+		let block_generic: Block = Block::decode(&mut &block.encode()[..]).map_err(native_err)?;
 		self.client
 			.runtime_api()
 			.trace_block(parent, block_generic, config)
-			.map_err(|e| ClientError::SubxtError(subxt::Error::Other(e.to_string())))
+			.map_err(native_err)
 	}
 
 	async fn trace_tx(
@@ -316,12 +284,11 @@ where
 		config: TracerType,
 	) -> Result<Trace, ClientError> {
 		let parent = *block.header().parent_hash();
-		let block_generic: Block = Block::decode(&mut &block.encode()[..])
-			.map_err(|e| ClientError::SubxtError(subxt::Error::Other(e.to_string())))?;
+		let block_generic: Block = Block::decode(&mut &block.encode()[..]).map_err(native_err)?;
 		self.client
 			.runtime_api()
 			.trace_tx(parent, block_generic, transaction_index, config)
-			.map_err(|e| ClientError::SubxtError(subxt::Error::Other(e.to_string())))?
+			.map_err(native_err)?
 			.ok_or(ClientError::EthExtrinsicNotFound)
 	}
 
@@ -334,7 +301,7 @@ where
 		self.client
 			.runtime_api()
 			.trace_call(block_hash, transaction, config)
-			.map_err(|e| ClientError::SubxtError(subxt::Error::Other(e.to_string())))?
+			.map_err(native_err)?
 			.map_err(ClientError::TransactError)
 	}
 
@@ -348,7 +315,7 @@ where
 			.submit_one(at, sc_transaction_pool_api::TransactionSource::External, opaque_xt)
 			.await
 			.map(|_| SubmitResult::Ready)
-			.map_err(|e| ClientError::SubxtError(subxt::Error::Other(e.to_string())))
+			.map_err(native_err)
 	}
 
 	async fn sync_state(
@@ -370,7 +337,6 @@ where
 		false
 	}
 
-	/// Subscribe to new best or finalized blocks.
 	async fn subscribe_blocks<F, Fut>(
 		&self,
 		subscription_type: SubscriptionType,
@@ -382,7 +348,8 @@ where
 	{
 		log::debug!(
 			target: crate::LOG_TARGET,
-			"NativeSubstrateClient::subscribe_blocks: delegating to native notification stream ({subscription_type:?})"
+			"NativeSubstrateClient::subscribe_blocks ({subscription_type:?}): \
+			 native notification stream active"
 		);
 
 		match subscription_type {
@@ -426,7 +393,7 @@ where
 		let signed = self
 			.client
 			.block(block_hash)
-			.map_err(|e| ClientError::SubxtError(subxt::Error::Other(e.to_string())))?
+			.map_err(native_err)?
 			.ok_or(ClientError::BlockNotFound)?;
 
 		let encoded = signed.block.encode();
@@ -434,7 +401,7 @@ where
 			sp_runtime::generic::Header<u32, sp_runtime::traits::BlakeTwo256>,
 			OpaqueExtrinsic,
 		>::decode(&mut &encoded[..])
-		.map_err(|e| ClientError::SubxtError(subxt::Error::Other(e.to_string())))
+		.map_err(native_err)
 	}
 
 	async fn block_extrinsics(
@@ -444,7 +411,7 @@ where
 		let body = self
 			.client
 			.block_body(block_hash)
-			.map_err(|e| ClientError::SubxtError(subxt::Error::Other(e.to_string())))?
+			.map_err(native_err)?
 			.ok_or(ClientError::BlockNotFound)?;
 
 		Ok(body

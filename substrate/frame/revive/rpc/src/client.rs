@@ -118,6 +118,9 @@ pub enum ClientError {
 	SubxtError(#[from] subxt::Error),
 	#[error(transparent)]
 	RpcError(#[from] subxt::ext::subxt_rpcs::Error),
+	/// An error originating from the native in-process Substrate client
+	#[error("Native client error: {0}")]
+	NativeClientError(String),
 	/// A [`sqlx::Error`] wrapper error.
 	#[error(transparent)]
 	SqlxError(#[from] sqlx::Error),

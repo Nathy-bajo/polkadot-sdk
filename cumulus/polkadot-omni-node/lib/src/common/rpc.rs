@@ -93,8 +93,6 @@ pub struct BuildAssetHubRpcExtensions<Block, RuntimeApi>(PhantomData<(Block, Run
 #[cfg(feature = "revive-rpc")]
 #[derive(Clone, Debug)]
 pub struct EthRpcConfig {
-	/// WebSocket URL of the local node.
-	pub node_rpc_url: String,
 	/// Number of blocks to keep in the receipt cache.
 	pub cache_size: usize,
 	/// Whether to allow unprotected (chain-id-less) transactions.
@@ -109,7 +107,6 @@ pub struct EthRpcConfig {
 impl Default for EthRpcConfig {
 	fn default() -> Self {
 		Self {
-			node_rpc_url: "ws://127.0.0.1:9944".into(),
 			cache_size: 256,
 			allow_unprotected_txs: false,
 			database_url: "sqlite::memory:".into(),
@@ -149,14 +146,21 @@ where
 	use sqlx::sqlite::SqlitePoolOptions;
 
 	const IN_MEMORY_DB: &str = "sqlite::memory:";
+	let node_rpc_url = "ws://127.0.0.1:9944";
 
 	let tokio_handle = tokio::runtime::Handle::current();
 
 	let eth_client = tokio_handle
 		.block_on(async {
 			let (api, _rpc_client, rpc) =
-				connect(&config.node_rpc_url, 64 * 1024 * 1024, 64 * 1024 * 1024).await?;
+				connect(node_rpc_url, 64 * 1024 * 1024, 64 * 1024 * 1024).await?;
 			let block_provider = SubxtBlockInfoProvider::new(api.clone(), rpc.clone()).await?;
+
+			let receipt_extractor = ReceiptExtractor::new_native_from_client::<
+				ParachainClient<Block, RuntimeApi>,
+				Block,
+				u64,
+			>(native_client.clone(), None);
 
 			let (pool_db, keep_latest_n_blocks) = if config.database_url == IN_MEMORY_DB {
 				let p = SqlitePoolOptions::new()
@@ -170,7 +174,6 @@ where
 				(SqlitePoolOptions::new().connect(&config.database_url).await?, None)
 			};
 
-			let receipt_extractor = ReceiptExtractor::new(api.clone(), None).await?;
 			let receipt_provider = ReceiptProvider::new(
 				pool_db,
 				block_provider.clone(),
@@ -181,9 +184,7 @@ where
 
 			let backend = NativeSubstrateClient::new(native_client, pool, config.chain_id)
 				.map_err(|e| {
-					pallet_revive_eth_rpc::client::ClientError::SubxtError(subxt::Error::Other(
-						e.to_string(),
-					))
+					pallet_revive_eth_rpc::client::ClientError::NativeClientError(e.to_string())
 				})?;
 
 			let automine = false;
@@ -195,7 +196,6 @@ where
 			sc_service::Error::Application(Box::new(e) as _)
 		})?;
 
-	// Spawn the block-subscription background task.
 	let client_for_sub = eth_client.clone();
 	spawn_handle.spawn(
 		"eth-rpc-block-subscription",
