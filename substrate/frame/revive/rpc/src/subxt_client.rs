@@ -81,11 +81,12 @@ mod src_chain {}
 pub use src_chain::*;
 
 use crate::{
+	block_info_provider::BlockInfo,
 	client::{
 		Balance, ClientError, SubscriptionType, SubstrateBlock, SubstrateBlockHash,
 		SubstrateBlockNumber,
 	},
-	substrate_client::{BlockInfo, NodeHealth, RawExtrinsic, SubmitResult, SubstrateClientT},
+	substrate_client::{NodeHealth, RawExtrinsic, SubmitResult, SubstrateClientT},
 };
 use futures::TryStreamExt;
 use jsonrpsee::core::async_trait;
@@ -111,6 +112,31 @@ use subxt::{
 
 fn system_health_from_subxt(h: subxt::backend::legacy::rpc_methods::SystemHealth) -> NodeHealth {
 	NodeHealth { peers: h.peers, is_syncing: h.is_syncing, should_have_peers: h.should_have_peers }
+}
+
+/// A lightweight block-info value returned by [`SubxtClient`].
+///
+/// This is the concrete type used for `SubstrateClientT::BlockInfo` in the subxt path.
+/// It implements [`BlockInfo`] so callers can access hash / number / parent_hash uniformly.
+#[derive(Clone, Debug)]
+pub struct SubxtBlockInfo {
+	pub hash: SubstrateBlockHash,
+	pub number: SubstrateBlockNumber,
+	pub parent_hash: SubstrateBlockHash,
+}
+
+impl BlockInfo for SubxtBlockInfo {
+	fn hash(&self) -> H256 {
+		self.hash
+	}
+
+	fn number(&self) -> SubstrateBlockNumber {
+		self.number
+	}
+
+	fn parent_hash(&self) -> H256 {
+		self.parent_hash
+	}
 }
 
 /// [`SubstrateClientT`] implementation backed by a `subxt` WebSocket connection.
@@ -147,8 +173,9 @@ impl SubxtClient {
 		Ok(Self { api, rpc_client, rpc, chain_id, max_block_weight })
 	}
 
-	fn block_info_from_subxt(block: &SubstrateBlock) -> BlockInfo {
-		BlockInfo {
+	/// Build a [`SubxtBlockInfo`] from a [`SubstrateBlock`] reference.
+	fn block_info_from_subxt(block: &SubstrateBlock) -> SubxtBlockInfo {
+		SubxtBlockInfo {
 			hash: block.hash(),
 			number: block.number(),
 			parent_hash: block.header().parent_hash,
@@ -158,6 +185,8 @@ impl SubxtClient {
 
 #[async_trait]
 impl SubstrateClientT for SubxtClient {
+	type BlockInfo = SubxtBlockInfo;
+
 	fn chain_id(&self) -> u64 {
 		self.chain_id
 	}
@@ -169,7 +198,7 @@ impl SubstrateClientT for SubxtClient {
 	async fn block_by_hash(
 		&self,
 		hash: &SubstrateBlockHash,
-	) -> Result<Option<BlockInfo>, ClientError> {
+	) -> Result<Option<SubxtBlockInfo>, ClientError> {
 		match self.api.blocks().at(*hash).await {
 			Ok(b) => Ok(Some(Self::block_info_from_subxt(&b))),
 			Err(subxt::Error::Block(subxt::error::BlockError::NotFound(_))) => Ok(None),
@@ -180,19 +209,19 @@ impl SubstrateClientT for SubxtClient {
 	async fn block_by_number(
 		&self,
 		number: SubstrateBlockNumber,
-	) -> Result<Option<BlockInfo>, ClientError> {
+	) -> Result<Option<SubxtBlockInfo>, ClientError> {
 		let Some(hash) = self.rpc.chain_get_block_hash(Some(number.into())).await? else {
 			return Ok(None);
 		};
 		self.block_by_hash(&hash).await
 	}
 
-	async fn latest_block(&self) -> Result<BlockInfo, ClientError> {
+	async fn latest_block(&self) -> Result<SubxtBlockInfo, ClientError> {
 		let block = self.api.blocks().at_latest().await?;
 		Ok(Self::block_info_from_subxt(&block))
 	}
 
-	async fn latest_finalized_block(&self) -> Result<BlockInfo, ClientError> {
+	async fn latest_finalized_block(&self) -> Result<SubxtBlockInfo, ClientError> {
 		let hash = self.rpc.chain_get_finalized_head().await?;
 		match self.api.blocks().at(hash).await {
 			Ok(b) => Ok(Self::block_info_from_subxt(&b)),
@@ -385,7 +414,7 @@ impl SubstrateClientT for SubxtClient {
 		callback: F,
 	) -> Result<(), ClientError>
 	where
-		F: Fn(BlockInfo) -> Fut + Send + Sync,
+		F: Fn(SubxtBlockInfo) -> Fut + Send + Sync,
 		Fut: Future<Output = Result<(), ClientError>> + Send,
 	{
 		let mut block_stream = match subscription_type {

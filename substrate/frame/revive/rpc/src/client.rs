@@ -24,7 +24,7 @@ use crate::{
 	BlockInfoProvider, BlockNumberOrTag, BlockTag, FeeHistoryProvider, ReceiptProvider, TracerType,
 	TransactionInfo,
 	block_info_provider::BlockInfo,
-	substrate_client::{BlockInfo as SubBlockInfo, NodeHealth, SubmitResult, SubstrateClientT},
+	substrate_client::{NodeHealth, SubmitResult, SubstrateClientT},
 	subxt_client::SrcChainConfig,
 };
 use jsonrpsee::types::{ErrorObjectOwned, error::CALL_EXECUTION_FAILED_CODE};
@@ -364,14 +364,14 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 		let block_provider = self.block_provider.clone();
 
 		self.backend
-			.subscribe_blocks(subscription_type, move |info: SubBlockInfo| {
+			.subscribe_blocks(subscription_type, move |info: C::BlockInfo| {
 				let callback = Arc::clone(&callback);
 				let lock_ref = Arc::clone(&lock);
 				let block_provider = block_provider.clone();
 
 				async move {
 					let block = block_provider
-						.block_by_hash(&info.hash)
+						.block_by_hash(&info.hash())
 						.await?
 						.ok_or(ClientError::BlockNotFound)?;
 

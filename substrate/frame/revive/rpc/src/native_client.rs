@@ -24,7 +24,8 @@
 use crate::{
 	ClientError, SubstrateClientT,
 	client::{Balance, SubscriptionType, SubstrateBlockHash, SubstrateBlockNumber},
-	substrate_client::{BlockInfo, NodeHealth, RawExtrinsic, SubmitResult},
+	native_block_info_provider::NativeCachedBlock,
+	substrate_client::{NodeHealth, RawExtrinsic, SubmitResult},
 };
 use codec::{Decode, Encode};
 use futures::StreamExt;
@@ -129,15 +130,25 @@ where
 		})
 	}
 
-	fn block_info_from_hash(&self, block_hash: H256) -> Result<Option<BlockInfo>, ClientError> {
-		match self.client.header(block_hash) {
-			Ok(Some(header)) => {
-				let number: u32 = (*header.number()).into();
-				Ok(Some(BlockInfo { hash: block_hash, number, parent_hash: *header.parent_hash() }))
-			},
-			Ok(None) => Ok(None),
-			Err(e) => Err(native_err(e)),
-		}
+	/// Build a [`NativeCachedBlock`] from a block hash by querying the in-process client.
+	fn block_info_from_hash(
+		&self,
+		block_hash: H256,
+	) -> Result<Option<NativeCachedBlock>, ClientError> {
+		let Some(signed) = self.client.block(block_hash).map_err(native_err)? else {
+			return Ok(None);
+		};
+
+		let encoded = signed.block.encode();
+		let opaque = OpaqueBlock::decode(&mut &encoded[..]).map_err(native_err)?;
+
+		let number: u32 = (*signed.block.header().number()).into();
+		Ok(Some(NativeCachedBlock {
+			hash: block_hash,
+			number,
+			parent_hash: *signed.block.header().parent_hash(),
+			opaque,
+		}))
 	}
 }
 
@@ -159,6 +170,8 @@ where
 	Client::Api: ReviveRuntimeApiT<Block, Moment>,
 	Pool: TransactionPool<Block = Block> + Clone + Send + Sync + 'static,
 {
+	type BlockInfo = NativeCachedBlock;
+
 	fn chain_id(&self) -> u64 {
 		self.chain_id
 	}
@@ -170,28 +183,27 @@ where
 	async fn block_by_hash(
 		&self,
 		hash: &SubstrateBlockHash,
-	) -> Result<Option<BlockInfo>, ClientError> {
+	) -> Result<Option<NativeCachedBlock>, ClientError> {
 		self.block_info_from_hash(*hash)
 	}
 
 	async fn block_by_number(
 		&self,
 		number: SubstrateBlockNumber,
-	) -> Result<Option<BlockInfo>, ClientError> {
+	) -> Result<Option<NativeCachedBlock>, ClientError> {
 		let hash = self.client.block_hash(number.into()).map_err(native_err)?;
-
 		match hash {
-			Some(h) => self.block_by_hash(&h).await,
+			Some(h) => self.block_info_from_hash(h),
 			None => Ok(None),
 		}
 	}
 
-	async fn latest_block(&self) -> Result<BlockInfo, ClientError> {
+	async fn latest_block(&self) -> Result<NativeCachedBlock, ClientError> {
 		let info = self.client.info();
 		self.block_info_from_hash(info.best_hash)?.ok_or(ClientError::BlockNotFound)
 	}
 
-	async fn latest_finalized_block(&self) -> Result<BlockInfo, ClientError> {
+	async fn latest_finalized_block(&self) -> Result<NativeCachedBlock, ClientError> {
 		let info = self.client.info();
 		self.block_info_from_hash(info.finalized_hash)?
 			.ok_or(ClientError::BlockNotFound)
@@ -355,7 +367,7 @@ where
 		callback: F,
 	) -> Result<(), ClientError>
 	where
-		F: Fn(BlockInfo) -> Fut + Send + Sync,
+		F: Fn(NativeCachedBlock) -> Fut + Send + Sync,
 		Fut: Future<Output = Result<(), ClientError>> + Send,
 	{
 		log::debug!(
@@ -372,20 +384,34 @@ where
 						continue;
 					}
 
-					let info = BlockInfo {
-						hash: notification.hash,
-						number: *notification.header.number(),
-						parent_hash: *notification.header.parent_hash(),
+					let hash = notification.hash;
+					let block_info = match self.block_info_from_hash(hash) {
+						Ok(Some(b)) => b,
+						Ok(None) => {
+							log::warn!(
+								target: crate::LOG_TARGET,
+								"NativeSubstrateClient: best-block notification for unknown hash {:?}",
+								hash
+							);
+							continue;
+						},
+						Err(err) => {
+							log::error!(
+								target: crate::LOG_TARGET,
+								"NativeSubstrateClient: failed to fetch best-block info: {err:?}"
+							);
+							continue;
+						},
 					};
 
 					log::trace!(
 						target: crate::LOG_TARGET,
 						"NativeSubstrateClient: new best block #{} ({:?})",
-						info.number,
-						info.hash
+						block_info.number,
+						block_info.hash
 					);
 
-					if let Err(err) = callback(info).await {
+					if let Err(err) = callback(block_info).await {
 						log::error!(
 							target: crate::LOG_TARGET,
 							"NativeSubstrateClient: best-block callback error: {err:?}"
@@ -397,20 +423,34 @@ where
 			SubscriptionType::FinalizedBlocks => {
 				let mut stream = self.client.finality_notification_stream();
 				while let Some(notification) = stream.next().await {
-					let info = BlockInfo {
-						hash: notification.hash,
-						number: *notification.header.number(),
-						parent_hash: *notification.header.parent_hash(),
+					let hash = notification.hash;
+					let block_info = match self.block_info_from_hash(hash) {
+						Ok(Some(b)) => b,
+						Ok(None) => {
+							log::warn!(
+								target: crate::LOG_TARGET,
+								"NativeSubstrateClient: finalized-block notification for unknown hash {:?}",
+								hash
+							);
+							continue;
+						},
+						Err(err) => {
+							log::error!(
+								target: crate::LOG_TARGET,
+								"NativeSubstrateClient: failed to fetch finalized-block info: {err:?}"
+							);
+							continue;
+						},
 					};
 
 					log::trace!(
 						target: crate::LOG_TARGET,
 						"NativeSubstrateClient: finalized block #{} ({:?})",
-						info.number,
-						info.hash
+						block_info.number,
+						block_info.hash
 					);
 
-					if let Err(err) = callback(info).await {
+					if let Err(err) = callback(block_info).await {
 						log::error!(
 							target: crate::LOG_TARGET,
 							"NativeSubstrateClient: finalized-block callback error: {err:?}"

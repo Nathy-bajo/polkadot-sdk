@@ -21,7 +21,10 @@
 //! Substrate node client, allowing the ETH RPC server to be integrated directly
 //! into a parachain node (e.g. Asset Hub) without requiring a separate `subxt`
 //! connection.
-use crate::client::{Balance, SubscriptionType, SubstrateBlockHash, SubstrateBlockNumber};
+use crate::{
+	block_info_provider::BlockInfo,
+	client::{Balance, SubscriptionType, SubstrateBlockHash, SubstrateBlockNumber},
+};
 use jsonrpsee::core::async_trait;
 use pallet_revive::{
 	EthTransactInfo,
@@ -51,23 +54,15 @@ pub struct NodeHealth {
 	pub should_have_peers: bool,
 }
 
-/// Lightweight block metadata that both the subxt and native paths can produce.
-#[derive(Clone, Debug)]
-pub struct BlockInfo {
-	/// Substrate block hash.
-	pub hash: SubstrateBlockHash,
-	/// Block number.
-	pub number: SubstrateBlockNumber,
-	/// Parent hash.
-	pub parent_hash: SubstrateBlockHash,
-}
-
 /// The result of submitting a transaction to the pool.
 pub type SubmitResult = TransactionStatus<SubstrateBlockHash, SubstrateBlockHash>;
 
 /// The core trait that the ETH RPC server requires from the underlying Substrate node.
 #[async_trait]
 pub trait SubstrateClientT: Send + Sync + Clone + 'static {
+	/// The concrete block-info type returned by this client.
+	type BlockInfo: BlockInfo + Clone + Send + Sync + 'static;
+
 	/// Return the EVM chain-id constant.
 	fn chain_id(&self) -> u64;
 
@@ -78,19 +73,19 @@ pub trait SubstrateClientT: Send + Sync + Clone + 'static {
 	async fn block_by_hash(
 		&self,
 		hash: &SubstrateBlockHash,
-	) -> Result<Option<BlockInfo>, crate::client::ClientError>;
+	) -> Result<Option<Self::BlockInfo>, crate::client::ClientError>;
 
 	/// Fetch a block by its block number.
 	async fn block_by_number(
 		&self,
 		number: SubstrateBlockNumber,
-	) -> Result<Option<BlockInfo>, crate::client::ClientError>;
+	) -> Result<Option<Self::BlockInfo>, crate::client::ClientError>;
 
 	/// Return metadata for the current best (latest) block.
-	async fn latest_block(&self) -> Result<BlockInfo, crate::client::ClientError>;
+	async fn latest_block(&self) -> Result<Self::BlockInfo, crate::client::ClientError>;
 
 	/// Return metadata for the current finalized block.
-	async fn latest_finalized_block(&self) -> Result<BlockInfo, crate::client::ClientError>;
+	async fn latest_finalized_block(&self) -> Result<Self::BlockInfo, crate::client::ClientError>;
 
 	/// Dry-run a transaction at the given block.
 	async fn dry_run(
@@ -210,7 +205,7 @@ pub trait SubstrateClientT: Send + Sync + Clone + 'static {
 		callback: F,
 	) -> Result<(), crate::client::ClientError>
 	where
-		F: Fn(BlockInfo) -> Fut + Send + Sync,
+		F: Fn(Self::BlockInfo) -> Fut + Send + Sync,
 		Fut: Future<Output = Result<(), crate::client::ClientError>> + Send;
 
 	/// Fetch an opaque signed block (used for tracing).
