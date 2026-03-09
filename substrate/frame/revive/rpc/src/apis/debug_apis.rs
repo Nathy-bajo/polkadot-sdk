@@ -61,7 +61,7 @@ pub trait DebugRpc {
 	async fn get_automine(&self) -> RpcResult<bool>;
 }
 
-pub struct DebugRpcServerImpl<C: SubstrateClientT = crate::substrate_client::SubxtClient> {
+pub struct DebugRpcServerImpl<C: SubstrateClientT = crate::SubxtClient> {
 	client: Client<C>,
 }
 

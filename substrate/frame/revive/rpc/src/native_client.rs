@@ -23,8 +23,8 @@
 //! server is embedded inside the node binary.
 use crate::{
 	ClientError, SubstrateClientT,
-	client::{Balance, SubscriptionType, SubstrateBlock, SubstrateBlockHash, SubstrateBlockNumber},
-	substrate_client::{NodeHealth, RawExtrinsic, SubmitResult},
+	client::{Balance, SubscriptionType, SubstrateBlockHash, SubstrateBlockNumber},
+	substrate_client::{BlockInfo, NodeHealth, RawExtrinsic, SubmitResult},
 };
 use codec::{Decode, Encode};
 use futures::StreamExt;
@@ -47,7 +47,7 @@ use sp_runtime::{
 use sp_weights::Weight;
 use std::{future::Future, marker::PhantomData, sync::Arc};
 
-/// Convenience alias for the pallet-revive runtime API trait objects.
+/// Convenience bound that bundles all runtime-API traits required by the native client.
 pub trait ReviveRuntimeApiT<Block: BlockT, Moment: codec::Codec>:
 	pallet_revive::ReviveApi<Block, sp_core::H160, Balance, u32, u128, Moment>
 	+ sp_api::Core<Block>
@@ -83,6 +83,7 @@ where
 	pool: Arc<Pool>,
 	chain_id: u64,
 	max_block_weight: Weight,
+	automine: bool,
 	_block: PhantomData<Block>,
 	_moment: PhantomData<Moment>,
 }
@@ -90,6 +91,7 @@ where
 impl<Client, Pool, Block, Moment> NativeSubstrateClient<Client, Pool, Block, Moment>
 where
 	Block: BlockT<Hash = H256>,
+	Block::Header: HeaderT<Number = u32>,
 	Moment: codec::Codec + Send + Sync + 'static,
 	Client: HeaderBackend<Block>
 		+ ProvideRuntimeApi<Block>
@@ -102,7 +104,12 @@ where
 	Pool: TransactionPool<Block = Block> + Send + Sync + 'static,
 {
 	/// Create a new native client.
-	pub fn new(client: Arc<Client>, pool: Arc<Pool>, chain_id: u64) -> Result<Self, ClientError> {
+	pub fn new(
+		client: Arc<Client>,
+		pool: Arc<Pool>,
+		chain_id: u64,
+		automine: bool,
+	) -> Result<Self, ClientError> {
 		let best_hash = client.info().best_hash;
 		let runtime_api = client.runtime_api();
 
@@ -116,9 +123,21 @@ where
 			pool,
 			chain_id,
 			max_block_weight: Weight::from_parts(block_gas_limit, u64::MAX),
+			automine,
 			_block: PhantomData,
 			_moment: PhantomData,
 		})
+	}
+
+	fn block_info_from_hash(&self, block_hash: H256) -> Result<Option<BlockInfo>, ClientError> {
+		match self.client.header(block_hash) {
+			Ok(Some(header)) => {
+				let number: u32 = (*header.number()).into();
+				Ok(Some(BlockInfo { hash: block_hash, number, parent_hash: *header.parent_hash() }))
+			},
+			Ok(None) => Ok(None),
+			Err(e) => Err(native_err(e)),
+		}
 	}
 }
 
@@ -151,22 +170,15 @@ where
 	async fn block_by_hash(
 		&self,
 		hash: &SubstrateBlockHash,
-	) -> Result<Option<Arc<SubstrateBlock>>, ClientError> {
-		match self.client.block(*hash) {
-			Ok(Some(_)) => Ok(None),
-			Ok(None) => Ok(None),
-			Err(e) => Err(ClientError::NativeClientError(e.to_string())),
-		}
+	) -> Result<Option<BlockInfo>, ClientError> {
+		self.block_info_from_hash(*hash)
 	}
 
 	async fn block_by_number(
 		&self,
 		number: SubstrateBlockNumber,
-	) -> Result<Option<Arc<SubstrateBlock>>, ClientError> {
-		let hash = self
-			.client
-			.block_hash(number.into())
-			.map_err(|e| ClientError::NativeClientError(e.to_string()))?;
+	) -> Result<Option<BlockInfo>, ClientError> {
+		let hash = self.client.block_hash(number.into()).map_err(native_err)?;
 
 		match hash {
 			Some(h) => self.block_by_hash(&h).await,
@@ -174,20 +186,15 @@ where
 		}
 	}
 
-	async fn latest_block(&self) -> Arc<SubstrateBlock> {
-		let best_hash = self.client.info().best_hash;
-		self.block_by_hash(&best_hash)
-			.await
-			.expect("latest_block: block_by_hash failed")
-			.expect("latest_block: best block not found")
+	async fn latest_block(&self) -> Result<BlockInfo, ClientError> {
+		let info = self.client.info();
+		self.block_info_from_hash(info.best_hash)?.ok_or(ClientError::BlockNotFound)
 	}
 
-	async fn latest_finalized_block(&self) -> Arc<SubstrateBlock> {
-		let finalized_hash = self.client.info().finalized_hash;
-		self.block_by_hash(&finalized_hash)
-			.await
-			.expect("latest_finalized_block: block_by_hash failed")
-			.expect("latest_finalized_block: finalized block not found")
+	async fn latest_finalized_block(&self) -> Result<BlockInfo, ClientError> {
+		let info = self.client.info();
+		self.block_info_from_hash(info.finalized_hash)?
+			.ok_or(ClientError::BlockNotFound)
 	}
 
 	async fn dry_run(
@@ -270,10 +277,7 @@ where
 	async fn trace_block(
 		&self,
 		_block_hash: SubstrateBlockHash,
-		block: sp_runtime::generic::Block<
-			sp_runtime::generic::Header<u32, sp_runtime::traits::BlakeTwo256>,
-			OpaqueExtrinsic,
-		>,
+		block: OpaqueBlock,
 		config: TracerType,
 	) -> Result<Vec<(u32, Trace)>, ClientError> {
 		let parent = *block.header().parent_hash();
@@ -287,10 +291,7 @@ where
 	async fn trace_tx(
 		&self,
 		_block_hash: SubstrateBlockHash,
-		block: sp_runtime::generic::Block<
-			sp_runtime::generic::Header<u32, sp_runtime::traits::BlakeTwo256>,
-			OpaqueExtrinsic,
-		>,
+		block: OpaqueBlock,
 		transaction_index: u32,
 		config: TracerType,
 	) -> Result<Trace, ClientError> {
@@ -325,7 +326,7 @@ where
 		self.pool
 			.submit_one(at, sc_transaction_pool_api::TransactionSource::External, opaque_xt)
 			.await
-			.map(|_| SubmitResult::Ready)
+			.map(|_| sc_transaction_pool_api::TransactionStatus::Ready)
 			.map_err(native_err)
 	}
 
@@ -345,16 +346,16 @@ where
 	}
 
 	async fn get_automine(&self) -> bool {
-		false
+		self.automine
 	}
 
 	async fn subscribe_blocks<F, Fut>(
 		&self,
 		subscription_type: SubscriptionType,
-		_callback: F,
+		callback: F,
 	) -> Result<(), ClientError>
 	where
-		F: Fn(SubstrateBlock) -> Fut + Send + Sync,
+		F: Fn(BlockInfo) -> Fut + Send + Sync,
 		Fut: Future<Output = Result<(), ClientError>> + Send,
 	{
 		log::debug!(
@@ -370,21 +371,51 @@ where
 					if !notification.is_new_best {
 						continue;
 					}
+
+					let info = BlockInfo {
+						hash: notification.hash,
+						number: *notification.header.number(),
+						parent_hash: *notification.header.parent_hash(),
+					};
+
 					log::trace!(
 						target: crate::LOG_TARGET,
-						"NativeSubstrateClient: new best block {:?}",
-						notification.hash
+						"NativeSubstrateClient: new best block #{} ({:?})",
+						info.number,
+						info.hash
 					);
+
+					if let Err(err) = callback(info).await {
+						log::error!(
+							target: crate::LOG_TARGET,
+							"NativeSubstrateClient: best-block callback error: {err:?}"
+						);
+					}
 				}
 			},
+
 			SubscriptionType::FinalizedBlocks => {
 				let mut stream = self.client.finality_notification_stream();
 				while let Some(notification) = stream.next().await {
+					let info = BlockInfo {
+						hash: notification.hash,
+						number: *notification.header.number(),
+						parent_hash: *notification.header.parent_hash(),
+					};
+
 					log::trace!(
 						target: crate::LOG_TARGET,
-						"NativeSubstrateClient: finalized block {:?}",
-						notification.hash
+						"NativeSubstrateClient: finalized block #{} ({:?})",
+						info.number,
+						info.hash
 					);
+
+					if let Err(err) = callback(info).await {
+						log::error!(
+							target: crate::LOG_TARGET,
+							"NativeSubstrateClient: finalized-block callback error: {err:?}"
+						);
+					}
 				}
 			},
 		}
@@ -394,13 +425,7 @@ where
 	async fn signed_block(
 		&self,
 		block_hash: SubstrateBlockHash,
-	) -> Result<
-		sp_runtime::generic::Block<
-			sp_runtime::generic::Header<u32, sp_runtime::traits::BlakeTwo256>,
-			OpaqueExtrinsic,
-		>,
-		ClientError,
-	> {
+	) -> Result<OpaqueBlock, ClientError> {
 		let signed = self
 			.client
 			.block(block_hash)
@@ -408,11 +433,7 @@ where
 			.ok_or(ClientError::BlockNotFound)?;
 
 		let encoded = signed.block.encode();
-		sp_runtime::generic::Block::<
-			sp_runtime::generic::Header<u32, sp_runtime::traits::BlakeTwo256>,
-			OpaqueExtrinsic,
-		>::decode(&mut &encoded[..])
-		.map_err(native_err)
+		OpaqueBlock::decode(&mut &encoded[..]).map_err(native_err)
 	}
 
 	async fn block_extrinsics(

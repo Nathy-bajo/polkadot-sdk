@@ -52,7 +52,8 @@ mod apis;
 pub use apis::*;
 
 pub use native_client::NativeSubstrateClient;
-pub use substrate_client::{SubstrateClientT, SubxtClient};
+pub use substrate_client::SubstrateClientT;
+pub use subxt_client::SubxtClient;
 
 pub const LOG_TARGET: &str = "eth-rpc";
 
@@ -265,7 +266,7 @@ impl<C: SubstrateClientT> EthRpcServer for EthRpcServerImpl<C> {
 			err
 		})?;
 
-		if matches!(tx_status, crate::substrate_client::SubmitResult::Future) {
+		if matches!(tx_status, sc_transaction_pool_api::TransactionStatus::Future) {
 			return Ok(hash);
 		}
 

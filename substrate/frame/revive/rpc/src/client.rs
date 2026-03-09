@@ -22,7 +22,7 @@ pub(crate) mod storage_api;
 use crate::{
 	BlockInfoProvider, BlockTag, FeeHistoryProvider, ReceiptProvider, SubxtBlockInfoProvider,
 	TracerType, TransactionInfo,
-	substrate_client::{NodeHealth, SubmitResult, SubstrateClientT},
+	substrate_client::{BlockInfo, NodeHealth, SubmitResult, SubstrateClientT},
 	subxt_client::SrcChainConfig,
 };
 use jsonrpsee::types::{ErrorObjectOwned, error::CALL_EXECUTION_FAILED_CODE};
@@ -41,7 +41,7 @@ use storage_api::StorageApi;
 use subxt::{
 	OnlineClient,
 	backend::{
-		legacy::{LegacyRpcMethods, rpc_methods::TransactionStatus},
+		legacy::LegacyRpcMethods,
 		rpc::{
 			RpcClient,
 			reconnecting_rpc_client::{ExponentialBackoff, RpcClient as ReconnectingRpcClient},
@@ -96,8 +96,13 @@ pub enum SubmitError {
 	Unknown,
 }
 
-impl From<TransactionStatus<SubstrateBlockHash>> for SubmitError {
-	fn from(status: TransactionStatus<SubstrateBlockHash>) -> Self {
+impl From<sc_transaction_pool_api::TransactionStatus<SubstrateBlockHash, SubstrateBlockHash>>
+	for SubmitError
+{
+	fn from(
+		status: sc_transaction_pool_api::TransactionStatus<SubstrateBlockHash, SubstrateBlockHash>,
+	) -> Self {
+		use sc_transaction_pool_api::TransactionStatus;
 		match status {
 			TransactionStatus::Usurped(_) => SubmitError::Usurped,
 			TransactionStatus::Dropped => SubmitError::Dropped,
@@ -204,7 +209,7 @@ impl From<ClientError> for ErrorObjectOwned {
 
 /// A client that connects to a substrate node and maintains a receipt/block cache.
 #[derive(Clone)]
-pub struct Client<C: SubstrateClientT = crate::substrate_client::SubxtClient> {
+pub struct Client<C: SubstrateClientT = crate::subxt_client::SubxtClient> {
 	/// The underlying substrate client backend.
 	pub(crate) backend: C,
 	/// Block info provider (caches latest best/finalized blocks).
@@ -243,7 +248,7 @@ pub async fn connect(
 	Ok((api, rpc_client, rpc))
 }
 
-impl Client<crate::substrate_client::SubxtClient> {
+impl Client<crate::subxt_client::SubxtClient> {
 	pub async fn new(
 		api: OnlineClient<SrcChainConfig>,
 		rpc_client: RpcClient,
@@ -251,7 +256,7 @@ impl Client<crate::substrate_client::SubxtClient> {
 		block_provider: SubxtBlockInfoProvider,
 		receipt_provider: ReceiptProvider,
 	) -> Result<Self, ClientError> {
-		let backend = crate::substrate_client::SubxtClient::new(api, rpc_client, rpc).await?;
+		let backend = crate::subxt_client::SubxtClient::new(api, rpc_client, rpc).await?;
 		let automine = backend.get_automine().await;
 		Self::from_backend(backend, block_provider, receipt_provider, automine)
 	}
@@ -339,17 +344,25 @@ impl<C: SubstrateClientT> Client<C> {
 		callback: F,
 	) -> Result<(), ClientError>
 	where
-		F: Fn(SubstrateBlock) -> Fut + Send + Sync + 'static,
+		F: Fn(Arc<SubstrateBlock>) -> Fut + Send + Sync + 'static,
 		Fut: std::future::Future<Output = Result<(), ClientError>> + Send,
 	{
 		let callback = Arc::new(callback);
 		let lock = self.subscription_lock.clone();
+		let block_provider = self.block_provider.clone();
 
 		self.backend
-			.subscribe_blocks(subscription_type, move |block| {
+			.subscribe_blocks(subscription_type, move |info: BlockInfo| {
 				let callback = Arc::clone(&callback);
 				let lock_ref = Arc::clone(&lock);
+				let block_provider = block_provider.clone();
+
 				async move {
+					let block = block_provider
+						.block_by_hash(&info.hash)
+						.await?
+						.ok_or(ClientError::BlockNotFound)?;
+
 					let _guard = lock_ref.lock().await;
 					callback(block).await
 				}
@@ -369,14 +382,14 @@ impl<C: SubstrateClientT> Client<C> {
 
 		let backend = self.backend.clone();
 		let receipt_provider = self.receipt_provider.clone();
-		let block_provider = self.block_provider.clone();
+		let block_provider_update = self.block_provider.clone();
 		let fee_history_provider = self.fee_history_provider.clone();
 		let block_notifier = self.block_notifier.clone();
 
-		self.subscribe_new_blocks(subscription_type, move |block| {
+		self.subscribe_new_blocks(subscription_type, move |block: Arc<SubstrateBlock>| {
 			let backend = backend.clone();
 			let receipt_provider = receipt_provider.clone();
-			let block_provider = block_provider.clone();
+			let block_provider_update = block_provider_update.clone();
 			let fee_history_provider = fee_history_provider.clone();
 			let block_notifier = block_notifier.clone();
 
@@ -389,7 +402,7 @@ impl<C: SubstrateClientT> Client<C> {
 					.into_iter()
 					.unzip();
 
-				block_provider.update_latest(Arc::new(block), subscription_type).await;
+				block_provider_update.update_latest(Arc::clone(&block), subscription_type).await;
 				fee_history_provider.update_fee_history(&evm_block, &receipts).await;
 
 				match (subscription_type, &block_notifier) {
@@ -805,8 +818,8 @@ impl<C: SubstrateClientT> Client<C> {
 	}
 }
 
-impl Client<crate::substrate_client::SubxtClient> {
-	/// Get the post dispatch weight associated with this Ethereum transaction hash.
+impl Client<crate::subxt_client::SubxtClient> {
+	/// Get the post-dispatch weight associated with this Ethereum transaction hash.
 	pub async fn post_dispatch_weight(&self, tx_hash: &H256) -> Option<Weight> {
 		use crate::subxt_client::system::events::ExtrinsicSuccess;
 		let ReceiptInfo { block_hash, transaction_index, .. } = self.receipt(tx_hash).await?;
