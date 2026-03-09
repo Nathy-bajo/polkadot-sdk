@@ -185,8 +185,6 @@ impl ReceiptExtractor {
 		}
 	}
 
-	/// Convenience wrapper: build a native `ReceiptExtractor` directly from a
-	/// Substrate `client` that implements `ProvideRuntimeApi` + `HeaderBackend`.
 	pub fn new_native_from_client<Client, Block, Moment>(
 		client: Arc<Client>,
 		earliest_receipt_block: Option<SubstrateBlockNumber>,
@@ -201,7 +199,6 @@ impl ReceiptExtractor {
 			+ 'static,
 		Client::Api: crate::native_client::ReviveRuntimeApiT<Block, Moment>,
 	{
-		// ── receipt-data closure ─────────────────────────────────────────────
 		let client_for_data = client.clone();
 		let fetch_receipt_data_fn = move |block_hash: H256| {
 			let client = client_for_data.clone();
@@ -226,7 +223,6 @@ impl ReceiptExtractor {
 			fetch_receipt_data_fn,
 			fetch_eth_block_hash_fn,
 			earliest_receipt_block,
-			// No block-event scanning in the native path.
 			None::<fn(H256) -> Pin<Box<dyn Future<Output = Option<BlockEvents>> + Send>>>,
 		)
 	}
