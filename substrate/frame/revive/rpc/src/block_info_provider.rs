@@ -26,34 +26,61 @@ use std::sync::Arc;
 use subxt::{OnlineClient, backend::legacy::LegacyRpcMethods};
 use tokio::sync::RwLock;
 
-/// BlockInfoProvider cache and retrieves information about blocks.
-#[async_trait]
-pub trait BlockInfoProvider: Send + Sync {
-	/// Update the latest block
-	async fn update_latest(&self, block: Arc<SubstrateBlock>, subscription_type: SubscriptionType);
+/// Provides information about a block.
+pub trait BlockInfo: Send + Sync + 'static {
+	/// Returns the block hash.
+	fn hash(&self) -> H256;
+	/// Returns the block number.
+	fn number(&self) -> SubstrateBlockNumber;
+	/// Returns the parent hash.
+	fn parent_hash(&self) -> H256;
+}
 
-	/// Return the latest finalized block.
-	async fn latest_finalized_block(&self) -> Arc<SubstrateBlock>;
-
-	/// Return the latest block.
-	async fn latest_block(&self) -> Arc<SubstrateBlock>;
-
-	/// Return the latest block number
-	async fn latest_block_number(&self) -> SubstrateBlockNumber {
-		return self.latest_block().await.number();
+impl BlockInfo for SubstrateBlock {
+	fn hash(&self) -> H256 {
+		SubstrateBlock::hash(self)
 	}
 
-	/// Get block by block_number.
+	fn number(&self) -> SubstrateBlockNumber {
+		SubstrateBlock::number(self)
+	}
+
+	fn parent_hash(&self) -> H256 {
+		self.header().parent_hash
+	}
+}
+
+/// A generic block-info provider that caches and retrieves block metadata.
+#[async_trait]
+pub trait BlockInfoProvider: Send + Sync + Clone + 'static {
+	/// The concrete block type this provider returns.
+	type Block: BlockInfo + Clone;
+
+	/// Update the cached latest block.
+	async fn update_latest(&self, block: Arc<Self::Block>, subscription_type: SubscriptionType);
+
+	/// Return the latest finalized block.
+	async fn latest_finalized_block(&self) -> Arc<Self::Block>;
+
+	/// Return the latest best block.
+	async fn latest_block(&self) -> Arc<Self::Block>;
+
+	/// Return the latest block number.
+	async fn latest_block_number(&self) -> SubstrateBlockNumber {
+		self.latest_block().await.number()
+	}
+
+	/// Get a block by block number.
 	async fn block_by_number(
 		&self,
 		block_number: SubstrateBlockNumber,
-	) -> Result<Option<Arc<SubstrateBlock>>, ClientError>;
+	) -> Result<Option<Arc<Self::Block>>, ClientError>;
 
-	/// Get block by block hash.
-	async fn block_by_hash(&self, hash: &H256) -> Result<Option<Arc<SubstrateBlock>>, ClientError>;
+	/// Get a block by hash.
+	async fn block_by_hash(&self, hash: &H256) -> Result<Option<Arc<Self::Block>>, ClientError>;
 }
 
-/// Provides information about blocks.
+/// The subxt-backed block info provider.
 #[derive(Clone)]
 pub struct SubxtBlockInfoProvider {
 	/// The latest block.
@@ -86,6 +113,8 @@ impl SubxtBlockInfoProvider {
 
 #[async_trait]
 impl BlockInfoProvider for SubxtBlockInfoProvider {
+	type Block = SubstrateBlock;
+
 	async fn update_latest(&self, block: Arc<SubstrateBlock>, subscription_type: SubscriptionType) {
 		let mut latest = match subscription_type {
 			SubscriptionType::FinalizedBlocks => self.latest_finalized_block.write().await,
@@ -149,9 +178,9 @@ impl BlockInfoProvider for SubxtBlockInfoProvider {
 #[cfg(test)]
 pub mod test {
 	use super::*;
-	use crate::BlockInfo;
+	use crate::client::SubstrateBlockNumber;
 
-	/// A Noop BlockInfoProvider used to test [`db::ReceiptProvider`].
+	/// A noop [`BlockInfoProvider`] used in unit tests.
 	pub struct MockBlockInfoProvider;
 
 	pub struct MockBlockInfo {
@@ -166,22 +195,33 @@ pub mod test {
 		fn number(&self) -> SubstrateBlockNumber {
 			self.number
 		}
+		fn parent_hash(&self) -> H256 {
+			H256::default()
+		}
+	}
+
+	impl Clone for MockBlockInfo {
+		fn clone(&self) -> Self {
+			Self { number: self.number, hash: self.hash }
+		}
 	}
 
 	#[async_trait]
 	impl BlockInfoProvider for MockBlockInfoProvider {
+		type Block = MockBlockInfo;
+
 		async fn update_latest(
 			&self,
-			_block: Arc<SubstrateBlock>,
+			_block: Arc<MockBlockInfo>,
 			_subscription_type: SubscriptionType,
 		) {
 		}
 
-		async fn latest_finalized_block(&self) -> Arc<SubstrateBlock> {
+		async fn latest_finalized_block(&self) -> Arc<MockBlockInfo> {
 			unimplemented!()
 		}
 
-		async fn latest_block(&self) -> Arc<SubstrateBlock> {
+		async fn latest_block(&self) -> Arc<MockBlockInfo> {
 			unimplemented!()
 		}
 
@@ -192,15 +232,21 @@ pub mod test {
 		async fn block_by_number(
 			&self,
 			_block_number: SubstrateBlockNumber,
-		) -> Result<Option<Arc<SubstrateBlock>>, ClientError> {
+		) -> Result<Option<Arc<MockBlockInfo>>, ClientError> {
 			Ok(None)
 		}
 
 		async fn block_by_hash(
 			&self,
 			_hash: &H256,
-		) -> Result<Option<Arc<SubstrateBlock>>, ClientError> {
+		) -> Result<Option<Arc<MockBlockInfo>>, ClientError> {
 			Ok(None)
+		}
+	}
+
+	impl Clone for MockBlockInfoProvider {
+		fn clone(&self) -> Self {
+			MockBlockInfoProvider
 		}
 	}
 }

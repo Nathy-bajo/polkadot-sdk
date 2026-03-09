@@ -16,7 +16,7 @@
 // limitations under the License.
 //! Heatlh JSON-RPC methods.
 
-use crate::{SubstrateClientT, client::Client, *};
+use crate::{BlockInfoProvider, SubstrateClientT, client::Client, *};
 use jsonrpsee::{core::RpcResult, proc_macros::rpc};
 use sc_rpc_api::system::helpers::Health;
 
@@ -31,18 +31,23 @@ pub trait SystemHealthRpc {
 	async fn net_peer_count(&self) -> RpcResult<U64>;
 }
 
-pub struct SystemHealthRpcServerImpl<C: SubstrateClientT = crate::SubxtClient> {
-	client: Client<C>,
+pub struct SystemHealthRpcServerImpl<
+	C: SubstrateClientT = crate::SubxtClient,
+	BP: BlockInfoProvider = crate::SubxtBlockInfoProvider,
+> {
+	client: Client<C, BP>,
 }
 
-impl<C: SubstrateClientT> SystemHealthRpcServerImpl<C> {
-	pub fn new(client: Client<C>) -> Self {
+impl<C: SubstrateClientT, BP: BlockInfoProvider> SystemHealthRpcServerImpl<C, BP> {
+	pub fn new(client: Client<C, BP>) -> Self {
 		Self { client }
 	}
 }
 
 #[async_trait]
-impl<C: SubstrateClientT> SystemHealthRpcServer for SystemHealthRpcServerImpl<C> {
+impl<C: SubstrateClientT, BP: BlockInfoProvider> SystemHealthRpcServer
+	for SystemHealthRpcServerImpl<C, BP>
+{
 	async fn system_health(&self) -> RpcResult<Health> {
 		let (sync_state, health) =
 			tokio::try_join!(self.client.sync_state(), self.client.system_health())?;

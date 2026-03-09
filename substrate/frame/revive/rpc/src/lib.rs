@@ -60,9 +60,12 @@ pub use subxt_client::SubxtClient;
 pub const LOG_TARGET: &str = "eth-rpc";
 
 /// An EVM RPC server implementation.
-pub struct EthRpcServerImpl<C: SubstrateClientT = SubxtClient> {
+pub struct EthRpcServerImpl<
+	C: SubstrateClientT = SubxtClient,
+	BP: BlockInfoProvider = SubxtBlockInfoProvider,
+> {
 	/// The client used to interact with the substrate node.
-	client: client::Client<C>,
+	client: client::Client<C, BP>,
 
 	/// The accounts managed by the server.
 	accounts: Vec<Account>,
@@ -74,9 +77,9 @@ pub struct EthRpcServerImpl<C: SubstrateClientT = SubxtClient> {
 	use_pending_for_estimate_gas: bool,
 }
 
-impl<C: SubstrateClientT> EthRpcServerImpl<C> {
+impl<C: SubstrateClientT, BP: BlockInfoProvider> EthRpcServerImpl<C, BP> {
 	/// Creates a new [`EthRpcServerImpl`].
-	pub fn new(client: client::Client<C>) -> Self {
+	pub fn new(client: client::Client<C, BP>) -> Self {
 		Self {
 			client,
 			accounts: vec![],
@@ -141,7 +144,7 @@ impl From<EthRpcError> for ErrorObjectOwned {
 }
 
 #[async_trait]
-impl<C: SubstrateClientT> EthRpcServer for EthRpcServerImpl<C> {
+impl<C: SubstrateClientT, BP: BlockInfoProvider> EthRpcServer for EthRpcServerImpl<C, BP> {
 	async fn net_version(&self) -> RpcResult<String> {
 		Ok(self.client.chain_id().to_string())
 	}
@@ -498,7 +501,7 @@ impl<C: SubstrateClientT> EthRpcServer for EthRpcServerImpl<C> {
 	}
 }
 
-impl<C: SubstrateClientT> EthRpcServerImpl<C> {
+impl<C: SubstrateClientT, BP: BlockInfoProvider> EthRpcServerImpl<C, BP> {
 	async fn get_transaction_by_substrate_block_hash_and_index(
 		&self,
 		substrate_block_hash: H256,

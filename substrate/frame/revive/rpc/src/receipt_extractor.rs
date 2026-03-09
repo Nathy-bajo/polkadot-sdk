@@ -43,6 +43,11 @@ type RecoverEthAddressFn = Arc<dyn Fn(&TransactionSigned) -> Result<H160, ()> + 
 type FetchBlockEventsFn =
 	Arc<dyn Fn(H256) -> Pin<Box<dyn Future<Output = Option<BlockEvents>> + Send>> + Send + Sync>;
 
+/// Fetches the raw extrinsics for a given block hash.
+type FetchBlockExtrinsicsFn = Arc<
+	dyn Fn(H256) -> Pin<Box<dyn Future<Output = Option<Vec<RawExtrinsic>>> + Send>> + Send + Sync,
+>;
+
 #[derive(Clone, Debug, Default)]
 pub struct ExtrinsicEvents {
 	pub success: bool,
@@ -62,6 +67,9 @@ pub struct ReceiptExtractor {
 	fetch_eth_block_hash: FetchEthBlockHashFn,
 	/// Fetch decoded events for every extrinsic in a block.
 	fetch_block_events: Option<FetchBlockEventsFn>,
+	/// Fetch raw extrinsics for a block
+	fetch_block_extrinsics: Option<FetchBlockExtrinsicsFn>,
+
 	earliest_receipt_block: Option<SubstrateBlockNumber>,
 
 	/// Recover the ethereum address from a transaction signature.
@@ -141,10 +149,28 @@ impl ReceiptExtractor {
 			Box::pin(fut) as Pin<Box<_>>
 		});
 
+		let api_for_ext = api.clone();
+		let fetch_block_extrinsics: FetchBlockExtrinsicsFn = Arc::new(move |block_hash| {
+			let api = api_for_ext.clone();
+			let fut = async move {
+				let block = api.blocks().at(block_hash).await.ok()?;
+				let extrinsics = block.extrinsics().await.ok()?;
+				Some(
+					extrinsics
+						.iter()
+						.enumerate()
+						.map(|(index, ext)| RawExtrinsic { payload: ext.bytes().to_vec(), index })
+						.collect(),
+				)
+			};
+			Box::pin(fut) as Pin<Box<_>>
+		});
+
 		Ok(Self {
 			fetch_receipt_data,
 			fetch_eth_block_hash,
 			fetch_block_events: Some(fetch_block_events),
+			fetch_block_extrinsics: Some(fetch_block_extrinsics),
 			earliest_receipt_block,
 			recover_eth_address: recover_eth_address_fn,
 		})
@@ -173,11 +199,19 @@ impl ReceiptExtractor {
 			+ Sync
 			+ 'static,
 		>,
+		fetch_block_extrinsics_fn: Option<
+			impl Fn(H256) -> Pin<Box<dyn Future<Output = Option<Vec<RawExtrinsic>>> + Send>>
+			+ Send
+			+ Sync
+			+ 'static,
+		>,
 	) -> Self {
 		Self {
 			fetch_receipt_data: Arc::new(fetch_receipt_data_fn),
 			fetch_eth_block_hash: Arc::new(fetch_eth_block_hash_fn),
 			fetch_block_events: fetch_block_events_fn.map(|f| Arc::new(f) as FetchBlockEventsFn),
+			fetch_block_extrinsics: fetch_block_extrinsics_fn
+				.map(|f| Arc::new(f) as FetchBlockExtrinsicsFn),
 			earliest_receipt_block,
 			recover_eth_address: Arc::new(|signed_tx: &TransactionSigned| {
 				signed_tx.recover_eth_address()
@@ -185,20 +219,27 @@ impl ReceiptExtractor {
 		}
 	}
 
+	/// Build a `ReceiptExtractor` for the native path directly from a Substrate client.
 	pub fn new_native_from_client<Client, Block, Moment>(
 		client: Arc<Client>,
 		earliest_receipt_block: Option<SubstrateBlockNumber>,
 	) -> Self
 	where
-		Block: sp_runtime::traits::Block<Hash = sp_core::H256> + Send + Sync + 'static,
+		Block: sp_runtime::traits::Block<Hash = sp_core::H256, Extrinsic = sp_runtime::OpaqueExtrinsic>
+			+ Send
+			+ Sync
+			+ 'static,
 		Moment: codec::Codec + Clone + Send + Sync + 'static,
 		Client: sp_api::ProvideRuntimeApi<Block>
 			+ sc_client_api::HeaderBackend<Block>
+			+ sc_client_api::BlockBackend<Block>
 			+ Send
 			+ Sync
 			+ 'static,
 		Client::Api: crate::native_client::ReviveRuntimeApiT<Block, Moment>,
 	{
+		use codec::Encode;
+
 		let client_for_data = client.clone();
 		let fetch_receipt_data_fn = move |block_hash: H256| {
 			let client = client_for_data.clone();
@@ -219,11 +260,27 @@ impl ReceiptExtractor {
 			Box::pin(fut) as Pin<Box<dyn Future<Output = Option<H256>> + Send>>
 		};
 
+		let client_for_ext = client.clone();
+		let fetch_block_extrinsics_fn = move |block_hash: H256| {
+			let client = client_for_ext.clone();
+			let fut = async move {
+				let body = client.block_body(block_hash).ok()??;
+				Some(
+					body.into_iter()
+						.enumerate()
+						.map(|(index, ext)| RawExtrinsic { payload: ext.encode(), index })
+						.collect(),
+				)
+			};
+			Box::pin(fut) as Pin<Box<dyn Future<Output = Option<Vec<RawExtrinsic>>> + Send>>
+		};
+
 		Self::new_native(
 			fetch_receipt_data_fn,
 			fetch_eth_block_hash_fn,
 			earliest_receipt_block,
 			None::<fn(H256) -> Pin<Box<dyn Future<Output = Option<BlockEvents>> + Send>>>,
+			Some(fetch_block_extrinsics_fn),
 		)
 	}
 
@@ -242,6 +299,7 @@ impl ReceiptExtractor {
 			fetch_receipt_data,
 			fetch_eth_block_hash,
 			fetch_block_events: None,
+			fetch_block_extrinsics: None,
 			earliest_receipt_block: None,
 			recover_eth_address: Arc::new(|signed_tx: &TransactionSigned| {
 				signed_tx.recover_eth_address()
@@ -414,7 +472,50 @@ impl ReceiptExtractor {
 		(self.fetch_eth_block_hash)(*block_hash, block_number).await
 	}
 
-	/// Extract receipts from block.
+	/// Extract receipts from a block, given only its hash and number.
+	pub async fn extract_from_block_by_hash(
+		&self,
+		block_hash: H256,
+		block_number: SubstrateBlockNumber,
+	) -> Result<Vec<(TransactionSigned, ReceiptInfo)>, ClientError> {
+		if self.is_before_earliest_block(block_number) {
+			return Ok(vec![]);
+		}
+
+		let eth_block_hash = (self.fetch_eth_block_hash)(block_hash, block_number as u64)
+			.await
+			.unwrap_or(block_hash);
+
+		let receipt_data = (self.fetch_receipt_data)(block_hash)
+			.await
+			.ok_or(ClientError::ReceiptDataNotFound)?;
+
+		let block_events = if let Some(ref fetch_events) = self.fetch_block_events {
+			fetch_events(block_hash).await
+		} else {
+			None
+		};
+
+		let raw = if let Some(ref fetch_extrinsics) = self.fetch_block_extrinsics {
+			fetch_extrinsics(block_hash).await.ok_or(ClientError::BlockNotFound)?
+		} else {
+			return Err(ClientError::NativeClientError(
+				"fetch_block_extrinsics not configured".to_string(),
+			));
+		};
+
+		self.extract_from_block_raw(
+			block_hash,
+			block_number,
+			eth_block_hash,
+			&raw,
+			&receipt_data,
+			block_events.as_deref(),
+		)
+		.await
+	}
+
+	/// Extract receipts from a block using a subxt `SubstrateBlock`.
 	pub async fn extract_from_block(
 		&self,
 		block: &SubstrateBlock,
@@ -459,6 +560,20 @@ impl ReceiptExtractor {
 	}
 
 	/// Extract a single receipt from a block by transaction index.
+	pub async fn extract_from_transaction_by_hash(
+		&self,
+		block_hash: H256,
+		block_number: SubstrateBlockNumber,
+		transaction_index: usize,
+	) -> Result<(TransactionSigned, ReceiptInfo), ClientError> {
+		let receipts = self.extract_from_block_by_hash(block_hash, block_number).await?;
+		receipts
+			.into_iter()
+			.find(|(_, r)| r.transaction_index.as_usize() == transaction_index)
+			.ok_or(ClientError::EthExtrinsicNotFound)
+	}
+
+	/// Extract a single receipt from a subxt block by transaction index.
 	pub async fn extract_from_transaction(
 		&self,
 		block: &SubstrateBlock,

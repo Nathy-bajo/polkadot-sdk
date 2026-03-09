@@ -14,7 +14,7 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-use crate::{client::Client, substrate_client::SubstrateClientT, *};
+use crate::{BlockInfoProvider, client::Client, substrate_client::SubstrateClientT, *};
 use jsonrpsee::{core::RpcResult, proc_macros::rpc};
 
 /// Debug Ethereum JSON-RPC APIs.
@@ -61,12 +61,15 @@ pub trait DebugRpc {
 	async fn get_automine(&self) -> RpcResult<bool>;
 }
 
-pub struct DebugRpcServerImpl<C: SubstrateClientT = crate::SubxtClient> {
-	client: Client<C>,
+pub struct DebugRpcServerImpl<
+	C: SubstrateClientT = crate::SubxtClient,
+	BP: BlockInfoProvider = crate::SubxtBlockInfoProvider,
+> {
+	client: Client<C, BP>,
 }
 
-impl<C: SubstrateClientT> DebugRpcServerImpl<C> {
-	pub fn new(client: Client<C>) -> Self {
+impl<C: SubstrateClientT, BP: BlockInfoProvider> DebugRpcServerImpl<C, BP> {
+	pub fn new(client: Client<C, BP>) -> Self {
 		Self { client }
 	}
 }
@@ -90,7 +93,7 @@ async fn with_timeout<T>(
 }
 
 #[async_trait]
-impl<C: SubstrateClientT> DebugRpcServer for DebugRpcServerImpl<C> {
+impl<C: SubstrateClientT, BP: BlockInfoProvider> DebugRpcServer for DebugRpcServerImpl<C, BP> {
 	async fn trace_block_by_number(
 		&self,
 		block: BlockNumberOrTag,

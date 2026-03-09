@@ -163,7 +163,7 @@ where
 				u64,
 			>(native_client.clone(), None);
 
-			let (pool_db, keep_latest_n_blocks) = if config.database_url == IN_MEMORY_DB {
+			let (pool_db, keep_latest_n_blocks) = if config.database_url.is_some() == IN_MEMORY_DB {
 				let p = SqlitePoolOptions::new()
 					.max_connections(1)
 					.idle_timeout(None)
@@ -175,7 +175,7 @@ where
 				(SqlitePoolOptions::new().connect(&config.database_url).await?, None)
 			};
 
-			let receipt_provider = ReceiptProvider::new_native(
+			let receipt_provider = ReceiptProvider::new(
 				pool_db,
 				block_provider.clone(),
 				receipt_extractor,
@@ -189,6 +189,7 @@ where
 			})?;
 
 			let automine = false;
+
 			let client =
 				Client::from_native_backend(backend, block_provider, receipt_provider, automine)?;
 

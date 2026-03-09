@@ -20,7 +20,8 @@
 //! server is embedded directly inside the node binary (e.g. Asset Hub).
 use crate::{
 	ClientError,
-	client::{SubscriptionType, SubstrateBlockHash, SubstrateBlockNumber},
+	block_info_provider::{BlockInfo, BlockInfoProvider},
+	client::{SubscriptionType, SubstrateBlockNumber},
 	native_client::OpaqueBlock,
 };
 use codec::Decode;
@@ -53,31 +54,21 @@ impl NativeCachedBlock {
 	}
 }
 
-/// A [`BlockInfoProvider`]-compatible trait specialised for the native client.
-#[async_trait]
-pub trait NativeBlockInfoProvider: Send + Sync + Clone + 'static {
-	async fn update_latest(
-		&self,
-		block: Arc<NativeCachedBlock>,
-		subscription_type: SubscriptionType,
-	);
-	async fn latest_finalized_block(&self) -> Arc<NativeCachedBlock>;
-	async fn latest_block(&self) -> Arc<NativeCachedBlock>;
-	async fn latest_block_number(&self) -> SubstrateBlockNumber {
-		self.latest_block().await.number()
+impl BlockInfo for NativeCachedBlock {
+	fn hash(&self) -> H256 {
+		self.hash
 	}
-	async fn block_by_number(
-		&self,
-		block_number: SubstrateBlockNumber,
-	) -> Result<Option<Arc<NativeCachedBlock>>, ClientError>;
-	async fn block_by_hash(
-		&self,
-		hash: &SubstrateBlockHash,
-	) -> Result<Option<Arc<NativeCachedBlock>>, ClientError>;
+
+	fn number(&self) -> SubstrateBlockNumber {
+		self.number
+	}
+
+	fn parent_hash(&self) -> H256 {
+		self.parent_hash
+	}
 }
 
-/// A [`NativeBlockInfoProvider`] that fetches blocks directly from the
-/// in-process Substrate client
+/// A [`BlockInfoProvider`] that fetches blocks directly from the in-process Substrate client.
 pub struct NativeClientBlockInfoProvider<Client, Block = OpaqueBlock> {
 	client: Arc<Client>,
 	latest_block: Arc<RwLock<Arc<NativeCachedBlock>>>,
@@ -149,7 +140,7 @@ where
 }
 
 #[async_trait]
-impl<Client, Block> NativeBlockInfoProvider for NativeClientBlockInfoProvider<Client, Block>
+impl<Client, Block> BlockInfoProvider for NativeClientBlockInfoProvider<Client, Block>
 where
 	Block: BlockT<Hash = H256> + Send + Sync + 'static,
 	Block::Header: HeaderT<Number = u32, Hash = H256> + Send + Sync,
@@ -161,6 +152,8 @@ where
 		+ Sync
 		+ 'static,
 {
+	type Block = NativeCachedBlock;
+
 	async fn update_latest(
 		&self,
 		block: Arc<NativeCachedBlock>,
@@ -207,7 +200,7 @@ where
 
 	async fn block_by_hash(
 		&self,
-		hash: &SubstrateBlockHash,
+		hash: &H256,
 	) -> Result<Option<Arc<NativeCachedBlock>>, ClientError> {
 		let latest = self.latest_block.read().await.clone();
 		if &latest.hash() == hash {

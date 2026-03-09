@@ -20,6 +20,7 @@ use crate::{
 	PolkadotRpcServer, PolkadotRpcServerImpl, ReceiptExtractor, ReceiptProvider,
 	SubxtBlockInfoProvider, SystemHealthRpcServer, SystemHealthRpcServerImpl,
 	client::{Client, SubscriptionType, SubstrateBlockNumber, connect},
+	subxt_client::SubxtClient,
 };
 use clap::Parser;
 use futures::{FutureExt, future::BoxFuture, pin_mut};
@@ -79,7 +80,7 @@ pub struct CliCommand {
 	pub prometheus_params: PrometheusParams,
 
 	/// By default, the node rejects any transaction that's unprotected (i.e., that doesn't have a
-	/// chain-id). If the user wishes the submit such a transaction then they can use this flag to
+	/// chain-id). If the user wishes to submit such a transaction they can use this flag to
 	/// instruct the RPC to ignore this check.
 	#[arg(long)]
 	pub allow_unprotected_txs: bool,
@@ -115,7 +116,7 @@ fn build_client(
 	max_request_size: u32,
 	max_response_size: u32,
 	abort_signal: Signals,
-) -> anyhow::Result<Client> {
+) -> anyhow::Result<Client<SubxtClient, SubxtBlockInfoProvider>> {
 	let fut = async {
 		let (api, rpc_client, rpc) =
 			connect(node_rpc_url, max_request_size, max_response_size).await?;
@@ -143,7 +144,7 @@ fn build_client(
 		let receipt_provider = ReceiptProvider::new(
 			pool,
 			block_provider.clone(),
-			receipt_extractor.clone(),
+			receipt_extractor,
 			keep_latest_n_blocks,
 		)
 		.await?;
@@ -234,7 +235,7 @@ pub fn run(cmd: CliCommand) -> anyhow::Result<()> {
 		&rpc_config,
 		prometheus_registry,
 		tokio_handle,
-		|| rpc_module(is_dev, client.clone(), allow_unprotected_txs),
+		|| build_eth_rpc_module(is_dev, client.clone(), allow_unprotected_txs),
 		None,
 	)?;
 
@@ -261,12 +262,16 @@ pub fn run(cmd: CliCommand) -> anyhow::Result<()> {
 	Ok(())
 }
 
-/// Create the JSON-RPC module.
-fn rpc_module(
+/// Create the JSON-RPC module from a `Client`.
+pub fn build_eth_rpc_module<C, BP>(
 	is_dev: bool,
-	client: Client,
+	client: Client<C, BP>,
 	allow_unprotected_txs: bool,
-) -> Result<RpcModule<()>, sc_service::Error> {
+) -> Result<RpcModule<()>, sc_service::Error>
+where
+	C: crate::SubstrateClientT,
+	BP: crate::BlockInfoProvider,
+{
 	let eth_api = EthRpcServerImpl::new(client.clone())
 		.with_accounts(if is_dev {
 			vec![
