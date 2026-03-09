@@ -139,22 +139,23 @@ where
 {
 	use pallet_revive_eth_rpc::{
 		cli::build_eth_rpc_module,
-		client::{connect, Client, SubscriptionType},
+		client::{Client, SubscriptionType},
+		native_block_info_provider::NativeClientBlockInfoProvider,
 		native_client::NativeSubstrateClient,
-		ReceiptExtractor, ReceiptProvider, SubxtBlockInfoProvider,
+		ReceiptExtractor, ReceiptProvider,
 	};
 	use sqlx::sqlite::SqlitePoolOptions;
 
 	const IN_MEMORY_DB: &str = "sqlite::memory:";
-	let node_rpc_url = "ws://127.0.0.1:9944";
 
 	let tokio_handle = tokio::runtime::Handle::current();
 
 	let eth_client = tokio_handle
 		.block_on(async {
-			let (api, _rpc_client, rpc) =
-				connect(node_rpc_url, 64 * 1024 * 1024, 64 * 1024 * 1024).await?;
-			let block_provider = SubxtBlockInfoProvider::new(api.clone(), rpc.clone()).await?;
+			let block_provider = NativeClientBlockInfoProvider::new(native_client.clone())
+				.map_err(|e| {
+					pallet_revive_eth_rpc::client::ClientError::NativeClientError(e.to_string())
+				})?;
 
 			let receipt_extractor = ReceiptExtractor::new_native_from_client::<
 				ParachainClient<Block, RuntimeApi>,
@@ -174,7 +175,7 @@ where
 				(SqlitePoolOptions::new().connect(&config.database_url).await?, None)
 			};
 
-			let receipt_provider = ReceiptProvider::new(
+			let receipt_provider = ReceiptProvider::new_native(
 				pool_db,
 				block_provider.clone(),
 				receipt_extractor,
@@ -182,13 +183,14 @@ where
 			)
 			.await?;
 
-			let backend = NativeSubstrateClient::new(native_client, pool, config.chain_id)
+			let backend = NativeSubstrateClient::new(native_client, pool, config.chain_id, false)
 				.map_err(|e| {
-					pallet_revive_eth_rpc::client::ClientError::NativeClientError(e.to_string())
-				})?;
+				pallet_revive_eth_rpc::client::ClientError::NativeClientError(e.to_string())
+			})?;
 
 			let automine = false;
-			let client = Client::from_backend(backend, block_provider, receipt_provider, automine)?;
+			let client =
+				Client::from_native_backend(backend, block_provider, receipt_provider, automine)?;
 
 			Ok::<_, pallet_revive_eth_rpc::client::ClientError>(client)
 		})

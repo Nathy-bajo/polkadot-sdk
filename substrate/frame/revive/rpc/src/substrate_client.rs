@@ -51,12 +51,6 @@ pub struct NodeHealth {
 	pub should_have_peers: bool,
 }
 
-impl From<subxt::backend::legacy::rpc_methods::SystemHealth> for NodeHealth {
-	fn from(h: subxt::backend::legacy::rpc_methods::SystemHealth) -> Self {
-		Self { peers: h.peers, is_syncing: h.is_syncing, should_have_peers: h.should_have_peers }
-	}
-}
-
 /// Lightweight block metadata that both the subxt and native paths can produce.
 #[derive(Clone, Debug)]
 pub struct BlockInfo {

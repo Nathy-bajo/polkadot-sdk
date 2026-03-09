@@ -109,6 +109,10 @@ use subxt::{
 	ext::subxt_rpcs::rpc_params,
 };
 
+fn system_health_from_subxt(h: subxt::backend::legacy::rpc_methods::SystemHealth) -> NodeHealth {
+	NodeHealth { peers: h.peers, is_syncing: h.is_syncing, should_have_peers: h.should_have_peers }
+}
+
 /// [`SubstrateClientT`] implementation backed by a `subxt` WebSocket connection.
 #[derive(Clone)]
 pub struct SubxtClient {
@@ -365,7 +369,7 @@ impl SubstrateClientT for SubxtClient {
 	}
 
 	async fn system_health(&self) -> Result<NodeHealth, ClientError> {
-		Ok(self.rpc.system_health().await?.into())
+		Ok(system_health_from_subxt(self.rpc.system_health().await?))
 	}
 
 	async fn get_automine(&self) -> bool {

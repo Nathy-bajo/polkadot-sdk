@@ -29,6 +29,7 @@ use thiserror::Error;
 pub mod cli;
 pub mod client;
 pub mod example;
+pub mod native_block_info_provider;
 pub mod native_client;
 pub mod substrate_client;
 pub mod subxt_client;
@@ -51,6 +52,7 @@ pub use receipt_extractor::ReceiptExtractor;
 mod apis;
 pub use apis::*;
 
+pub use native_block_info_provider::NativeClientBlockInfoProvider;
 pub use native_client::NativeSubstrateClient;
 pub use substrate_client::SubstrateClientT;
 pub use subxt_client::SubxtClient;
