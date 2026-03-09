@@ -336,22 +336,18 @@ impl SubstrateClientT for SubxtClient {
 			StreamOf::new(Box::pin(sub.map_err(|e| e.into())));
 
 		tokio::time::timeout(std::time::Duration::from_secs(5), async {
-			if let Some(status) = stream.next().await {
-				match status {
-					Ok(subxt_status) => {
-						let pool_status = subxt_tx_status_to_pool(subxt_status);
-						match pool_status {
-							sc_transaction_pool_api::TransactionStatus::Usurped(_) |
-							sc_transaction_pool_api::TransactionStatus::Dropped |
-							sc_transaction_pool_api::TransactionStatus::Invalid => {
-								return Err(ClientError::SubmitError(
-									crate::client::SubmitError::from(pool_status),
-								));
-							},
-							other => return Ok(other),
-						}
+			while let Some(status) = stream.next().await {
+				let subxt_status: SubxtTxStatus<SubstrateBlockHash> =
+					status.map_err(ClientError::from)?;
+				let pool_status = subxt_tx_status_to_submit_result(subxt_status);
+
+				match pool_status {
+					SubmitResult::Usurped(_) | SubmitResult::Dropped | SubmitResult::Invalid => {
+						return Err(ClientError::SubmitError(crate::client::SubmitError::from(
+							pool_status,
+						)));
 					},
-					Err(e) => return Err(ClientError::from(e)),
+					other => return Ok(other),
 				}
 			}
 			Err(ClientError::SubmitError(crate::client::SubmitError::StreamEnded))
@@ -373,10 +369,10 @@ impl SubstrateClientT for SubxtClient {
 	}
 
 	async fn get_automine(&self) -> bool {
-		match self.rpc_client.request::<bool>("getAutomine", rpc_params![]).await {
-			Ok(v) => v,
-			Err(_) => false,
-		}
+		self.rpc_client
+			.request::<bool>("getAutomine", rpc_params![])
+			.await
+			.unwrap_or(false)
 	}
 
 	async fn subscribe_blocks<F, Fut>(
@@ -469,9 +465,7 @@ fn to_hex(bytes: impl AsRef<[u8]>) -> String {
 	format!("0x{}", hex::encode(bytes.as_ref()))
 }
 
-fn subxt_tx_status_to_pool(
-	s: SubxtTxStatus<SubstrateBlockHash>,
-) -> sc_transaction_pool_api::TransactionStatus<SubstrateBlockHash, SubstrateBlockHash> {
+fn subxt_tx_status_to_submit_result(s: SubxtTxStatus<SubstrateBlockHash>) -> SubmitResult {
 	use sc_transaction_pool_api::TransactionStatus as Pool;
 	match s {
 		SubxtTxStatus::Future => Pool::Future,
