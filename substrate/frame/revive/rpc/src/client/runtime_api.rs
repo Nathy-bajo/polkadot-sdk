@@ -16,9 +16,13 @@
 // limitations under the License.
 
 #[cfg(feature = "subxt")]
-use crate::subxt_client::{self, SrcChainConfig};
+use crate::{
+	ClientError,
+	client::Balance,
+	subxt_client::{self, SrcChainConfig},
+};
 
-use crate::{ClientError, client::Balance};
+#[cfg(feature = "subxt")]
 use pallet_revive::{
 	EthTransactInfo,
 	evm::{
@@ -26,11 +30,14 @@ use pallet_revive::{
 		ReceiptGasInfo, Trace, U256,
 	},
 };
+
+#[cfg(feature = "subxt")]
 use sp_core::H256;
 
+#[cfg(feature = "subxt")]
 const LOG_TARGET: &str = "eth-rpc::runtime_api";
 
-/// A Wrapper around subxt Runtime API.
+/// A wrapper around the subxt Runtime API.
 #[cfg(feature = "subxt")]
 pub struct RuntimeApi(
 	subxt::runtime_api::RuntimeApi<SrcChainConfig, subxt::OnlineClient<SrcChainConfig>>,
@@ -141,7 +148,7 @@ impl RuntimeApi {
 		Ok(*gas_price)
 	}
 
-	/// Convert a weight to a fee.
+	/// Get the block gas limit
 	pub async fn block_gas_limit(&self) -> Result<U256, ClientError> {
 		let payload = subxt_client::apis().revive_api().block_gas_limit();
 		let gas_limit = self.0.call(payload).await?;

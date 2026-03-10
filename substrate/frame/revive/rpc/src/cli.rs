@@ -102,6 +102,29 @@ fn init_logger(params: &SharedParams) -> anyhow::Result<()> {
 	Ok(())
 }
 
+/// Build the list of dev accounts to inject when `--dev` is passed.
+fn dev_accounts() -> Vec<crate::Account> {
+	#[cfg(feature = "subxt")]
+	{
+		vec![
+			crate::Account::from(subxt_signer::eth::dev::alith()),
+			crate::Account::from(subxt_signer::eth::dev::baltathar()),
+			crate::Account::from(subxt_signer::eth::dev::charleth()),
+			crate::Account::from(subxt_signer::eth::dev::dorothy()),
+			crate::Account::from(subxt_signer::eth::dev::ethan()),
+		]
+	}
+	#[cfg(not(feature = "subxt"))]
+	{
+		log::warn!(
+			target: LOG_TARGET,
+			"⚠️  --dev mode: the `subxt` feature is disabled, no dev accounts are pre-loaded. \
+			 Enable `subxt` or inject accounts manually via EthRpcServerImpl::with_accounts."
+		);
+		vec![]
+	}
+}
+
 /// Create the JSON-RPC module from a `Client`.
 pub fn build_eth_rpc_module<C, BP>(
 	is_dev: bool,
@@ -113,17 +136,7 @@ where
 	BP: BlockInfoProvider,
 {
 	let eth_api = EthRpcServerImpl::new(client.clone())
-		.with_accounts(if is_dev {
-			vec![
-				crate::Account::from(subxt_signer::eth::dev::alith()),
-				crate::Account::from(subxt_signer::eth::dev::baltathar()),
-				crate::Account::from(subxt_signer::eth::dev::charleth()),
-				crate::Account::from(subxt_signer::eth::dev::dorothy()),
-				crate::Account::from(subxt_signer::eth::dev::ethan()),
-			]
-		} else {
-			vec![]
-		})
+		.with_accounts(if is_dev { dev_accounts() } else { vec![] })
 		.with_allow_unprotected_txs(allow_unprotected_txs)
 		.with_use_pending_for_estimate_gas(is_dev)
 		.into_rpc();

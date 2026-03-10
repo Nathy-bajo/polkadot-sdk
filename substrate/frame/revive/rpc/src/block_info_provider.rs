@@ -63,8 +63,6 @@ pub trait BlockInfoProvider: Send + Sync + Clone + 'static {
 	async fn block_by_hash(&self, hash: &H256) -> Result<Option<Arc<Self::Block>>, ClientError>;
 }
 
-pub use crate::native_block_info_provider::NativeClientBlockInfoProvider;
-
 /// The subxt-backed block info provider.
 #[cfg(feature = "subxt")]
 pub use crate::subxt_block_info_provider::SubxtBlockInfoProvider;
