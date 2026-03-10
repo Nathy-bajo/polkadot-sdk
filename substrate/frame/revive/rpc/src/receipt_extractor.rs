@@ -15,10 +15,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 use crate::{
-	ClientError, H160, LOG_TARGET,
-	client::{SubstrateBlock, SubstrateBlockNumber, runtime_api::RuntimeApi},
-	substrate_client::RawExtrinsic,
-	subxt_client::SrcChainConfig,
+	ClientError, H160, LOG_TARGET, client::SubstrateBlockNumber, substrate_client::RawExtrinsic,
 };
 
 use pallet_revive::{
@@ -27,7 +24,7 @@ use pallet_revive::{
 };
 use sp_core::keccak_256;
 use std::{future::Future, pin::Pin, sync::Arc};
-use subxt::OnlineClient;
+
 const PALLET_REVIVE_INDEX: u8 = 253;
 const ETH_TRANSACT_CALL_INDEX: u8 = 0;
 
@@ -65,9 +62,9 @@ pub struct ReceiptExtractor {
 
 	/// Fetch ethereum block hash.
 	fetch_eth_block_hash: FetchEthBlockHashFn,
-	/// Fetch decoded events for every extrinsic in a block.
+	/// Fetch decoded events for every extrinsic in a block (optional).
 	fetch_block_events: Option<FetchBlockEventsFn>,
-	/// Fetch raw extrinsics for a block
+	/// Fetch raw extrinsics for a block.
 	fetch_block_extrinsics: Option<FetchBlockExtrinsicsFn>,
 
 	earliest_receipt_block: Option<SubstrateBlockNumber>,
@@ -82,101 +79,7 @@ impl ReceiptExtractor {
 		block_number < self.earliest_receipt_block.unwrap_or_default()
 	}
 
-	/// Create a new `ReceiptExtractor` backed by a **subxt** `OnlineClient`.
-	pub async fn new(
-		api: OnlineClient<SrcChainConfig>,
-		earliest_receipt_block: Option<SubstrateBlockNumber>,
-	) -> Result<Self, ClientError> {
-		Self::new_with_custom_address_recovery(
-			api,
-			earliest_receipt_block,
-			Arc::new(|signed_tx: &TransactionSigned| signed_tx.recover_eth_address()),
-		)
-		.await
-	}
-
-	pub async fn new_with_custom_address_recovery(
-		api: OnlineClient<SrcChainConfig>,
-		earliest_receipt_block: Option<SubstrateBlockNumber>,
-		recover_eth_address_fn: RecoverEthAddressFn,
-	) -> Result<Self, ClientError> {
-		use crate::subxt_client::revive::events::{ContractEmitted, EthExtrinsicRevert};
-
-		let api_for_hash = api.clone();
-		let fetch_eth_block_hash = Arc::new(move |block_hash, block_number| {
-			let api = api_for_hash.clone();
-			let fut = async move {
-				let runtime_api = RuntimeApi::new(api.runtime_api().at(block_hash));
-				runtime_api.eth_block_hash(U256::from(block_number)).await.ok().flatten()
-			};
-
-			Box::pin(fut) as Pin<Box<_>>
-		});
-
-		let api_for_data = api.clone();
-		let fetch_receipt_data = Arc::new(move |block_hash| {
-			let api = api_for_data.clone();
-			let fut = async move {
-				let runtime_api = RuntimeApi::new(api.runtime_api().at(block_hash));
-				runtime_api.eth_receipt_data().await.ok()
-			};
-			Box::pin(fut) as Pin<Box<_>>
-		});
-
-		let api_for_events = api.clone();
-		let fetch_block_events: FetchBlockEventsFn = Arc::new(move |block_hash| {
-			let api = api_for_events.clone();
-			let fut = async move {
-				let block = api.blocks().at(block_hash).await.ok()?;
-				let extrinsics = block.extrinsics().await.ok()?;
-
-				let mut result = Vec::new();
-				for ext in extrinsics.iter() {
-					let events = ext.events().await.ok()?;
-					let success = !events.has::<EthExtrinsicRevert>().unwrap_or(false);
-					let logs = events
-						.iter()
-						.filter_map(|ev| {
-							let ev = ev.ok()?;
-							let ce = ev.as_event::<ContractEmitted>().ok()??;
-							Some((ce.contract, ce.topics, Some(ce.data)))
-						})
-						.collect();
-					result.push(ExtrinsicEvents { success, logs });
-				}
-				Some(result)
-			};
-			Box::pin(fut) as Pin<Box<_>>
-		});
-
-		let api_for_ext = api.clone();
-		let fetch_block_extrinsics: FetchBlockExtrinsicsFn = Arc::new(move |block_hash| {
-			let api = api_for_ext.clone();
-			let fut = async move {
-				let block = api.blocks().at(block_hash).await.ok()?;
-				let extrinsics = block.extrinsics().await.ok()?;
-				Some(
-					extrinsics
-						.iter()
-						.enumerate()
-						.map(|(index, ext)| RawExtrinsic { payload: ext.bytes().to_vec(), index })
-						.collect(),
-				)
-			};
-			Box::pin(fut) as Pin<Box<_>>
-		});
-
-		Ok(Self {
-			fetch_receipt_data,
-			fetch_eth_block_hash,
-			fetch_block_events: Some(fetch_block_events),
-			fetch_block_extrinsics: Some(fetch_block_extrinsics),
-			earliest_receipt_block,
-			recover_eth_address: recover_eth_address_fn,
-		})
-	}
-
-	/// Create a `ReceiptExtractor` for the **native in-process** path.
+	/// Create a `ReceiptExtractor` for the **native in-process** path with custom closures.
 	pub fn new_native(
 		fetch_receipt_data_fn: impl Fn(
 			H256,
@@ -272,6 +175,46 @@ impl ReceiptExtractor {
 						.collect(),
 				)
 			};
+			Box::pin(fut) as Pin<Box<dyn Future<Output = Option<Vec<RawExtrinsic>>> + Send>>
+		};
+
+		Self::new_native(
+			fetch_receipt_data_fn,
+			fetch_eth_block_hash_fn,
+			earliest_receipt_block,
+			None::<fn(H256) -> Pin<Box<dyn Future<Output = Option<BlockEvents>> + Send>>>,
+			Some(fetch_block_extrinsics_fn),
+		)
+	}
+
+	/// Create a `ReceiptExtractor` from a [`SubstrateClientT`] implementation.
+	pub fn new_from_substrate_client<C>(
+		client: C,
+		earliest_receipt_block: Option<SubstrateBlockNumber>,
+	) -> Self
+	where
+		C: crate::SubstrateClientT + Clone + 'static,
+	{
+		let client_for_data = client.clone();
+		let fetch_receipt_data_fn = move |block_hash: H256| {
+			let c = client_for_data.clone();
+			let fut = async move { c.eth_receipt_data(block_hash).await.ok() };
+			Box::pin(fut) as Pin<Box<dyn Future<Output = Option<Vec<ReceiptGasInfo>>> + Send>>
+		};
+
+		let client_for_hash = client.clone();
+		let fetch_eth_block_hash_fn = move |block_hash: H256, block_number: u64| {
+			let c = client_for_hash.clone();
+			let fut = async move {
+				c.eth_block_hash(block_hash, U256::from(block_number)).await.ok().flatten()
+			};
+			Box::pin(fut) as Pin<Box<dyn Future<Output = Option<H256>> + Send>>
+		};
+
+		let client_for_ext = client.clone();
+		let fetch_block_extrinsics_fn = move |block_hash: H256| {
+			let c = client_for_ext.clone();
+			let fut = async move { c.block_extrinsics(block_hash).await.ok() };
 			Box::pin(fut) as Pin<Box<dyn Future<Output = Option<Vec<RawExtrinsic>>> + Send>>
 		};
 
@@ -515,50 +458,6 @@ impl ReceiptExtractor {
 		.await
 	}
 
-	/// Extract receipts from a block using a subxt `SubstrateBlock`.
-	pub async fn extract_from_block(
-		&self,
-		block: &SubstrateBlock,
-	) -> Result<Vec<(TransactionSigned, ReceiptInfo)>, ClientError> {
-		if self.is_before_earliest_block(block.number()) {
-			return Ok(vec![]);
-		}
-
-		let block_hash = block.hash();
-		let block_number = block.number();
-
-		let eth_block_hash = (self.fetch_eth_block_hash)(block_hash, block_number as u64)
-			.await
-			.unwrap_or(block_hash);
-
-		let receipt_data = (self.fetch_receipt_data)(block_hash)
-			.await
-			.ok_or(ClientError::ReceiptDataNotFound)?;
-
-		let block_events = if let Some(ref fetch_events) = self.fetch_block_events {
-			fetch_events(block_hash).await
-		} else {
-			None
-		};
-
-		let extrinsics = block.extrinsics().await?;
-		let raw: Vec<RawExtrinsic> = extrinsics
-			.iter()
-			.enumerate()
-			.map(|(i, ext)| RawExtrinsic { payload: ext.bytes().to_vec(), index: i })
-			.collect();
-
-		self.extract_from_block_raw(
-			block_hash,
-			block_number,
-			eth_block_hash,
-			&raw,
-			&receipt_data,
-			block_events.as_deref(),
-		)
-		.await
-	}
-
 	/// Extract a single receipt from a block by transaction index.
 	pub async fn extract_from_transaction_by_hash(
 		&self,
@@ -567,19 +466,6 @@ impl ReceiptExtractor {
 		transaction_index: usize,
 	) -> Result<(TransactionSigned, ReceiptInfo), ClientError> {
 		let receipts = self.extract_from_block_by_hash(block_hash, block_number).await?;
-		receipts
-			.into_iter()
-			.find(|(_, r)| r.transaction_index.as_usize() == transaction_index)
-			.ok_or(ClientError::EthExtrinsicNotFound)
-	}
-
-	/// Extract a single receipt from a subxt block by transaction index.
-	pub async fn extract_from_transaction(
-		&self,
-		block: &SubstrateBlock,
-		transaction_index: usize,
-	) -> Result<(TransactionSigned, ReceiptInfo), ClientError> {
-		let receipts = self.extract_from_block(block).await?;
 		receipts
 			.into_iter()
 			.find(|(_, r)| r.transaction_index.as_usize() == transaction_index)

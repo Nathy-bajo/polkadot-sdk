@@ -157,22 +157,39 @@ where
 					pallet_revive_eth_rpc::client::ClientError::NativeClientError(e.to_string())
 				})?;
 
-			let receipt_extractor = ReceiptExtractor::new_native_from_client::<
-				ParachainClient<Block, RuntimeApi>,
-				Block,
-				u64,
-			>(native_client.clone(), None);
+			let backend =
+				NativeSubstrateClient::new(native_client.clone(), pool, config.chain_id, false)
+					.map_err(|e| {
+						pallet_revive_eth_rpc::client::ClientError::NativeClientError(e.to_string())
+					})?;
 
-			let (pool_db, keep_latest_n_blocks) = if config.database_url.is_some() == IN_MEMORY_DB {
+			let receipt_extractor = ReceiptExtractor::new_from_substrate_client(
+				backend.clone(),
+				None, // earliest_receipt_block
+			);
+
+			let (pool_db, keep_latest_n_blocks) = if config.database_url == IN_MEMORY_DB {
+				log::warn!(
+					target: pallet_revive_eth_rpc::LOG_TARGET,
+					"💾 Using in-memory receipt DB, keeping only {} blocks",
+					config.cache_size,
+				);
 				let p = SqlitePoolOptions::new()
 					.max_connections(1)
 					.idle_timeout(None)
 					.max_lifetime(None)
 					.connect(&config.database_url)
-					.await?;
+					.await
+					.map_err(pallet_revive_eth_rpc::client::ClientError::SqlxError)?;
 				(p, Some(config.cache_size))
 			} else {
-				(SqlitePoolOptions::new().connect(&config.database_url).await?, None)
+				(
+					SqlitePoolOptions::new()
+						.connect(&config.database_url)
+						.await
+						.map_err(pallet_revive_eth_rpc::client::ClientError::SqlxError)?,
+					None,
+				)
 			};
 
 			let receipt_provider = ReceiptProvider::new(
@@ -181,17 +198,15 @@ where
 				receipt_extractor,
 				keep_latest_n_blocks,
 			)
-			.await?;
+			.await
+			.map_err(pallet_revive_eth_rpc::client::ClientError::SqlxError)?;
 
-			let backend = NativeSubstrateClient::new(native_client, pool, config.chain_id, false)
-				.map_err(|e| {
-				pallet_revive_eth_rpc::client::ClientError::NativeClientError(e.to_string())
-			})?;
-
-			let automine = false;
-
-			let client =
-				Client::from_native_backend(backend, block_provider, receipt_provider, automine)?;
+			let client = Client::from_native_backend(
+				backend,
+				block_provider,
+				receipt_provider,
+				false, // automine
+			)?;
 
 			Ok::<_, pallet_revive_eth_rpc::client::ClientError>(client)
 		})
@@ -205,16 +220,17 @@ where
 		Some("eth-rpc"),
 		Box::pin(async move {
 			use futures::FutureExt;
-			let fut = futures::future::try_join_all(vec![
+			let result = futures::future::try_join_all(vec![
 				client_for_sub
 					.subscribe_and_cache_new_blocks(SubscriptionType::BestBlocks)
 					.boxed(),
 				client_for_sub
 					.subscribe_and_cache_new_blocks(SubscriptionType::FinalizedBlocks)
 					.boxed(),
-			]);
+			])
+			.await;
 
-			if let Err(err) = fut.await {
+			if let Err(err) = result {
 				log::error!(
 					target: pallet_revive_eth_rpc::LOG_TARGET,
 					"ETH RPC block subscription task failed: {err:?}"

@@ -15,33 +15,32 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use crate::{
-	ClientError,
-	client::Balance,
-	subxt_client::{self, SrcChainConfig},
-};
-use futures::TryFutureExt;
+#[cfg(feature = "subxt")]
+use crate::subxt_client::{self, SrcChainConfig};
+
+use crate::{ClientError, client::Balance};
 use pallet_revive::{
-	DryRunConfig, EthTransactInfo,
+	EthTransactInfo,
 	evm::{
 		Block as EthBlock, BlockNumberOrTagOrHash, BlockTag, GenericTransaction, H160,
 		ReceiptGasInfo, Trace, U256,
 	},
 };
 use sp_core::H256;
-use sp_timestamp::Timestamp;
-use subxt::{Error::Metadata, OnlineClient, error::MetadataError, ext::subxt_rpcs::UserError};
 
 const LOG_TARGET: &str = "eth-rpc::runtime_api";
 
-/// A Wrapper around subxt Runtime API
-#[derive(Clone)]
-pub struct RuntimeApi(subxt::runtime_api::RuntimeApi<SrcChainConfig, OnlineClient<SrcChainConfig>>);
+/// A Wrapper around subxt Runtime API.
+#[cfg(feature = "subxt")]
+pub struct RuntimeApi(
+	subxt::runtime_api::RuntimeApi<SrcChainConfig, subxt::OnlineClient<SrcChainConfig>>,
+);
 
+#[cfg(feature = "subxt")]
 impl RuntimeApi {
 	/// Create a new instance.
 	pub fn new(
-		api: subxt::runtime_api::RuntimeApi<SrcChainConfig, OnlineClient<SrcChainConfig>>,
+		api: subxt::runtime_api::RuntimeApi<SrcChainConfig, subxt::OnlineClient<SrcChainConfig>>,
 	) -> Self {
 		Self(api)
 	}
@@ -72,6 +71,11 @@ impl RuntimeApi {
 		tx: GenericTransaction,
 		block: BlockNumberOrTagOrHash,
 	) -> Result<EthTransactInfo<Balance>, ClientError> {
+		use futures::TryFutureExt;
+		use pallet_revive::DryRunConfig;
+		use sp_timestamp::Timestamp;
+		use subxt::{Error::Metadata, error::MetadataError, ext::subxt_rpcs::UserError};
+
 		let timestamp_override = match block {
 			BlockNumberOrTagOrHash::BlockTag(BlockTag::Pending) => {
 				Some(Timestamp::current().as_millis())
@@ -223,7 +227,10 @@ impl RuntimeApi {
 	pub async fn eth_block_hash(&self, number: U256) -> Result<Option<H256>, ClientError> {
 		let payload = subxt_client::apis().revive_api().eth_block_hash(number.into());
 		let hash = self.0.call(payload).await.inspect_err(|err| {
-			log::debug!(target: LOG_TARGET, "Ethereum block hash for block #{number:?} not found, err: {err:?}");
+			log::debug!(
+				target: LOG_TARGET,
+				"Ethereum block hash for block #{number:?} not found, err: {err:?}"
+			);
 		})?;
 		Ok(hash)
 	}

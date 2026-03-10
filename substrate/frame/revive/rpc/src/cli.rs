@@ -16,11 +16,10 @@
 // limitations under the License.
 //! The Ethereum JSON-RPC server.
 use crate::{
-	DebugRpcServer, DebugRpcServerImpl, EthRpcServer, EthRpcServerImpl, LOG_TARGET,
-	PolkadotRpcServer, PolkadotRpcServerImpl, ReceiptExtractor, ReceiptProvider,
-	SubxtBlockInfoProvider, SystemHealthRpcServer, SystemHealthRpcServerImpl,
-	client::{Client, SubscriptionType, SubstrateBlockNumber, connect},
-	subxt_client::SubxtClient,
+	BlockInfoProvider, DebugRpcServer, DebugRpcServerImpl, EthRpcServer, EthRpcServerImpl,
+	LOG_TARGET, PolkadotRpcServer, PolkadotRpcServerImpl, ReceiptExtractor, ReceiptProvider,
+	SubstrateClientT, SystemHealthRpcServer, SystemHealthRpcServerImpl,
+	client::{Client, SubscriptionType, SubstrateBlockNumber},
 };
 use clap::Parser;
 use futures::{FutureExt, future::BoxFuture, pin_mut};
@@ -45,10 +44,6 @@ const IN_MEMORY_DB: &str = "sqlite::memory:";
 #[derive(Parser, Debug)]
 #[clap(author, about, version)]
 pub struct CliCommand {
-	/// The node url to connect to
-	#[clap(long, default_value = "ws://127.0.0.1:9944")]
-	pub node_rpc_url: String,
-
 	/// The maximum number of blocks to cache in memory.
 	#[clap(long, default_value = "256")]
 	pub cache_size: usize,
@@ -107,68 +102,99 @@ fn init_logger(params: &SharedParams) -> anyhow::Result<()> {
 	Ok(())
 }
 
-fn build_client(
-	tokio_handle: &tokio::runtime::Handle,
-	cache_size: usize,
-	earliest_receipt_block: Option<SubstrateBlockNumber>,
-	node_rpc_url: &str,
-	database_url: &str,
-	max_request_size: u32,
-	max_response_size: u32,
-	abort_signal: Signals,
-) -> anyhow::Result<Client<SubxtClient, SubxtBlockInfoProvider>> {
-	let fut = async {
-		let (api, rpc_client, rpc) =
-			connect(node_rpc_url, max_request_size, max_response_size).await?;
-
-		let block_provider = SubxtBlockInfoProvider::new(api.clone(), rpc.clone()).await?;
-
-		let (pool, keep_latest_n_blocks) = if database_url == IN_MEMORY_DB {
-			log::warn!(
-				target: LOG_TARGET,
-				"💾 Using in-memory database, keeping only {cache_size} blocks in memory"
-			);
-			let pool = SqlitePoolOptions::new()
-				.max_connections(1)
-				.idle_timeout(None)
-				.max_lifetime(None)
-				.connect(database_url)
-				.await?;
-			(pool, Some(cache_size))
+/// Create the JSON-RPC module from a `Client`.
+pub fn build_eth_rpc_module<C, BP>(
+	is_dev: bool,
+	client: Client<C, BP>,
+	allow_unprotected_txs: bool,
+) -> Result<RpcModule<()>, sc_service::Error>
+where
+	C: SubstrateClientT,
+	BP: BlockInfoProvider,
+{
+	let eth_api = EthRpcServerImpl::new(client.clone())
+		.with_accounts(if is_dev {
+			vec![
+				crate::Account::from(subxt_signer::eth::dev::alith()),
+				crate::Account::from(subxt_signer::eth::dev::baltathar()),
+				crate::Account::from(subxt_signer::eth::dev::charleth()),
+				crate::Account::from(subxt_signer::eth::dev::dorothy()),
+				crate::Account::from(subxt_signer::eth::dev::ethan()),
+			]
 		} else {
-			(SqlitePoolOptions::new().connect(database_url).await?, None)
-		};
+			vec![]
+		})
+		.with_allow_unprotected_txs(allow_unprotected_txs)
+		.with_use_pending_for_estimate_gas(is_dev)
+		.into_rpc();
 
-		let receipt_extractor = ReceiptExtractor::new(api.clone(), earliest_receipt_block).await?;
+	let health_api = SystemHealthRpcServerImpl::new(client.clone()).into_rpc();
+	let debug_api = DebugRpcServerImpl::new(client.clone()).into_rpc();
+	let polkadot_api = PolkadotRpcServerImpl::new(client).into_rpc();
 
-		let receipt_provider = ReceiptProvider::new(
-			pool,
-			block_provider.clone(),
-			receipt_extractor,
-			keep_latest_n_blocks,
-		)
-		.await?;
-
-		let client = Client::new(api, rpc_client, rpc, block_provider, receipt_provider).await?;
-
-		anyhow::Ok(client)
-	}
-	.fuse();
-	pin_mut!(fut);
-
-	match tokio_handle.block_on(abort_signal.try_until_signal(fut)) {
-		Ok(Ok(client)) => Ok(client),
-		Ok(Err(err)) => Err(err),
-		Err(_) => anyhow::bail!("Process interrupted"),
-	}
+	let mut module = RpcModule::new(());
+	module.merge(eth_api).map_err(|e| sc_service::Error::Application(e.into()))?;
+	module.merge(health_api).map_err(|e| sc_service::Error::Application(e.into()))?;
+	module.merge(debug_api).map_err(|e| sc_service::Error::Application(e.into()))?;
+	module
+		.merge(polkadot_api)
+		.map_err(|e| sc_service::Error::Application(e.into()))?;
+	Ok(module)
 }
 
-/// Start the JSON-RPC server using the given command line arguments.
-pub fn run(cmd: CliCommand) -> anyhow::Result<()> {
+/// Build an in-memory `Client` from a [`SubstrateClientT`] and [`BlockInfoProvider`].
+pub async fn build_client_from_backend<C, BP>(
+	backend: C,
+	block_provider: BP,
+	database_url: &str,
+	cache_size: usize,
+	earliest_receipt_block: Option<SubstrateBlockNumber>,
+	automine: bool,
+) -> anyhow::Result<Client<C, BP>>
+where
+	C: SubstrateClientT,
+	BP: BlockInfoProvider,
+{
+	let receipt_extractor =
+		ReceiptExtractor::new_from_substrate_client(backend.clone(), earliest_receipt_block);
+
+	let (pool, keep_latest_n_blocks) = if database_url == IN_MEMORY_DB {
+		log::warn!(
+			target: LOG_TARGET,
+			"💾 Using in-memory database, keeping only {cache_size} blocks in memory"
+		);
+		let pool = SqlitePoolOptions::new()
+			.max_connections(1)
+			.idle_timeout(None)
+			.max_lifetime(None)
+			.connect(database_url)
+			.await?;
+		(pool, Some(cache_size))
+	} else {
+		(SqlitePoolOptions::new().connect(database_url).await?, None)
+	};
+
+	let receipt_provider =
+		ReceiptProvider::new(pool, block_provider.clone(), receipt_extractor, keep_latest_n_blocks)
+			.await?;
+
+	let client = Client::from_backend(backend, block_provider, receipt_provider, automine)?;
+	Ok(client)
+}
+
+/// Start the JSON-RPC server using a pre-built native client.
+pub fn run_with_native_client<C, BP>(
+	cmd: CliCommand,
+	backend: C,
+	block_provider: BP,
+) -> anyhow::Result<()>
+where
+	C: SubstrateClientT,
+	BP: BlockInfoProvider,
+{
 	let CliCommand {
 		rpc_params,
 		prometheus_params,
-		node_rpc_url,
 		cache_size,
 		database_url,
 		earliest_receipt_block,
@@ -180,6 +206,7 @@ pub fn run(cmd: CliCommand) -> anyhow::Result<()> {
 
 	#[cfg(not(test))]
 	init_logger(&shared_params)?;
+
 	let is_dev = shared_params.dev;
 	let rpc_addrs: Option<Vec<sc_service::config::RpcEndpoint>> = rpc_params
 		.rpc_addr(is_dev, false, 8545)?
@@ -211,16 +238,26 @@ pub fn run(cmd: CliCommand) -> anyhow::Result<()> {
 	let tokio_handle = tokio_runtime.handle();
 	let mut task_manager = TaskManager::new(tokio_handle.clone(), prometheus_registry)?;
 
-	let client = build_client(
-		tokio_handle,
-		cache_size,
-		earliest_receipt_block,
-		&node_rpc_url,
-		&database_url,
-		rpc_config.max_request_size * 1024 * 1024,
-		rpc_config.max_response_size * 1024 * 1024,
-		tokio_runtime.block_on(async { Signals::capture() })?,
-	)?;
+	// Build the client synchronously inside the tokio runtime.
+	let client = {
+		let fut = build_client_from_backend(
+			backend,
+			block_provider,
+			&database_url,
+			cache_size,
+			earliest_receipt_block,
+			false, // automine
+		)
+		.fuse();
+		pin_mut!(fut);
+
+		let abort_signal = tokio_runtime.block_on(async { Signals::capture() })?;
+		match tokio_handle.block_on(abort_signal.try_until_signal(fut)) {
+			Ok(Ok(c)) => c,
+			Ok(Err(e)) => return Err(e),
+			Err(_) => anyhow::bail!("Process interrupted"),
+		}
+	};
 
 	// Prometheus metrics.
 	if let Some(PrometheusConfig { port, registry }) = prometheus_config.clone() {
@@ -260,44 +297,4 @@ pub fn run(cmd: CliCommand) -> anyhow::Result<()> {
 	let signals = tokio_runtime.block_on(async { Signals::capture() })?;
 	tokio_runtime.block_on(signals.run_until_signal(task_manager.future().fuse()))?;
 	Ok(())
-}
-
-/// Create the JSON-RPC module from a `Client`.
-pub fn build_eth_rpc_module<C, BP>(
-	is_dev: bool,
-	client: Client<C, BP>,
-	allow_unprotected_txs: bool,
-) -> Result<RpcModule<()>, sc_service::Error>
-where
-	C: crate::SubstrateClientT,
-	BP: crate::BlockInfoProvider,
-{
-	let eth_api = EthRpcServerImpl::new(client.clone())
-		.with_accounts(if is_dev {
-			vec![
-				crate::Account::from(subxt_signer::eth::dev::alith()),
-				crate::Account::from(subxt_signer::eth::dev::baltathar()),
-				crate::Account::from(subxt_signer::eth::dev::charleth()),
-				crate::Account::from(subxt_signer::eth::dev::dorothy()),
-				crate::Account::from(subxt_signer::eth::dev::ethan()),
-			]
-		} else {
-			vec![]
-		})
-		.with_allow_unprotected_txs(allow_unprotected_txs)
-		.with_use_pending_for_estimate_gas(is_dev)
-		.into_rpc();
-
-	let health_api = SystemHealthRpcServerImpl::new(client.clone()).into_rpc();
-	let debug_api = DebugRpcServerImpl::new(client.clone()).into_rpc();
-	let polkadot_api = PolkadotRpcServerImpl::new(client).into_rpc();
-
-	let mut module = RpcModule::new(());
-	module.merge(eth_api).map_err(|e| sc_service::Error::Application(e.into()))?;
-	module.merge(health_api).map_err(|e| sc_service::Error::Application(e.into()))?;
-	module.merge(debug_api).map_err(|e| sc_service::Error::Application(e.into()))?;
-	module
-		.merge(polkadot_api)
-		.map_err(|e| sc_service::Error::Application(e.into()))?;
-	Ok(module)
 }

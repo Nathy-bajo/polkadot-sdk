@@ -16,7 +16,9 @@
 // limitations under the License.
 use crate::{
 	Address, AddressOrAddresses, BlockInfoProvider, BlockNumberOrTag, BlockTag, Bytes, ClientError,
-	FilterTopic, ReceiptExtractor, block_info_provider::BlockInfo, client::SubstrateBlockNumber,
+	FilterTopic, ReceiptExtractor,
+	block_info_provider::{BlockInfo, test::MockBlockInfoProvider},
+	client::SubstrateBlockNumber,
 };
 use pallet_revive::evm::{Filter, Log, ReceiptInfo, TransactionSigned};
 use sp_core::{H256, U256};
@@ -31,7 +33,7 @@ const LOG_TARGET: &str = "eth-rpc::receipt_provider";
 
 /// ReceiptProvider stores transaction receipts and logs in a SQLite database.
 #[derive(Clone)]
-pub struct ReceiptProvider<BP: BlockInfoProvider = crate::SubxtBlockInfoProvider> {
+pub struct ReceiptProvider<BP: BlockInfoProvider = MockBlockInfoProvider> {
 	/// The database pool.
 	pool: SqlitePool,
 	/// The block provider used to fetch blocks and reconstruct receipts.
@@ -79,7 +81,7 @@ impl<BP: BlockInfoProvider> ReceiptProvider<BP> {
 		})
 	}
 
-	// Get block hash and  transaction index by transaction hash
+	// Get block hash and transaction index by transaction hash
 	pub async fn find_transaction(&self, transaction_hash: &H256) -> Option<(H256, usize)> {
 		let transaction_hash = transaction_hash.as_ref();
 		let result = query!(
@@ -267,26 +269,6 @@ impl<BP: BlockInfoProvider> ReceiptProvider<BP> {
 			.await
 			.ok()?;
 		Some(signed_tx)
-	}
-
-	/// Extract receipts from a subxt `SubstrateBlock` (legacy helper).
-	pub async fn receipts_from_block(
-		&self,
-		block: &crate::client::SubstrateBlock,
-	) -> Result<Vec<(TransactionSigned, ReceiptInfo)>, ClientError> {
-		self.receipt_extractor.extract_from_block(block).await
-	}
-
-	/// Extract and insert receipts from a subxt `SubstrateBlock` (legacy helper).
-	pub async fn insert_block_receipts(
-		&self,
-		block: &crate::client::SubstrateBlock,
-		ethereum_hash: &H256,
-	) -> Result<Vec<(TransactionSigned, ReceiptInfo)>, ClientError> {
-		let receipts = self.receipts_from_block(block).await?;
-		self.insert_with_hashes(block.hash(), block.number(), &receipts, ethereum_hash)
-			.await?;
-		Ok(receipts)
 	}
 
 	/// Insert receipts for a block that implements [`BlockInfo`].

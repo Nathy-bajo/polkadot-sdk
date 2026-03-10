@@ -15,6 +15,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#[cfg(feature = "subxt")]
 use crate::{
 	ClientError, H160,
 	subxt_client::{
@@ -22,12 +23,16 @@ use crate::{
 		runtime_types::pallet_revive::storage::{AccountType, ContractInfo},
 	},
 };
+
+#[cfg(feature = "subxt")]
 use subxt::{OnlineClient, storage::Storage};
 
 /// A wrapper around the Substrate Storage API.
+#[cfg(feature = "subxt")]
 #[derive(Clone)]
 pub struct StorageApi(Storage<SrcChainConfig, OnlineClient<SrcChainConfig>>);
 
+#[cfg(feature = "subxt")]
 impl StorageApi {
 	/// Create a new instance of the StorageApi.
 	pub fn new(api: Storage<SrcChainConfig, OnlineClient<SrcChainConfig>>) -> Self {

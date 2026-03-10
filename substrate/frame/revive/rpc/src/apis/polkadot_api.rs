@@ -27,10 +27,7 @@ pub trait PolkadotRpc {
 	async fn post_dispatch_weight(&self, transaction_hash: H256) -> RpcResult<Option<Weight>>;
 }
 
-pub struct PolkadotRpcServerImpl<
-	C: SubstrateClientT = crate::SubxtClient,
-	BP: BlockInfoProvider = crate::SubxtBlockInfoProvider,
-> {
+pub struct PolkadotRpcServerImpl<C: SubstrateClientT, BP: BlockInfoProvider> {
 	client: Client<C, BP>,
 }
 

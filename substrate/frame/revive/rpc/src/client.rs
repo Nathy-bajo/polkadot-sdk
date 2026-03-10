@@ -25,7 +25,6 @@ use crate::{
 	TransactionInfo,
 	block_info_provider::BlockInfo,
 	substrate_client::{NodeHealth, SubmitResult, SubstrateClientT},
-	subxt_client::SrcChainConfig,
 };
 use jsonrpsee::types::{ErrorObjectOwned, error::CALL_EXECUTION_FAILED_CODE};
 use pallet_revive::{
@@ -37,32 +36,15 @@ use pallet_revive::{
 	},
 };
 use sp_weights::Weight;
-use std::{ops::Range, sync::Arc, time::Duration};
-use subxt::{
-	OnlineClient,
-	backend::{
-		legacy::LegacyRpcMethods,
-		rpc::{
-			RpcClient,
-			reconnecting_rpc_client::{ExponentialBackoff, RpcClient as ReconnectingRpcClient},
-		},
-	},
-	config::{HashFor, Header},
-};
+use std::{ops::Range, sync::Arc};
 use thiserror::Error;
 use tokio::sync::Mutex;
 
-/// The substrate block type (subxt-backed).
-pub type SubstrateBlock = subxt::blocks::Block<SrcChainConfig, OnlineClient<SrcChainConfig>>;
-
-/// The substrate block header.
-pub type SubstrateBlockHeader = <SrcChainConfig as subxt::Config>::Header;
-
 /// The substrate block number type.
-pub type SubstrateBlockNumber = <SubstrateBlockHeader as Header>::Number;
+pub type SubstrateBlockNumber = u32;
 
 /// The substrate block hash type.
-pub type SubstrateBlockHash = HashFor<SrcChainConfig>;
+pub type SubstrateBlockHash = sp_core::H256;
 
 /// The runtime balance type.
 pub type Balance = u128;
@@ -118,11 +100,6 @@ pub enum ClientError {
 	/// A [`jsonrpsee::core::ClientError`] wrapper error.
 	#[error(transparent)]
 	Jsonrpsee(#[from] jsonrpsee::core::ClientError),
-	/// A [`subxt::Error`] wrapper error.
-	#[error(transparent)]
-	SubxtError(#[from] subxt::Error),
-	#[error(transparent)]
-	RpcError(#[from] subxt::ext::subxt_rpcs::Error),
 	/// An error originating from the native in-process Substrate client
 	#[error("Native client error: {0}")]
 	NativeClientError(String),
@@ -182,18 +159,11 @@ const NOTIFIER_CAPACITY: usize = 16;
 impl From<ClientError> for ErrorObjectOwned {
 	fn from(err: ClientError) -> Self {
 		match err {
-			ClientError::SubxtError(subxt::Error::Rpc(subxt::error::RpcError::ClientError(
-				subxt::ext::subxt_rpcs::Error::User(err),
-			))) |
-			ClientError::RpcError(subxt::ext::subxt_rpcs::Error::User(err)) => {
-				ErrorObjectOwned::owned::<Vec<u8>>(err.code, err.message, None)
-			},
 			ClientError::TransactError(EthTransactError::Data(data)) => {
 				let msg = match decode_revert_reason(&data) {
 					Some(reason) => format!("execution reverted: {reason}"),
 					None => "execution reverted".to_string(),
 				};
-
 				let data = format!("0x{}", hex::encode(data));
 				ErrorObjectOwned::owned::<String>(REVERT_CODE, msg, Some(data))
 			},
@@ -209,10 +179,7 @@ impl From<ClientError> for ErrorObjectOwned {
 
 /// A client that connects to a Substrate node and maintains a receipt/block cache.
 #[derive(Clone)]
-pub struct Client<
-	C: SubstrateClientT = crate::subxt_client::SubxtClient,
-	BP: BlockInfoProvider = crate::SubxtBlockInfoProvider,
-> {
+pub struct Client<C: SubstrateClientT, BP: BlockInfoProvider> {
 	/// The underlying substrate client backend.
 	pub(crate) backend: C,
 	/// Block info provider (caches latest best/finalized blocks).
@@ -227,42 +194,6 @@ pub struct Client<
 	block_notifier: Option<tokio::sync::broadcast::Sender<H256>>,
 	/// Serialises write operations across concurrent subscriptions.
 	subscription_lock: Arc<Mutex<()>>,
-}
-
-/// Connect to a node at the given URL and return the underlying subxt components.
-pub async fn connect(
-	node_rpc_url: &str,
-	max_request_size: u32,
-	max_response_size: u32,
-) -> Result<(OnlineClient<SrcChainConfig>, RpcClient, LegacyRpcMethods<SrcChainConfig>), ClientError>
-{
-	log::info!(target: LOG_TARGET, "🌐 Connecting to node at: {node_rpc_url} ...");
-	let rpc_client = ReconnectingRpcClient::builder()
-		.retry_policy(ExponentialBackoff::from_millis(100).max_delay(Duration::from_secs(10)))
-		.max_request_size(max_request_size)
-		.max_response_size(max_response_size)
-		.build(node_rpc_url.to_string())
-		.await?;
-	let rpc_client = RpcClient::new(rpc_client);
-	log::info!(target: LOG_TARGET, "🌟 Connected to node at: {node_rpc_url}");
-
-	let api = OnlineClient::<SrcChainConfig>::from_rpc_client(rpc_client.clone()).await?;
-	let rpc = LegacyRpcMethods::<SrcChainConfig>::new(rpc_client.clone());
-	Ok((api, rpc_client, rpc))
-}
-
-impl Client<crate::subxt_client::SubxtClient, crate::SubxtBlockInfoProvider> {
-	pub async fn new(
-		api: OnlineClient<SrcChainConfig>,
-		rpc_client: RpcClient,
-		rpc: LegacyRpcMethods<SrcChainConfig>,
-		block_provider: crate::SubxtBlockInfoProvider,
-		receipt_provider: ReceiptProvider<crate::SubxtBlockInfoProvider>,
-	) -> Result<Self, ClientError> {
-		let backend = crate::subxt_client::SubxtClient::new(api, rpc_client, rpc).await?;
-		let automine = backend.get_automine().await;
-		Self::from_backend(backend, block_provider, receipt_provider, automine)
-	}
 }
 
 impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
@@ -762,7 +693,7 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 		self.backend.dry_run(block_hash, tx, block).await.map(|info| info.eth_gas)
 	}
 
-	/// Fetch the raw signed block.
+	/// Fetch the raw signed block (used for tracing).
 	async fn tracing_block(
 		&self,
 		block_hash: H256,
@@ -829,27 +760,13 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 		let block_hash = self.block_hash_for_tag(block).await?;
 		self.backend.trace_call(block_hash, transaction, config).await
 	}
-}
 
-impl Client<crate::subxt_client::SubxtClient, crate::SubxtBlockInfoProvider> {
 	/// Get the post-dispatch weight associated with this Ethereum transaction hash.
 	pub async fn post_dispatch_weight(&self, tx_hash: &H256) -> Option<Weight> {
-		use crate::subxt_client::system::events::ExtrinsicSuccess;
-		let ReceiptInfo { block_hash, transaction_index, .. } = self.receipt(tx_hash).await?;
-		let block_hash = self.resolve_substrate_hash(&block_hash).await?;
-		let block = self.block_provider.block_by_hash(&block_hash).await.ok()??;
-		let ext = block.extrinsics().await.ok()?.iter().nth(transaction_index.as_u32() as _)?;
-		let event = ext.events().await.ok()?.find_first::<ExtrinsicSuccess>().ok()??;
-		Some(event.dispatch_info.weight.0)
-	}
-
-	/// Get the storage API for the given block.
-	pub fn storage_api(&self, block_hash: H256) -> storage_api::StorageApi {
-		storage_api::StorageApi::new(self.backend.api.storage().at(block_hash))
-	}
-
-	/// Get the runtime API for the given block.
-	pub fn runtime_api(&self, block_hash: H256) -> runtime_api::RuntimeApi {
-		runtime_api::RuntimeApi::new(self.backend.api.runtime_api().at(block_hash))
+		let receipt = self.receipt(tx_hash).await?;
+		let block_hash = self.resolve_substrate_hash(&receipt.block_hash).await?;
+		self.backend
+			.extrinsic_post_dispatch_weight(block_hash, receipt.transaction_index.as_usize())
+			.await
 	}
 }

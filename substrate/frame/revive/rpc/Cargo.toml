@@ -19,6 +19,15 @@ exclude-from-umbrella = true
 name = "eth-rpc"
 path = "src/main.rs"
 
+[features]
+default = []
+# Enable the subxt-backed client for the standalone binary / external RPC usage.
+# When this feature is disabled, only the native in-process client path is compiled.
+subxt = [
+	"dep:subxt",
+	"dep:subxt-signer",
+]
+
 [dependencies]
 anyhow = { workspace = true }
 async-trait = { workspace = true }
@@ -49,10 +58,12 @@ sp-runtime = { workspace = true, default-features = true }
 sp-timestamp = { workspace = true }
 sp-weights = { workspace = true, default-features = true }
 sqlx = { workspace = true, features = ["macros", "runtime-tokio", "sqlite"] }
-subxt = { workspace = true, default-features = true, features = ["reconnecting-rpc-client"] }
-subxt-signer = { workspace = true, features = ["unstable-eth"] }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
+
+# Optional
+subxt = { workspace = true, default-features = true, features = ["reconnecting-rpc-client"], optional = true }
+subxt-signer = { workspace = true, features = ["unstable-eth"], optional = true }
 
 [dev-dependencies]
 env_logger = { workspace = true }

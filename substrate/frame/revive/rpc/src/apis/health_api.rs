@@ -31,10 +31,7 @@ pub trait SystemHealthRpc {
 	async fn net_peer_count(&self) -> RpcResult<U64>;
 }
 
-pub struct SystemHealthRpcServerImpl<
-	C: SubstrateClientT = crate::SubxtClient,
-	BP: BlockInfoProvider = crate::SubxtBlockInfoProvider,
-> {
+pub struct SystemHealthRpcServerImpl<C: SubstrateClientT, BP: BlockInfoProvider> {
 	client: Client<C, BP>,
 }
 

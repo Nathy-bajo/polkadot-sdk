@@ -81,11 +81,8 @@ mod src_chain {}
 pub use src_chain::*;
 
 use crate::{
-	block_info_provider::BlockInfo,
-	client::{
-		Balance, ClientError, SubscriptionType, SubstrateBlock, SubstrateBlockHash,
-		SubstrateBlockNumber,
-	},
+	block_info_provider::{BlockInfo, BlockInfoProvider},
+	client::{Balance, ClientError, SubscriptionType, SubstrateBlockHash, SubstrateBlockNumber},
 	substrate_client::{NodeHealth, RawExtrinsic, SubmitResult, SubstrateClientT},
 };
 use futures::TryStreamExt;
@@ -99,7 +96,7 @@ use pallet_revive::{
 };
 use sp_core::H256;
 use sp_weights::Weight;
-use std::future::Future;
+use std::{future::Future, sync::Arc};
 use subxt::{
 	OnlineClient,
 	backend::{
@@ -107,17 +104,22 @@ use subxt::{
 		legacy::{LegacyRpcMethods, rpc_methods::TransactionStatus as SubxtTxStatus},
 		rpc::RpcClient,
 	},
+	config::{HashFor, Header},
 	ext::subxt_rpcs::rpc_params,
 };
+use tokio::sync::RwLock;
+
+/// The substrate block type (subxt-backed).
+pub type SubstrateBlock = subxt::blocks::Block<SrcChainConfig, OnlineClient<SrcChainConfig>>;
+
+/// The substrate block header.
+pub type SubstrateBlockHeader = <SrcChainConfig as subxt::Config>::Header;
 
 fn system_health_from_subxt(h: subxt::backend::legacy::rpc_methods::SystemHealth) -> NodeHealth {
 	NodeHealth { peers: h.peers, is_syncing: h.is_syncing, should_have_peers: h.should_have_peers }
 }
 
 /// A lightweight block-info value returned by [`SubxtClient`].
-///
-/// This is the concrete type used for `SubstrateClientT::BlockInfo` in the subxt path.
-/// It implements [`BlockInfo`] so callers can access hash / number / parent_hash uniformly.
 #[derive(Clone, Debug)]
 pub struct SubxtBlockInfo {
 	pub hash: SubstrateBlockHash,
@@ -136,6 +138,116 @@ impl BlockInfo for SubxtBlockInfo {
 
 	fn parent_hash(&self) -> H256 {
 		self.parent_hash
+	}
+}
+
+/// The subxt-backed block info provider.
+#[derive(Clone)]
+pub struct SubxtBlockInfoProvider {
+	/// The latest block.
+	latest_block: Arc<RwLock<Arc<SubstrateBlock>>>,
+
+	/// The latest finalized block.
+	latest_finalized_block: Arc<RwLock<Arc<SubstrateBlock>>>,
+
+	/// The rpc client, used to fetch blocks not in the cache.
+	rpc: LegacyRpcMethods<SrcChainConfig>,
+
+	/// The api client, used to fetch blocks not in the cache.
+	api: OnlineClient<SrcChainConfig>,
+}
+
+impl SubxtBlockInfoProvider {
+	pub async fn new(
+		api: OnlineClient<SrcChainConfig>,
+		rpc: LegacyRpcMethods<SrcChainConfig>,
+	) -> Result<Self, ClientError> {
+		let latest = Arc::new(api.blocks().at_latest().await?);
+		Ok(Self {
+			api,
+			rpc,
+			latest_block: Arc::new(RwLock::new(latest.clone())),
+			latest_finalized_block: Arc::new(RwLock::new(latest)),
+		})
+	}
+}
+
+#[async_trait]
+impl BlockInfoProvider for SubxtBlockInfoProvider {
+	type Block = SubstrateBlock;
+
+	async fn update_latest(&self, block: Arc<SubstrateBlock>, subscription_type: SubscriptionType) {
+		let mut latest = match subscription_type {
+			SubscriptionType::FinalizedBlocks => self.latest_finalized_block.write().await,
+			SubscriptionType::BestBlocks => self.latest_block.write().await,
+		};
+		*latest = block;
+	}
+
+	async fn latest_block(&self) -> Arc<SubstrateBlock> {
+		self.latest_block.read().await.clone()
+	}
+
+	async fn latest_finalized_block(&self) -> Arc<SubstrateBlock> {
+		self.latest_finalized_block.read().await.clone()
+	}
+
+	async fn block_by_number(
+		&self,
+		block_number: SubstrateBlockNumber,
+	) -> Result<Option<Arc<SubstrateBlock>>, ClientError> {
+		let latest = self.latest_block().await;
+		if block_number == latest.number() {
+			return Ok(Some(latest));
+		}
+
+		let latest_finalized = self.latest_finalized_block().await;
+		if block_number == latest_finalized.number() {
+			return Ok(Some(latest_finalized));
+		}
+
+		let Some(hash) = self.rpc.chain_get_block_hash(Some(block_number.into())).await? else {
+			return Ok(None);
+		};
+
+		match self.api.blocks().at(hash).await {
+			Ok(block) => Ok(Some(Arc::new(block))),
+			Err(subxt::Error::Block(subxt::error::BlockError::NotFound(_))) => Ok(None),
+			Err(err) => Err(err.into()),
+		}
+	}
+
+	async fn block_by_hash(&self, hash: &H256) -> Result<Option<Arc<SubstrateBlock>>, ClientError> {
+		let latest = self.latest_block().await;
+		if hash == &latest.hash() {
+			return Ok(Some(latest));
+		}
+
+		let latest_finalized = self.latest_finalized_block().await;
+		if hash == &latest_finalized.hash() {
+			return Ok(Some(latest_finalized));
+		}
+
+		match self.api.blocks().at(*hash).await {
+			Ok(block) => Ok(Some(Arc::new(block))),
+			Err(subxt::Error::Block(subxt::error::BlockError::NotFound(_))) => Ok(None),
+			Err(err) => Err(err.into()),
+		}
+	}
+}
+
+// Teach the generic code about SubstrateBlock's block-info fields.
+impl BlockInfo for SubstrateBlock {
+	fn hash(&self) -> H256 {
+		SubstrateBlock::hash(self)
+	}
+
+	fn number(&self) -> SubstrateBlockNumber {
+		SubstrateBlock::number(self)
+	}
+
+	fn parent_hash(&self) -> H256 {
+		self.header().parent_hash
 	}
 }
 
@@ -512,4 +624,30 @@ fn subxt_tx_status_to_submit_result(s: SubxtTxStatus<SubstrateBlockHash>) -> Sub
 		SubxtTxStatus::Dropped => Pool::Dropped,
 		SubxtTxStatus::Invalid => Pool::Invalid,
 	}
+}
+
+use std::time::Duration;
+use subxt::backend::rpc::reconnecting_rpc_client::{
+	ExponentialBackoff, RpcClient as ReconnectingRpcClient,
+};
+
+pub async fn connect(
+	node_rpc_url: &str,
+	max_request_size: u32,
+	max_response_size: u32,
+) -> Result<(OnlineClient<SrcChainConfig>, RpcClient, LegacyRpcMethods<SrcChainConfig>), ClientError>
+{
+	log::info!(target: crate::LOG_TARGET, "🌐 Connecting to node at: {node_rpc_url} ...");
+	let rpc_client = ReconnectingRpcClient::builder()
+		.retry_policy(ExponentialBackoff::from_millis(100).max_delay(Duration::from_secs(10)))
+		.max_request_size(max_request_size)
+		.max_response_size(max_response_size)
+		.build(node_rpc_url.to_string())
+		.await?;
+	let rpc_client = RpcClient::new(rpc_client);
+	log::info!(target: crate::LOG_TARGET, "🌟 Connected to node at: {node_rpc_url}");
+
+	let api = OnlineClient::<SrcChainConfig>::from_rpc_client(rpc_client.clone()).await?;
+	let rpc = LegacyRpcMethods::<SrcChainConfig>::new(rpc_client.clone());
+	Ok((api, rpc_client, rpc))
 }

@@ -32,6 +32,8 @@ pub mod example;
 pub mod native_block_info_provider;
 pub mod native_client;
 pub mod substrate_client;
+
+#[cfg(feature = "subxt")]
 pub mod subxt_client;
 
 #[cfg(test)]
@@ -55,15 +57,14 @@ pub use apis::*;
 pub use native_block_info_provider::NativeClientBlockInfoProvider;
 pub use native_client::NativeSubstrateClient;
 pub use substrate_client::SubstrateClientT;
+
+#[cfg(feature = "subxt")]
 pub use subxt_client::SubxtClient;
 
 pub const LOG_TARGET: &str = "eth-rpc";
 
 /// An EVM RPC server implementation.
-pub struct EthRpcServerImpl<
-	C: SubstrateClientT = SubxtClient,
-	BP: BlockInfoProvider = SubxtBlockInfoProvider,
-> {
+pub struct EthRpcServerImpl<C: SubstrateClientT, BP: BlockInfoProvider> {
 	/// The client used to interact with the substrate node.
 	client: client::Client<C, BP>,
 
