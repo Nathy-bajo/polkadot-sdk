@@ -168,7 +168,7 @@ where
 				None, // earliest_receipt_block
 			);
 
-			let (pool_db, keep_latest_n_blocks) = if config.database_url == IN_MEMORY_DB {
+			let (pool_db, keep_latest_n_blocks) = if config.database_url.is_some() == IN_MEMORY_DB {
 				log::warn!(
 					target: pallet_revive_eth_rpc::LOG_TARGET,
 					"💾 Using in-memory receipt DB, keeping only {} blocks",

@@ -311,3 +311,147 @@ where
 	tokio_runtime.block_on(signals.run_until_signal(task_manager.future().fuse()))?;
 	Ok(())
 }
+
+/// Run the ETH RPC server using a `subxt` WebSocket connection to a Substrate node.
+#[cfg(feature = "subxt")]
+pub fn run(cmd: CliCommand) -> anyhow::Result<()> {
+	use crate::{
+		SubxtBlockInfoProvider,
+		subxt_client::{SubxtClient, connect},
+	};
+
+	let CliCommand {
+		rpc_params,
+		prometheus_params,
+		cache_size,
+		database_url,
+		earliest_receipt_block,
+		index_last_n_blocks,
+		shared_params,
+		allow_unprotected_txs,
+		..
+	} = cmd.clone();
+
+	#[cfg(not(test))]
+	init_logger(&shared_params)?;
+
+	let is_dev = shared_params.dev;
+
+	let node_rpc_url = rpc_params
+		.rpc_addr(is_dev, false, 9944)?
+		.and_then(|addrs| addrs.into_iter().next())
+		.map(|addr| format!("ws://{}:{}", addr.addr.ip(), addr.addr.port()))
+		.unwrap_or_else(|| "ws://127.0.0.1:9944".to_string());
+
+	let rpc_addrs: Option<Vec<sc_service::config::RpcEndpoint>> = cmd
+		.rpc_params
+		.rpc_addr(is_dev, false, DEFAULT_RPC_PORT)?
+		.map(|addrs| addrs.into_iter().map(Into::into).collect());
+
+	let rpc_config = RpcConfiguration {
+		addr: rpc_addrs,
+		methods: cmd.rpc_params.rpc_methods.into(),
+		max_connections: cmd.rpc_params.rpc_max_connections,
+		cors: cmd.rpc_params.rpc_cors(is_dev)?,
+		max_request_size: cmd.rpc_params.rpc_max_request_size,
+		max_response_size: cmd.rpc_params.rpc_max_response_size,
+		id_provider: None,
+		max_subs_per_conn: cmd.rpc_params.rpc_max_subscriptions_per_connection,
+		port: cmd.rpc_params.rpc_port.unwrap_or(DEFAULT_RPC_PORT),
+		message_buffer_capacity: cmd.rpc_params.rpc_message_buffer_capacity_per_connection,
+		batch_config: cmd.rpc_params.rpc_batch_config()?,
+		rate_limit: cmd.rpc_params.rpc_rate_limit,
+		rate_limit_whitelisted_ips: cmd.rpc_params.rpc_rate_limit_whitelisted_ips,
+		rate_limit_trust_proxy_headers: cmd.rpc_params.rpc_rate_limit_trust_proxy_headers,
+		request_logger_limit: if is_dev { 1024 * 1024 } else { 1024 },
+	};
+
+	let prometheus_config =
+		prometheus_params.prometheus_config(DEFAULT_PROMETHEUS_PORT, "eth-rpc".into());
+	let prometheus_registry = prometheus_config.as_ref().map(|config| &config.registry);
+
+	let tokio_runtime = sc_cli::build_runtime()?;
+	let tokio_handle = tokio_runtime.handle();
+	let mut task_manager = TaskManager::new(tokio_handle.clone(), prometheus_registry)?;
+
+	let (client, block_provider) = {
+		let fut = async {
+			let (api, rpc_client, rpc) =
+				connect(&node_rpc_url, rpc_config.max_request_size, rpc_config.max_response_size)
+					.await?;
+
+			let subxt_client = SubxtClient::new(api.clone(), rpc_client, rpc.clone()).await?;
+			let block_provider = SubxtBlockInfoProvider::new(api, rpc).await?;
+
+			let client = build_client_from_backend(
+				subxt_client,
+				block_provider.clone(),
+				&database_url,
+				cache_size,
+				earliest_receipt_block,
+				false, // automine not supported in standalone mode
+			)
+			.await?;
+
+			Ok::<_, anyhow::Error>((client, block_provider))
+		}
+		.fuse();
+
+		futures::pin_mut!(fut);
+		let abort_signal = tokio_runtime.block_on(async { sc_cli::Signals::capture() })?;
+		match tokio_handle.block_on(abort_signal.try_until_signal(fut)) {
+			Ok(Ok(result)) => result,
+			Ok(Err(e)) => return Err(e),
+			Err(_) => anyhow::bail!("Process interrupted during startup"),
+		}
+	};
+
+	// Prometheus metrics.
+	if let Some(sc_service::config::PrometheusConfig { port, registry }) = prometheus_config.clone()
+	{
+		task_manager.spawn_handle().spawn(
+			"prometheus-endpoint",
+			None,
+			prometheus_endpoint::init_prometheus(port, registry).map(drop),
+		);
+	}
+
+	let rpc_server_handle = start_rpc_servers(
+		&rpc_config,
+		prometheus_registry,
+		tokio_handle,
+		|| build_eth_rpc_module(is_dev, client.clone(), allow_unprotected_txs),
+		None,
+	)?;
+
+	task_manager
+		.spawn_essential_handle()
+		.spawn("block-subscription", None, async move {
+			let mut futures: Vec<BoxFuture<'_, Result<(), crate::client::ClientError>>> = vec![
+				Box::pin(client.subscribe_and_cache_new_blocks(SubscriptionType::BestBlocks)),
+				Box::pin(client.subscribe_and_cache_new_blocks(SubscriptionType::FinalizedBlocks)),
+			];
+
+			if let Some(index_last_n_blocks) = index_last_n_blocks {
+				futures.push(Box::pin(client.subscribe_and_cache_blocks(index_last_n_blocks)));
+			}
+
+			if let Err(err) = futures::future::try_join_all(futures).await {
+				panic!("Block subscription task failed: {err:?}")
+			}
+		});
+
+	task_manager.keep_alive(rpc_server_handle);
+	let signals = tokio_runtime.block_on(async { sc_cli::Signals::capture() })?;
+	tokio_runtime.block_on(signals.run_until_signal(task_manager.future().fuse()))?;
+	Ok(())
+}
+
+/// Fallback when the `subxt` feature is disabled.
+#[cfg(not(feature = "subxt"))]
+pub fn run(_cmd: CliCommand) -> anyhow::Result<()> {
+	anyhow::bail!(
+		"The standalone `eth-rpc` binary requires the `subxt` feature. \
+		 Rebuild with `--features subxt` or embed the server using `run_with_native_client`."
+	)
+}
