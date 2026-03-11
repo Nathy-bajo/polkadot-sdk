@@ -27,7 +27,6 @@ use crate::{
 use codec::Decode;
 use jsonrpsee::core::async_trait;
 use sc_client_api::{BlockBackend, BlockchainEvents, HeaderBackend};
-use sp_api::ProvideRuntimeApi;
 use sp_core::H256;
 use sp_runtime::traits::{Block as BlockT, Header as HeaderT};
 use std::sync::Arc;
@@ -94,7 +93,6 @@ where
 	Client: HeaderBackend<Block>
 		+ BlockBackend<Block>
 		+ BlockchainEvents<Block>
-		+ ProvideRuntimeApi<Block>
 		+ Send
 		+ Sync
 		+ 'static,
@@ -147,7 +145,6 @@ where
 	Client: HeaderBackend<Block>
 		+ BlockBackend<Block>
 		+ BlockchainEvents<Block>
-		+ ProvideRuntimeApi<Block>
 		+ Send
 		+ Sync
 		+ 'static,

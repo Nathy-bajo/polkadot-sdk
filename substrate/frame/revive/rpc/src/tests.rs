@@ -17,7 +17,6 @@
 //! Test the eth-rpc cli with the kitchensink node.
 //! This only includes basic transaction tests, most of the other tests are in the
 //! [evm-test-suite](https://github.com/paritytech/evm-test-suite) repository.
-
 use crate::{
 	EthRpcClient,
 	cli::{self, CliCommand},

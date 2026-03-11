@@ -36,7 +36,7 @@ pub mod substrate_client;
 #[cfg(feature = "subxt")]
 pub mod subxt_client;
 
-#[cfg(test)]
+#[cfg(all(test, feature = "subxt"))]
 mod tests;
 
 mod block_info_provider;

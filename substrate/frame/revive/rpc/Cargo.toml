@@ -19,6 +19,22 @@ exclude-from-umbrella = true
 name = "eth-rpc"
 path = "src/main.rs"
 
+[[example]]
+name = "tx-types"
+required-features = ["subxt"]
+
+[[example]]
+name = "transfer"
+required-features = ["subxt"]
+
+[[example]]
+name = "extrinsic"
+required-features = ["subxt"]
+
+[[example]]
+name = "remark-extrinsic"
+required-features = ["subxt"]
+
 [features]
 default = []
 # Enable the subxt-backed client for the standalone binary / external RPC usage.
@@ -70,6 +86,7 @@ env_logger = { workspace = true }
 pallet-revive-fixtures = { workspace = true, default-features = true }
 pretty_assertions = { workspace = true }
 sp-io = { workspace = true, default-features = true }
+subxt-signer = { workspace = true, features = ["unstable-eth"] }
 
 [build-dependencies]
 git2 = { workspace = true }
