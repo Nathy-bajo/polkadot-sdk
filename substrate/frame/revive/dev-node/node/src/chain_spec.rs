@@ -15,11 +15,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use polkadot_sdk::{
-	sc_service::{ChainType, Properties},
-	*,
-};
 use revive_dev_runtime::WASM_BINARY;
+use sc_service::{ChainType, Properties};
 
 /// This is a specialization of the general Substrate ChainSpec type.
 pub type ChainSpec = sc_service::GenericChainSpec;

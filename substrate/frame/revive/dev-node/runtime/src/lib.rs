@@ -25,11 +25,15 @@ extern crate alloc;
 
 use alloc::{vec, vec::Vec};
 use currency::*;
-use frame_support::weights::{
-	constants::{BlockExecutionWeight, ExtrinsicBaseWeight, WEIGHT_REF_TIME_PER_SECOND},
-	Weight,
+use frame_support::{
+	derive_impl, parameter_types,
+	traits::{ConstBool, ConstU32, ConstU64},
+	weights::{
+		constants::{BlockExecutionWeight, ExtrinsicBaseWeight, WEIGHT_REF_TIME_PER_SECOND},
+		Weight,
+	},
 };
-use frame_system::limits::BlockWeights;
+use frame_system::{limits::BlockWeights, EnsureSigned};
 use pallet_revive::{
 	evm::{
 		fees::{BlockRatioFee, Info as FeeInfo},
@@ -37,21 +41,26 @@ use pallet_revive::{
 	},
 	AccountId32Mapper,
 };
+#[allow(unused_imports)]
 use pallet_transaction_payment::{ConstFeeMultiplier, FeeDetails, Multiplier, RuntimeDispatchInfo};
-use polkadot_sdk::{
-	polkadot_sdk_frame::{
-		deps::sp_genesis_builder,
-		runtime::{apis, prelude::*},
-		traits::Block as BlockT,
-	},
-	*,
+use sp_api::impl_runtime_apis;
+use sp_genesis_builder::PresetId;
+use sp_runtime::{
+	generic,
+	traits::{Block as BlockT, One},
+	Perbill,
 };
+use sp_version::{runtime_version, RuntimeVersion};
 use sp_weights::ConstantMultiplier;
 
-pub use polkadot_sdk::{
-	parachains_common::{AccountId, Balance, BlockNumber, Hash, Header, Nonce, Signature},
-	polkadot_sdk_frame::runtime::types_common::OpaqueBlock,
-};
+#[cfg(feature = "std")]
+use sp_version::NativeVersion;
+
+// Re-export types used by the node
+pub use parachains_common::{AccountId, Balance, BlockNumber, Hash, Header, Nonce, Signature};
+
+// OpaqueBlock used by the node
+pub type OpaqueBlock = generic::Block<Header, sp_runtime::OpaqueExtrinsic>;
 
 pub mod currency {
 	use super::Balance;
@@ -64,13 +73,12 @@ pub mod currency {
 pub mod genesis_config_presets {
 	use super::*;
 	use crate::{
-		currency::DOLLARS, sp_keyring::Sr25519Keyring, Balance, BalancesConfig, ReviveConfig,
-		RuntimeGenesisConfig, SudoConfig,
+		currency::DOLLARS, Balance, BalancesConfig, ReviveConfig, RuntimeGenesisConfig, SudoConfig,
 	};
-
 	use alloc::{vec, vec::Vec};
 	use pallet_revive::is_eth_derived;
 	use serde_json::Value;
+	use sp_keyring::Sr25519Keyring;
 
 	pub const ENDOWMENT: Balance = 10_000_000_000_001 * DOLLARS;
 
@@ -143,7 +151,6 @@ pub mod genesis_config_presets {
 	}
 }
 
-/// The runtime version.
 #[runtime_version]
 pub const VERSION: RuntimeVersion = RuntimeVersion {
 	spec_name: alloc::borrow::Cow::Borrowed("revive-dev-runtime"),
@@ -164,9 +171,8 @@ pub fn native_version() -> NativeVersion {
 
 /// The address format for describing accounts.
 pub type Address = sp_runtime::MultiAddress<AccountId, ()>;
-/// Block type as expected by this runtime.
-pub type Block = sp_runtime::generic::Block<Header, UncheckedExtrinsic>;
-/// The transaction extensions that are added to the runtime.
+pub type Block = generic::Block<Header, UncheckedExtrinsic>;
+
 type TxExtension = (
 	// Checks that the sender is not the zero address.
 	frame_system::CheckNonZeroSender<Runtime>,
@@ -228,8 +234,7 @@ type Executive = frame_executive::Executive<
 	AllPalletsWithSystem,
 >;
 
-// Composes the runtime by adding all the used pallets and deriving necessary types.
-#[frame_construct_runtime]
+#[frame_support::runtime]
 mod runtime {
 	/// The main runtime type.
 	#[runtime::runtime]
@@ -286,13 +291,13 @@ parameter_types! {
 	pub const Version: RuntimeVersion = VERSION;
 	pub RuntimeBlockWeights: BlockWeights = BlockWeights::builder()
 		.base_block(BlockExecutionWeight::get())
-		.for_class(DispatchClass::all(), |weights| {
+		.for_class(frame_support::dispatch::DispatchClass::all(), |weights| {
 			weights.base_extrinsic = ExtrinsicBaseWeight::get();
 		})
-		.for_class(DispatchClass::Normal, |weights| {
+		.for_class(frame_support::dispatch::DispatchClass::Normal, |weights| {
 			weights.max_total = Some(NORMAL_DISPATCH_RATIO * MAXIMUM_BLOCK_WEIGHT);
 		})
-		.for_class(DispatchClass::Operational, |weights| {
+		.for_class(frame_support::dispatch::DispatchClass::Operational, |weights| {
 			weights.max_total = Some(MAXIMUM_BLOCK_WEIGHT);
 			// Operational transactions have some extra reserved space, so that they
 			// are included even if block reached `MAXIMUM_BLOCK_WEIGHT`.
@@ -375,7 +380,7 @@ pallet_revive::impl_runtime_apis_plus_revive_traits!(
 	Executive,
 	EthExtraImpl,
 
-	impl apis::Core<Block> for Runtime {
+	impl sp_api::Core<Block> for Runtime {
 		fn version() -> RuntimeVersion {
 			VERSION
 		}
@@ -384,17 +389,17 @@ pallet_revive::impl_runtime_apis_plus_revive_traits!(
 			Executive::execute_block(block)
 		}
 
-		fn initialize_block(header: &Header) -> ExtrinsicInclusionMode {
+		fn initialize_block(header: &Header) -> sp_runtime::ExtrinsicInclusionMode {
 			Executive::initialize_block(header)
 		}
 	}
 
-	impl apis::Metadata<Block> for Runtime {
-		fn metadata() -> OpaqueMetadata {
-			OpaqueMetadata::new(Runtime::metadata().into())
+	impl sp_api::Metadata<Block> for Runtime {
+		fn metadata() -> sp_core::OpaqueMetadata {
+			sp_core::OpaqueMetadata::new(Runtime::metadata().into())
 		}
 
-		fn metadata_at_version(version: u32) -> Option<OpaqueMetadata> {
+		fn metadata_at_version(version: u32) -> Option<sp_core::OpaqueMetadata> {
 			Runtime::metadata_at_version(version)
 		}
 
@@ -403,57 +408,59 @@ pallet_revive::impl_runtime_apis_plus_revive_traits!(
 		}
 	}
 
-	impl apis::BlockBuilder<Block> for Runtime {
-		fn apply_extrinsic(extrinsic: ExtrinsicFor<Runtime>) -> ApplyExtrinsicResult {
+	impl sp_block_builder::BlockBuilder<Block> for Runtime {
+		fn apply_extrinsic(extrinsic: <Block as BlockT>::Extrinsic) -> sp_runtime::ApplyExtrinsicResult {
 			Executive::apply_extrinsic(extrinsic)
 		}
 
-		fn finalize_block() -> HeaderFor<Runtime> {
+		fn finalize_block() -> <Block as BlockT>::Header {
 			Executive::finalize_block()
 		}
 
-		fn inherent_extrinsics(data: InherentData) -> Vec<ExtrinsicFor<Runtime>> {
+		fn inherent_extrinsics(data: sp_inherents::InherentData) -> Vec<<Block as BlockT>::Extrinsic> {
 			data.create_extrinsics()
 		}
 
 		fn check_inherents(
 			block: <Block as BlockT>::LazyBlock,
-			data: InherentData,
-		) -> CheckInherentsResult {
+			data: sp_inherents::InherentData,
+		) -> sp_inherents::CheckInherentsResult {
 			data.check_extrinsics(&block)
 		}
 	}
 
-	impl apis::TaggedTransactionQueue<Block> for Runtime {
+	impl sp_transaction_pool::runtime_api::TaggedTransactionQueue<Block> for Runtime {
 		fn validate_transaction(
-			source: TransactionSource,
-			tx: ExtrinsicFor<Runtime>,
+			source: sp_runtime::transaction_validity::TransactionSource,
+			tx: <Block as BlockT>::Extrinsic,
 			block_hash: <Runtime as frame_system::Config>::Hash,
-		) -> TransactionValidity {
+		) -> sp_runtime::transaction_validity::TransactionValidity {
 			Executive::validate_transaction(source, tx, block_hash)
 		}
 	}
 
-	impl apis::OffchainWorkerApi<Block> for Runtime {
-		fn offchain_worker(header: &HeaderFor<Runtime>) {
+	impl sp_offchain::OffchainWorkerApi<Block> for Runtime {
+		fn offchain_worker(header: &<Block as BlockT>::Header) {
 			Executive::offchain_worker(header)
 		}
 	}
 
-	impl apis::SessionKeys<Block> for Runtime {
-		fn generate_session_keys(_owner: Vec<u8>, _seed: Option<Vec<u8>>) -> apis::OpaqueGeneratedSessionKeys {
+	impl sp_session::SessionKeys<Block> for Runtime {
+	fn generate_session_keys(
+		_owner: Vec<u8>,
+		_seed: Option<Vec<u8>>,
+	) -> sp_session::OpaqueGeneratedSessionKeys {
 		Default::default()
-		}
-
-
-		fn decode_session_keys(
-			_encoded: Vec<u8>,
-		) -> Option<Vec<(Vec<u8>, apis::KeyTypeId)>> {
-			Default::default()
-		}
 	}
 
-	impl apis::AccountNonceApi<Block, AccountId, Nonce> for Runtime {
+	fn decode_session_keys(
+		_encoded: Vec<u8>,
+	) -> Option<Vec<(Vec<u8>, sp_core::crypto::KeyTypeId)>> {
+		Default::default()
+	}
+}
+
+	impl frame_system_rpc_runtime_api::AccountNonceApi<Block, AccountId, Nonce> for Runtime {
 		fn account_nonce(account: AccountId) -> Nonce {
 			System::account_nonce(account)
 		}
@@ -463,10 +470,10 @@ pallet_revive::impl_runtime_apis_plus_revive_traits!(
 		Block,
 		Balance,
 	> for Runtime {
-		fn query_info(uxt: ExtrinsicFor<Runtime>, len: u32) -> RuntimeDispatchInfo<Balance> {
+		fn query_info(uxt: <Block as BlockT>::Extrinsic, len: u32) -> RuntimeDispatchInfo<Balance> {
 			TransactionPayment::query_info(uxt, len)
 		}
-		fn query_fee_details(uxt: ExtrinsicFor<Runtime>, len: u32) -> FeeDetails<Balance> {
+		fn query_fee_details(uxt: <Block as BlockT>::Extrinsic, len: u32) -> FeeDetails<Balance> {
 			TransactionPayment::query_fee_details(uxt, len)
 		}
 		fn query_weight_to_fee(weight: Weight) -> Balance {
@@ -477,13 +484,13 @@ pallet_revive::impl_runtime_apis_plus_revive_traits!(
 		}
 	}
 
-	impl apis::GenesisBuilder<Block> for Runtime {
+	impl sp_genesis_builder::GenesisBuilder<Block> for Runtime {
 		fn build_state(config: Vec<u8>) -> sp_genesis_builder::Result {
-			build_state::<RuntimeGenesisConfig>(config)
+			frame_support::genesis_builder_helper::build_state::<RuntimeGenesisConfig>(config)
 		}
 
 		fn get_preset(id: &Option<PresetId>) -> Option<Vec<u8>> {
-			get_preset::<RuntimeGenesisConfig>(id, self::genesis_config_presets::get_preset)
+			frame_support::genesis_builder_helper::get_preset::<RuntimeGenesisConfig>(id, self::genesis_config_presets::get_preset)
 		}
 
 		fn preset_names() -> Vec<PresetId> {
