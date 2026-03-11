@@ -98,7 +98,7 @@ pub struct EthRpcConfig {
 	/// Whether to allow unprotected (chain-id-less) transactions.
 	pub allow_unprotected_txs: bool,
 	/// SQLite database URL for receipt storage.
-	pub database_url: String,
+	pub database_url: Option<String>,
 	/// EVM chain ID.
 	pub chain_id: u64,
 }
@@ -109,9 +109,23 @@ impl Default for EthRpcConfig {
 		Self {
 			cache_size: 256,
 			allow_unprotected_txs: false,
-			database_url: "sqlite::memory:".into(),
+			database_url: None,
 			chain_id: 420420421,
 		}
+	}
+}
+
+/// The SQLite in-memory connection string.
+#[cfg(feature = "revive-rpc")]
+const IN_MEMORY_DB: &str = "sqlite::memory:";
+
+/// Resolve the effective database URL and whether we are running in-memory mode.
+#[cfg(feature = "revive-rpc")]
+fn resolve_db(database_url: &Option<String>) -> (&str, bool) {
+	match database_url.as_deref() {
+		None | Some("") => (IN_MEMORY_DB, true),
+		Some(url) if url == IN_MEMORY_DB => (IN_MEMORY_DB, true),
+		Some(url) => (url, false),
 	}
 }
 
@@ -146,8 +160,6 @@ where
 	};
 	use sqlx::sqlite::SqlitePoolOptions;
 
-	const IN_MEMORY_DB: &str = "sqlite::memory:";
-
 	let tokio_handle = tokio::runtime::Handle::current();
 
 	let eth_client = tokio_handle
@@ -168,7 +180,10 @@ where
 				None, // earliest_receipt_block
 			);
 
-			let (pool_db, keep_latest_n_blocks) = if config.database_url.is_some() == IN_MEMORY_DB {
+			// Resolve whether we use an in-memory or file-backed database.
+			let (db_url, is_in_memory) = resolve_db(&config.database_url);
+
+			let (pool_db, keep_latest_n_blocks) = if is_in_memory {
 				log::warn!(
 					target: pallet_revive_eth_rpc::LOG_TARGET,
 					"💾 Using in-memory receipt DB, keeping only {} blocks",
@@ -178,14 +193,18 @@ where
 					.max_connections(1)
 					.idle_timeout(None)
 					.max_lifetime(None)
-					.connect(&config.database_url)
+					.connect(db_url)
 					.await
 					.map_err(pallet_revive_eth_rpc::client::ClientError::SqlxError)?;
 				(p, Some(config.cache_size))
 			} else {
+				log::info!(
+					target: pallet_revive_eth_rpc::LOG_TARGET,
+					"💾 Using persistent receipt DB at: {db_url}",
+				);
 				(
 					SqlitePoolOptions::new()
-						.connect(&config.database_url)
+						.connect(db_url)
 						.await
 						.map_err(pallet_revive_eth_rpc::client::ClientError::SqlxError)?,
 					None,

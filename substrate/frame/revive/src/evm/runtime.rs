@@ -149,7 +149,6 @@ where
 		self.0.check(lookup)
 	}
 
-	#[cfg(feature = "try-runtime")]
 	fn unchecked_into_checked_i_know_what_i_am_doing(
 		self,
 		lookup: &Lookup,

@@ -55,6 +55,11 @@ where
 		let latest_location: Location = (*a).clone().try_into().map_err(|_| ())?;
 		Ok(pallet_xcm::Origin::Xcm(latest_location).into())
 	}
+
+	#[cfg(not(feature = "runtime-benchmarks"))]
+	fn try_successful_origin(_a: &L) -> Result<RuntimeOrigin, ()> {
+		Err(())
+	}
 }
 
 /// Origin check that verifies that an origin is the owner of a local trusted asset.
@@ -95,5 +100,10 @@ where
 	#[cfg(feature = "runtime-benchmarks")]
 	fn try_successful_origin(_: &L) -> Result<RuntimeOrigin, ()> {
 		Ok(RawOrigin::Root.into())
+	}
+
+	#[cfg(not(feature = "runtime-benchmarks"))]
+	fn try_successful_origin(_: &L) -> Result<RuntimeOrigin, ()> {
+		Err(())
 	}
 }

@@ -44,10 +44,8 @@ pub enum MockedMigrationKind {
 	/// elapsed.
 	HighWeightAfter(Weight),
 	/// PreUpgrade should fail.
-	#[cfg(feature = "try-runtime")]
 	PreUpgradeFail,
 	/// PostUpgrade should fail.
-	#[cfg(feature = "try-runtime")]
 	PostUpgradeFail,
 }
 use MockedMigrationKind::*; // C style
@@ -105,7 +103,6 @@ impl SteppedMigrations for MockedMigrations {
 				Err(SteppedMigrationError::Failed)
 			},
 			TimeoutAfter => unreachable!(),
-			#[cfg(feature = "try-runtime")]
 			PreUpgradeFail | PostUpgradeFail => Ok(None),
 		})
 	}
