@@ -37,8 +37,6 @@ required-features = ["subxt"]
 
 [features]
 default = []
-# Enable the subxt-backed client for the standalone binary / external RPC usage.
-# When this feature is disabled, only the native in-process client path is compiled.
 subxt = [
 	"dep:subxt",
 	"dep:subxt-signer",
@@ -85,11 +83,13 @@ subxt-signer = { workspace = true, features = ["unstable-eth"], optional = true 
 env_logger = { workspace = true }
 pallet-revive-fixtures = { workspace = true, default-features = true }
 pretty_assertions = { workspace = true }
+revive-dev-node = { workspace = true }
 sp-io = { workspace = true, default-features = true }
 subxt-signer = { workspace = true, features = ["unstable-eth"] }
 
 [build-dependencies]
 git2 = { workspace = true }
 asset-hub-westend-runtime = { workspace = true, default-features = true }
+revive-dev-runtime = { workspace = true, default-features = true }
 sp-io = { workspace = true, default-features = true }
 sp-runtime = { workspace = true, default-features = true }

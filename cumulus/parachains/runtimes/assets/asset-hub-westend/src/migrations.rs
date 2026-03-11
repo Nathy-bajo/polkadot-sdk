@@ -76,6 +76,7 @@ impl ForeignAssetsReservesProvider for AssetHubWestendForeignAssetsReservesProvi
 		reserves
 	}
 
+	#[cfg(feature = "try-runtime")]
 	fn check_reserves_for(asset_id: &Location, reserves: Vec<Self::ReserveData>) -> bool {
 		if StartsWith::<RococoEcosystem>::contains(asset_id) {
 			let expected =
