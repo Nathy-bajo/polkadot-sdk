@@ -32,9 +32,9 @@ parachains-common-types = { workspace = true, default-features = true }
 scale-info = { workspace = true }
 subxt-metadata = { workspace = true, default-features = true }
 
-pallet-revive-eth-rpc = { workspace = true, optional = true }
-sqlx = { workspace = true, features = ["runtime-tokio", "sqlite"], optional = true }
-tokio = { workspace = true, features = ["rt-multi-thread"], optional = true }
+pallet-revive-eth-rpc = { workspace = true }
+sqlx = { workspace = true, features = ["runtime-tokio", "sqlite"] }
+tokio = { workspace = true, features = ["rt-multi-thread"] }
 
 # Substrate
 frame-benchmarking = { optional = true, workspace = true, default-features = true }
@@ -122,11 +122,6 @@ wait-timeout = { workspace = true }
 default = []
 rococo-native = ["polkadot-cli/rococo-native"]
 westend-native = ["polkadot-cli/westend-native"]
-revive-rpc = [
-	"dep:pallet-revive-eth-rpc",
-	"dep:sqlx",
-	"dep:tokio",
-]
 runtime-benchmarks = [
 	"cumulus-primitives-core/runtime-benchmarks",
 	"frame-benchmarking-cli/runtime-benchmarks",

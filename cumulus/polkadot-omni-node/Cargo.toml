@@ -32,10 +32,6 @@ substrate-build-script-utils = { workspace = true, default-features = true }
 default = []
 jemalloc-allocator = ["polkadot-jemalloc-shim/jemalloc-allocator"]
 
-revive-rpc = [
-	"polkadot-omni-node-lib/revive-rpc",
-]
-
 runtime-benchmarks = [
 	"polkadot-omni-node-lib/runtime-benchmarks",
 ]

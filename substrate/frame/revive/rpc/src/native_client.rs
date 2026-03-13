@@ -75,7 +75,6 @@ fn native_err(e: impl std::fmt::Display) -> ClientError {
 }
 
 /// A [`SubstrateClientT`] backed by the node's native in-process Substrate client.
-#[derive(Clone)]
 pub struct NativeSubstrateClient<Client, Pool, Block = OpaqueBlock, Moment = u64>
 where
 	Block: BlockT,
@@ -87,6 +86,23 @@ where
 	automine: bool,
 	_block: PhantomData<Block>,
 	_moment: PhantomData<Moment>,
+}
+
+impl<Client, Pool, Block, Moment> Clone for NativeSubstrateClient<Client, Pool, Block, Moment>
+where
+	Block: BlockT,
+{
+	fn clone(&self) -> Self {
+		Self {
+			client: Arc::clone(&self.client),
+			pool: Arc::clone(&self.pool),
+			chain_id: self.chain_id,
+			max_block_weight: self.max_block_weight,
+			automine: self.automine,
+			_block: PhantomData,
+			_moment: PhantomData,
+		}
+	}
 }
 
 impl<Client, Pool, Block, Moment> NativeSubstrateClient<Client, Pool, Block, Moment>
@@ -163,12 +179,11 @@ where
 		+ ProvideRuntimeApi<Block>
 		+ BlockBackend<Block>
 		+ BlockchainEvents<Block>
-		+ Clone
 		+ Send
 		+ Sync
 		+ 'static,
 	Client::Api: ReviveRuntimeApiT<Block, Moment>,
-	Pool: TransactionPool<Block = Block> + Clone + Send + Sync + 'static,
+	Pool: TransactionPool<Block = Block> + Send + Sync + 'static,
 {
 	type BlockInfo = NativeCachedBlock;
 

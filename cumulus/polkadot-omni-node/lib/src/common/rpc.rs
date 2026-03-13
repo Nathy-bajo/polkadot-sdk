@@ -90,7 +90,6 @@ where
 pub struct BuildAssetHubRpcExtensions<Block, RuntimeApi>(PhantomData<(Block, RuntimeApi)>);
 
 /// Configuration for the embedded ETH RPC server.
-#[cfg(feature = "revive-rpc")]
 #[derive(Clone, Debug)]
 pub struct EthRpcConfig {
 	/// Number of blocks to keep in the receipt cache.
@@ -103,7 +102,6 @@ pub struct EthRpcConfig {
 	pub chain_id: u64,
 }
 
-#[cfg(feature = "revive-rpc")]
 impl Default for EthRpcConfig {
 	fn default() -> Self {
 		Self {
@@ -116,11 +114,9 @@ impl Default for EthRpcConfig {
 }
 
 /// The SQLite in-memory connection string.
-#[cfg(feature = "revive-rpc")]
 const IN_MEMORY_DB: &str = "sqlite::memory:";
 
-/// Resolve the effective database URL and whether we are running in-memory mode.
-#[cfg(feature = "revive-rpc")]
+/// Resolve the effective database URL and whether we're in-memory.
 fn resolve_db(database_url: &Option<String>) -> (&str, bool) {
 	match database_url.as_deref() {
 		None | Some("") => (IN_MEMORY_DB, true),
@@ -129,8 +125,7 @@ fn resolve_db(database_url: &Option<String>) -> (&str, bool) {
 	}
 }
 
-/// Build the ETH RPC [`RpcExtension`] using the **native** in-process Substrate client.
-#[cfg(feature = "revive-rpc")]
+/// Build the ETH RPC [`RpcExtension`] using the native in-process Substrate client.
 pub fn build_revive_eth_rpc_module_native<Block, RuntimeApi, Pool>(
 	config: EthRpcConfig,
 	native_client: Arc<ParachainClient<Block, RuntimeApi>>,
@@ -220,19 +215,18 @@ where
 			.await
 			.map_err(pallet_revive_eth_rpc::client::ClientError::SqlxError)?;
 
-			let client = Client::from_native_backend(
+			Client::from_native_backend(
 				backend,
 				block_provider,
 				receipt_provider,
 				false, // automine
-			)?;
-
-			Ok::<_, pallet_revive_eth_rpc::client::ClientError>(client)
+			)
 		})
 		.map_err(|e: pallet_revive_eth_rpc::client::ClientError| {
 			sc_service::Error::Application(Box::new(e) as _)
 		})?;
 
+	// Spawn the background block-subscription tasks.
 	let client_for_sub = eth_client.clone();
 	spawn_handle.spawn(
 		"eth-rpc-block-subscription",
@@ -278,7 +272,10 @@ where
 	RuntimeApi:
 		ConstructNodeRuntimeApi<Block, ParachainClient<Block, RuntimeApi>> + Send + Sync + 'static,
 	RuntimeApi::RuntimeApi: pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi<Block, Balance>
-		+ substrate_frame_rpc_system::AccountNonceApi<Block, AccountId, Nonce>,
+		+ substrate_frame_rpc_system::AccountNonceApi<Block, AccountId, Nonce>
+		+ pallet_revive_eth_rpc::native_client::ReviveRuntimeApiT<Block, u64>
+		+ sp_api::Core<Block>
+		+ sp_api::Metadata<Block>,
 {
 	fn build_rpc_extensions(
 		client: Arc<ParachainClient<Block, RuntimeApi>>,
@@ -301,18 +298,16 @@ where
 			}
 			module.merge(Dev::new(client.clone()).into_rpc())?;
 
-			#[cfg(feature = "revive-rpc")]
-			{
-				let eth_module = build_revive_eth_rpc_module_native(
-					EthRpcConfig::default(),
-					client,
-					pool,
-					false, // is_dev
-					spawn_handle,
-				)
-				.map_err(|e| format!("Failed to build ETH RPC module: {e}"))?;
-				module.merge(eth_module)?;
-			}
+			// ETH RPC is always present for Asset Hub
+			let eth_module = build_revive_eth_rpc_module_native(
+				EthRpcConfig::default(),
+				client,
+				pool,
+				false, // is_dev
+				spawn_handle,
+			)
+			.map_err(|e| format!("Failed to build ETH RPC module: {e}"))?;
+			module.merge(eth_module)?;
 
 			Ok(module)
 		};
