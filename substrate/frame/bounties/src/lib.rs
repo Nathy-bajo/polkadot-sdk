@@ -368,8 +368,6 @@ pub mod pallet {
 		TooManyQueued,
 		/// User is not the proposer of the bounty.
 		NotProposer,
-		/// The bounty account holds no remaining balance; nothing to dust.
-		BountyAccountAlreadyEmpty,
 	}
 
 	#[pallet::event]
@@ -406,7 +404,7 @@ pub mod pallet {
 		},
 		/// A closed bounty account's remaining balance/assets were transferred
 		/// to the treasury by `who`.
-		BountyAccDusted { bounty_id: BountyIndex, who: T::AccountId },
+		BountyAccDusted { bounty_id: BountyIndex },
 	}
 
 	/// Number of bounty proposals that have been made.
@@ -998,10 +996,6 @@ pub mod pallet {
 		/// after being closed. This extrinsic allows anyone to clean up such
 		/// stale accounts, sending all funds back to the treasury.
 		///
-		/// The call succeeds only if **no active bounty** exists at `bounty_id`.
-		/// If the bounty account is already empty this call returns
-		/// `BountyAccountAlreadyEmpty`.
-		///
 		/// ## Complexity
 		/// - O(1) for the native token; O(A) where A is the number of relevant assets configured in
 		///   `TransferAllAssets`.
@@ -1011,7 +1005,7 @@ pub mod pallet {
 			origin: OriginFor<T>,
 			#[pallet::compact] bounty_id: BountyIndex,
 		) -> DispatchResultWithPostInfo {
-			let who = ensure_signed(origin)?;
+			ensure_signed(origin)?;
 
 			// If a bounty still exists for this ID we must not touch its account
 			// because it is still actively managed.
@@ -1020,18 +1014,10 @@ pub mod pallet {
 			let bounty_account = Self::bounty_account_id(bounty_id);
 			let treasury_account = Self::account_id();
 
-			// Check whether the native currency balance is non-zero before
-			// attempting any transfer.
-			let native_balance = T::Currency::free_balance(&bounty_account);
-
-			if native_balance.is_zero() {
-				return Err(Error::<T, I>::BountyAccountAlreadyEmpty.into());
-			}
-
-			// Transfer all assets (including native token via TransferAllAssets).
+			// Transfer assets BEFORE the native token.
 			T::TransferAllAssets::force_transfer_all_assets(&bounty_account, &treasury_account)?;
 
-			Self::deposit_event(Event::<T, I>::BountyAccDusted { bounty_id, who });
+			Self::deposit_event(Event::<T, I>::BountyAccDusted { bounty_id });
 
 			Ok(Pays::No.into())
 		}

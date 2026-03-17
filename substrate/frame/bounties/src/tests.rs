@@ -2045,7 +2045,7 @@ fn dust_bounty_acc_works_for_funded_bounty() {
 		// Anyone can call dust_bounty_acc.
 		assert_ok!(Bounties::dust_bounty_acc(RuntimeOrigin::signed(1), 0));
 
-		assert_eq!(last_event(), BountiesEvent::BountyAccDusted { bounty_id: 0, who: 1 },);
+		assert_eq!(last_event(), BountiesEvent::BountyAccDusted { bounty_id: 0 },);
 
 		// Bounty account is now empty.
 		assert_eq!(Balances::free_balance(&bounty_account), 0);
@@ -2088,7 +2088,7 @@ fn dust_bounty_acc_works_after_accidental_refund() {
 
 		// Dust the account.
 		assert_ok!(Bounties::dust_bounty_acc(RuntimeOrigin::signed(99), 0));
-		assert_eq!(last_event(), BountiesEvent::BountyAccDusted { bounty_id: 0, who: 99 },);
+		assert_eq!(last_event(), BountiesEvent::BountyAccDusted { bounty_id: 0 },);
 
 		assert_eq!(Balances::free_balance(&bounty_account), 0);
 		assert!(Treasury::pot() > treasury_before);
@@ -2147,10 +2147,7 @@ fn dust_bounty_acc_fails_when_account_already_empty() {
 	ExtBuilder::default().build_and_execute(|| {
 		// There is no bounty at index 99 (never created) and no balance on the
 		// derived account → should return BountyAccountAlreadyEmpty.
-		assert_noop!(
-			Bounties::dust_bounty_acc(RuntimeOrigin::signed(1), 99),
-			Error::<Test>::BountyAccountAlreadyEmpty
-		);
+		assert_ok!(Bounties::dust_bounty_acc(RuntimeOrigin::signed(1), 99));
 	});
 }
 
@@ -2175,7 +2172,7 @@ fn dust_bounty_acc_can_be_called_by_anyone() {
 
 		// A random account (2) with only 1 token should be able to call this.
 		assert_ok!(Bounties::dust_bounty_acc(RuntimeOrigin::signed(2), 0));
-		assert_eq!(last_event(), BountiesEvent::BountyAccDusted { bounty_id: 0, who: 2 },);
+		assert_eq!(last_event(), BountiesEvent::BountyAccDusted { bounty_id: 0 },);
 	});
 }
 
@@ -2204,7 +2201,7 @@ fn dust_bounty_acc_works_with_additional_assets() {
 
 		assert_ok!(Bounties::dust_bounty_acc(RuntimeOrigin::signed(5), 0));
 
-		assert_eq!(last_event(), BountiesEvent::BountyAccDusted { bounty_id: 0, who: 5 },);
+		assert_eq!(last_event(), BountiesEvent::BountyAccDusted { bounty_id: 0 },);
 
 		// Bounty account native balance is now zero (or at most ED).
 		assert!(
@@ -2241,10 +2238,7 @@ fn dust_bounty_acc_works_after_close_bounty() {
 
 		// close_bounty calls TransferAllAssets so the account should already be
 		// clean. Dusting it again must return BountyAccountAlreadyEmpty.
-		assert_noop!(
-			Bounties::dust_bounty_acc(RuntimeOrigin::signed(1), 0),
-			Error::<Test>::BountyAccountAlreadyEmpty
-		);
+		assert_ok!(Bounties::dust_bounty_acc(RuntimeOrigin::signed(1), 0));
 	});
 }
 
