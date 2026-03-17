@@ -422,8 +422,6 @@ pub(crate) enum UmpAcceptanceCheckErr {
 	TotalSizeExceeded { total_size: u64, limit: u64 },
 	/// A para-chain cannot send UMP messages while it is offboarding.
 	IsOffboarding,
-	/// A para-chain cannot send UMP messages while it is frozen.
-	IsFrozen,
 }
 
 impl fmt::Debug for UmpAcceptanceCheckErr {
@@ -452,9 +450,6 @@ impl fmt::Debug for UmpAcceptanceCheckErr {
 			UmpAcceptanceCheckErr::IsOffboarding => {
 				write!(fmt, "upward message rejected because the para is off-boarding")
 			},
-			UmpAcceptanceCheckErr::IsFrozen => {
-				write!(fmt, "upward message rejected because the para is frozen")
-			},
 		}
 	}
 }
@@ -462,27 +457,35 @@ impl fmt::Debug for UmpAcceptanceCheckErr {
 impl<T: Config> Pallet<T> {
 	/// Block initialization logic, called by initializer.
 	pub(crate) fn initializer_initialize(_now: BlockNumberFor<T>) -> Weight {
-		Self::free_frozen_paras()
+		Weight::zero()
 	}
 
 	/// Block finalization logic, called by initializer.
 	pub(crate) fn initializer_finalize() {}
 
-	/// Free all pending availability candidates for frozen parachains.
-	/// Called during block initialization.
-	pub(crate) fn free_frozen_paras() -> Weight {
+	/// Free pending availability candidates for the given parachain.
+	pub(crate) fn free_para_pending_availability(para_id: ParaId) -> Weight {
 		let mut weight = T::DbWeight::get().reads(1);
-		let frozen = paras::FrozenParas::<T>::get();
-		if frozen.is_empty() {
-			return weight;
-		}
-		for para_id in &frozen {
-			if PendingAvailability::<T>::contains_key(para_id) {
-				weight.saturating_accrue(T::DbWeight::get().writes(1));
-				PendingAvailability::<T>::remove(para_id);
-			}
+		if PendingAvailability::<T>::contains_key(para_id) {
+			PendingAvailability::<T>::remove(para_id);
+			weight.saturating_accrue(T::DbWeight::get().writes(1));
+			log::debug!(
+				target: LOG_TARGET,
+				"Freed pending availability candidates for frozen para {:?}",
+				para_id,
+			);
 		}
 		weight
+	}
+
+	/// Sweep the UMP queue for the given para.
+	pub(crate) fn sweep_para_upward_messages(para_id: ParaId) {
+		Self::cleanup_outgoing_ump_dispatch_queue(para_id);
+		log::debug!(
+			target: LOG_TARGET,
+			"Swept upward messages for frozen para {:?}",
+			para_id,
+		);
 	}
 
 	/// Handle an incoming session change.
@@ -962,11 +965,6 @@ impl<T: Config> Pallet<T> {
 			ensure!(upward_messages.is_empty(), UmpAcceptanceCheckErr::IsOffboarding);
 		}
 
-		// Cannot send UMP messages while frozen.
-		if paras::Pallet::<T>::is_para_frozen(para) {
-			ensure!(upward_messages.is_empty(), UmpAcceptanceCheckErr::IsFrozen);
-		}
-
 		let additional_msgs = upward_messages.len() as u32;
 		if additional_msgs > config.max_upward_message_num_per_candidate {
 			return Err(UmpAcceptanceCheckErr::MoreMessagesThanPermitted {
@@ -1194,6 +1192,16 @@ impl<T: Config> Pallet<T> {
 					.collect()
 			})
 			.unwrap_or_default()
+	}
+}
+
+impl<T: Config> paras::OnParaFrozen for Pallet<T> {
+	fn on_para_frozen(id: ParaId) -> Weight {
+		let mut weight = Weight::zero();
+		weight.saturating_accrue(Self::free_para_pending_availability(id));
+		Self::sweep_para_upward_messages(id);
+		weight.saturating_accrue(T::DbWeight::get().writes(1));
+		weight
 	}
 }
 

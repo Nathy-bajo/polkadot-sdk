@@ -488,27 +488,22 @@ impl<T: Config> Pallet<T> {
 
 		// Extend the disputed bitfield to also cover cores occupied by frozen parachains.
 		// This ensures that availability votes for frozen para cores are dropped.
-		let disputed_bitfield = {
-			let frozen = paras::FrozenParas::<T>::get();
-			if !frozen.is_empty() {
-				let mut bitvec = disputed_bitfield.0;
-				for (core_idx, candidate) in inclusion::Pallet::<T>::get_occupied_cores() {
-					if frozen.contains(&candidate.candidate_descriptor().para_id()) {
-						let idx = core_idx.0 as usize;
-						if idx < bitvec.len() {
-							bitvec.set(idx, true);
-						}
+		let unavailable_cores_bitfield = {
+			let mut bitvec = disputed_bitfield.0;
+			for (core_idx, candidate) in inclusion::Pallet::<T>::get_occupied_cores() {
+				if paras::Pallet::<T>::is_para_frozen(candidate.candidate_descriptor().para_id()) {
+					let idx = core_idx.0 as usize;
+					if idx < bitvec.len() {
+						bitvec.set(idx, true);
 					}
 				}
-				DisputedBitfield::from(bitvec)
-			} else {
-				disputed_bitfield
 			}
+			DisputedBitfield::from(bitvec)
 		};
 
 		let bitfields = sanitize_bitfields::<T>(
 			bitfields,
-			disputed_bitfield,
+			unavailable_cores_bitfield,
 			expected_bits,
 			parent_hash,
 			current_session,
@@ -623,6 +618,19 @@ impl<T: Config> Pallet<T> {
 		for (core_idx, para_id) in scheduled {
 			eligible.entry(para_id).or_default().insert(core_idx);
 		}
+
+		// Filter out frozen parachains from the eligible set.
+		eligible.retain(|para_id, _| {
+			let frozen = paras::Pallet::<T>::is_para_frozen(*para_id);
+			if frozen {
+				log::debug!(
+					target: LOG_TARGET,
+					"Filtering out backed candidates for frozen parachain {:?}",
+					para_id,
+				);
+			}
+			!frozen
+		});
 
 		let node_features = configuration::ActiveConfig::<T>::get().node_features;
 		let v3_enabled = FeatureIndex::CandidateReceiptV3.is_set(&node_features);
