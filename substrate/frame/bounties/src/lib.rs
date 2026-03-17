@@ -1033,7 +1033,7 @@ pub mod pallet {
 
 			Self::deposit_event(Event::<T, I>::BountyAccDusted { bounty_id, who });
 
-			Ok(Pays::No.into()) // Reward callers for performing cleanup work
+			Ok(Pays::No.into())
 		}
 	}
 
