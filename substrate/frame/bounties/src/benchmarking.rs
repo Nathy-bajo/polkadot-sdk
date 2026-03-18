@@ -416,9 +416,7 @@ mod benchmarks {
 		#[extrinsic_call]
 		_(RawOrigin::Signed(dust_caller), bounty_id);
 
-		assert_last_event::<T, I>(
-			Event::BountyAccDusted { bounty_id, who: whitelisted_caller() }.into(),
-		);
+		assert_last_event::<T, I>(Event::BountyAccDusted { bounty_id }.into());
 
 		Ok(())
 	}
