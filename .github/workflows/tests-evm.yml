@@ -71,7 +71,7 @@ jobs:
 
       - name: script
         run: |
-          forklift cargo build --locked --release -p pallet-revive-eth-rpc --bin eth-rpc
+          forklift cargo build --locked --release -p pallet-revive-eth-rpc --bin eth-rpc --features subxt
           forklift cargo build --locked --release -p revive-dev-node --bin revive-dev-node
 
       - name: Checkout evm-tests
