@@ -15,6 +15,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#[cfg(feature = "subxt")]
 use crate::{
 	ClientError,
 	client::Balance,
@@ -30,18 +31,22 @@ use pallet_revive::{
 };
 use sp_core::H256;
 use sp_timestamp::Timestamp;
-use subxt::{Error::Metadata, OnlineClient, error::MetadataError, ext::subxt_rpcs::UserError};
+#[cfg(feature = "subxt")]
+use subxt::{Error::Metadata, error::MetadataError, ext::subxt_rpcs::UserError};
 
 const LOG_TARGET: &str = "eth-rpc::runtime_api";
 
-/// A Wrapper around subxt Runtime API
-#[derive(Clone)]
-pub struct RuntimeApi(subxt::runtime_api::RuntimeApi<SrcChainConfig, OnlineClient<SrcChainConfig>>);
+/// A wrapper around the subxt Runtime API.
+#[cfg(feature = "subxt")]
+pub struct RuntimeApi(
+	subxt::runtime_api::RuntimeApi<SrcChainConfig, subxt::OnlineClient<SrcChainConfig>>,
+);
 
+#[cfg(feature = "subxt")]
 impl RuntimeApi {
 	/// Create a new instance.
 	pub fn new(
-		api: subxt::runtime_api::RuntimeApi<SrcChainConfig, OnlineClient<SrcChainConfig>>,
+		api: subxt::runtime_api::RuntimeApi<SrcChainConfig, subxt::OnlineClient<SrcChainConfig>>,
 	) -> Self {
 		Self(api)
 	}
@@ -66,8 +71,8 @@ impl RuntimeApi {
 		Ok(result)
 	}
 
-	/// Estimates the minimum gas limit required for the transaction execution. Returns a [`U256`]
-	/// of the gas limit.
+	/// Estimates the minimum gas limit required for the transaction execution.
+	#[allow(dead_code)]
 	pub async fn estimate_gas(
 		&self,
 		tx: GenericTransaction,
@@ -199,14 +204,16 @@ impl RuntimeApi {
 		Ok(*gas_price)
 	}
 
-	/// Convert a weight to a fee.
+	/// Get the block gas limit.
+	#[allow(dead_code)]
 	pub async fn block_gas_limit(&self) -> Result<U256, ClientError> {
 		let payload = subxt_client::apis().revive_api().block_gas_limit();
 		let gas_limit = self.0.call(payload).await?;
 		Ok(*gas_limit)
 	}
 
-	/// Get the miner address
+	/// Get the block author address.
+	#[allow(dead_code)]
 	pub async fn block_author(&self) -> Result<H160, ClientError> {
 		let payload = subxt_client::apis().revive_api().block_author();
 		let author = self.0.call(payload).await?;

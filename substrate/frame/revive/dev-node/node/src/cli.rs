@@ -15,7 +15,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use polkadot_sdk::{sc_cli::RunCmd, *};
+use sc_cli::RunCmd;
 
 #[derive(Debug, Clone, Copy)]
 pub enum Consensus {

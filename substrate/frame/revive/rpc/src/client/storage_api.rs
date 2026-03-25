@@ -15,6 +15,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#[cfg(feature = "subxt")]
 use crate::{
 	ClientError, H160,
 	subxt_client::{
@@ -22,19 +23,25 @@ use crate::{
 		runtime_types::pallet_revive::storage::{AccountType, ContractInfo},
 	},
 };
+#[cfg(feature = "subxt")]
 use subxt::{OnlineClient, storage::Storage};
 
 /// A wrapper around the Substrate Storage API.
+#[cfg(feature = "subxt")]
+#[allow(dead_code)]
 #[derive(Clone)]
 pub struct StorageApi(Storage<SrcChainConfig, OnlineClient<SrcChainConfig>>);
 
+#[cfg(feature = "subxt")]
 impl StorageApi {
 	/// Create a new instance of the StorageApi.
+	#[allow(dead_code)]
 	pub fn new(api: Storage<SrcChainConfig, OnlineClient<SrcChainConfig>>) -> Self {
 		Self(api)
 	}
 
 	/// Get the contract info for the given contract address.
+	#[allow(dead_code)]
 	pub async fn get_contract_info(
 		&self,
 		contract_address: &H160,
@@ -55,6 +62,7 @@ impl StorageApi {
 	}
 
 	/// Get the contract trie id for the given contract address.
+	#[allow(dead_code)]
 	pub async fn get_contract_trie_id(&self, address: &H160) -> Result<Vec<u8>, ClientError> {
 		let ContractInfo { trie_id, .. } = self.get_contract_info(address).await?;
 		Ok(trie_id.0)
