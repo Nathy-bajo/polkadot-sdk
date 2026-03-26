@@ -54,7 +54,7 @@ impl RuntimeApi {
 	/// Get the balance of the given address.
 	pub async fn balance(&self, address: H160) -> Result<U256, ClientError> {
 		let address = address.0.into();
-		let payload = subxt_client::apis().revive_api().balance(address);
+		let payload = subxt_client::apis().revive_api().balance(address).unvalidated();
 		let balance = self.0.call(payload).await?;
 		Ok(*balance)
 	}
@@ -66,7 +66,10 @@ impl RuntimeApi {
 		key: [u8; 32],
 	) -> Result<Option<Vec<u8>>, ClientError> {
 		let contract_address = contract_address.0.into();
-		let payload = subxt_client::apis().revive_api().get_storage(contract_address, key);
+		let payload = subxt_client::apis()
+			.revive_api()
+			.get_storage(contract_address, key)
+			.unvalidated();
 		let result = self.0.call(payload).await?.map_err(|_| ClientError::ContractNotFound)?;
 		Ok(result)
 	}
@@ -93,23 +96,30 @@ impl RuntimeApi {
 		let mut stream =
 			// Estimate through the `estimate_gas` function
 			stream::once(Box::pin(async {
-				let payload = subxt_client::apis().revive_api().eth_estimate_gas(
-					tx.clone().into(),
-					DryRunConfig::new(timestamp_override).into(),
-				);
+				let payload = subxt_client::apis()
+					.revive_api()
+					.eth_estimate_gas(
+						tx.clone().into(),
+						DryRunConfig::new(timestamp_override).into(),
+					)
+					.unvalidated();
 				self.0.call(payload).await.map(|value| value.map(|value| value.0))
 			}))
 			// Otherwise, estimate through `eth_transact_with_config`
 			.chain(stream::once(Box::pin(async {
-				let payload = subxt_client::apis().revive_api().eth_transact_with_config(
-					tx.clone().into(),
-					DryRunConfig::new(timestamp_override).into(),
-				);
+				let payload = subxt_client::apis()
+					.revive_api()
+					.eth_transact_with_config(
+						tx.clone().into(),
+						DryRunConfig::new(timestamp_override).into(),
+					)
+					.unvalidated();
 				self.0.call(payload).await.map(|value| value.map(|value| value.eth_gas))
 			})))
 			// Otherwise, estimate through `eth_transact`
 			.chain(stream::once(Box::pin(async {
-				let payload = subxt_client::apis().revive_api().eth_transact(tx.clone().into());
+				let payload =
+					subxt_client::apis().revive_api().eth_transact(tx.clone().into()).unvalidated();
 				self.0.call(payload).await.map(|value| value.map(|value| value.eth_gas))
 			})));
 
@@ -163,7 +173,8 @@ impl RuntimeApi {
 					// metadata when the eth-rpc starts) does not contain the new method
 					Metadata(MetadataError::RuntimeMethodNotFound(name)) => {
 						log::debug!(target: LOG_TARGET, "Method {name:?} not found falling back to eth_transact");
-						let payload = subxt_client::apis().revive_api().eth_transact(tx.into());
+						let payload =
+							subxt_client::apis().revive_api().eth_transact(tx.into()).unvalidated();
 						self.0.call(payload).await
 					},
 					// This will be hit if we are trying to hit a block where the runtime did not
@@ -172,7 +183,8 @@ impl RuntimeApi {
 						subxt::ext::subxt_rpcs::Error::User(UserError { message, .. }),
 					)) if message.contains("eth_transact_with_config is not found") => {
 						log::debug!(target: LOG_TARGET, "{message:?} not found falling back to eth_transact");
-						let payload = subxt_client::apis().revive_api().eth_transact(tx.into());
+						let payload =
+							subxt_client::apis().revive_api().eth_transact(tx.into()).unvalidated();
 						self.0.call(payload).await
 					},
 					e => Err(e),
@@ -192,14 +204,14 @@ impl RuntimeApi {
 	/// Get the nonce of the given address.
 	pub async fn nonce(&self, address: H160) -> Result<U256, ClientError> {
 		let address = address.0.into();
-		let payload = subxt_client::apis().revive_api().nonce(address);
+		let payload = subxt_client::apis().revive_api().nonce(address).unvalidated();
 		let nonce = self.0.call(payload).await?;
 		Ok(nonce.into())
 	}
 
 	/// Get the gas price
 	pub async fn gas_price(&self) -> Result<U256, ClientError> {
-		let payload = subxt_client::apis().revive_api().gas_price();
+		let payload = subxt_client::apis().revive_api().gas_price().unvalidated();
 		let gas_price = self.0.call(payload).await?;
 		Ok(*gas_price)
 	}
@@ -207,7 +219,7 @@ impl RuntimeApi {
 	/// Get the block gas limit.
 	#[allow(dead_code)]
 	pub async fn block_gas_limit(&self) -> Result<U256, ClientError> {
-		let payload = subxt_client::apis().revive_api().block_gas_limit();
+		let payload = subxt_client::apis().revive_api().block_gas_limit().unvalidated();
 		let gas_limit = self.0.call(payload).await?;
 		Ok(*gas_limit)
 	}
@@ -215,7 +227,7 @@ impl RuntimeApi {
 	/// Get the block author address.
 	#[allow(dead_code)]
 	pub async fn block_author(&self) -> Result<H160, ClientError> {
-		let payload = subxt_client::apis().revive_api().block_author();
+		let payload = subxt_client::apis().revive_api().block_author().unvalidated();
 		let author = self.0.call(payload).await?;
 		Ok(author)
 	}
@@ -274,14 +286,14 @@ impl RuntimeApi {
 
 	/// Get the code of the given address.
 	pub async fn code(&self, address: H160) -> Result<Vec<u8>, ClientError> {
-		let payload = subxt_client::apis().revive_api().code(address);
+		let payload = subxt_client::apis().revive_api().code(address).unvalidated();
 		let code = self.0.call(payload).await?;
 		Ok(code)
 	}
 
 	/// Get the current Ethereum block.
 	pub async fn eth_block(&self) -> Result<EthBlock, ClientError> {
-		let payload = subxt_client::apis().revive_api().eth_block();
+		let payload = subxt_client::apis().revive_api().eth_block().unvalidated();
 		let block = self.0.call(payload).await.inspect_err(|err| {
 			log::debug!(target: LOG_TARGET, "Ethereum block not found, err: {err:?}");
 		})?;
@@ -290,7 +302,7 @@ impl RuntimeApi {
 
 	/// Get the Ethereum block hash for the given block number.
 	pub async fn eth_block_hash(&self, number: U256) -> Result<Option<H256>, ClientError> {
-		let payload = subxt_client::apis().revive_api().eth_block_hash(number.into());
+		let payload = subxt_client::apis().revive_api().eth_block_hash(number.into()).unvalidated();
 		let hash = self.0.call(payload).await.inspect_err(|err| {
 			log::debug!(target: LOG_TARGET, "Ethereum block hash for block #{number:?} not found, err: {err:?}");
 		})?;
@@ -299,7 +311,7 @@ impl RuntimeApi {
 
 	/// Get the receipt data for the current block.
 	pub async fn eth_receipt_data(&self) -> Result<Vec<ReceiptGasInfo>, ClientError> {
-		let payload = subxt_client::apis().revive_api().eth_receipt_data();
+		let payload = subxt_client::apis().revive_api().eth_receipt_data().unvalidated();
 		let receipt_data = self.0.call(payload).await.inspect_err(|err| {
 			log::debug!(target: LOG_TARGET, "Receipt data not found, err: {err:?}");
 		})?;
