@@ -117,7 +117,7 @@ tokio = { version = "1.43.1", features = ["macros", "parking_lot", "time"] }
 wait-timeout = { workspace = true }
 
 [features]
-default = []
+default = ["eth-rpc"]
 eth-rpc = ["dep:pallet-revive-eth-rpc"]
 rococo-native = ["polkadot-cli/rococo-native"]
 westend-native = ["polkadot-cli/westend-native"]

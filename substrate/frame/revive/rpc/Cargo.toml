@@ -93,7 +93,3 @@ tempfile = { workspace = true }
 
 [build-dependencies]
 git2 = { workspace = true }
-asset-hub-westend-runtime = { workspace = true, default-features = true }
-revive-dev-runtime = { workspace = true, default-features = true }
-sp-io = { workspace = true, default-features = true }
-sp-runtime = { workspace = true, default-features = true }

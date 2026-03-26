@@ -16,12 +16,15 @@
 // limitations under the License.
 
 use crate::cli::Consensus;
+use polkadot_sdk::{
+	sc_client_api::StorageProvider,
+	sc_executor::WasmExecutor,
+	sc_service::{error::Error as ServiceError, Configuration, TaskManager},
+	sc_telemetry::{Telemetry, TelemetryWorker},
+	sp_runtime::traits::Block as BlockT,
+	*,
+};
 use revive_dev_runtime::{OpaqueBlock as Block, Runtime, RuntimeApi};
-use sc_client_api::StorageProvider;
-use sc_executor::WasmExecutor;
-use sc_service::{error::Error as ServiceError, Configuration, TaskManager};
-use sc_telemetry::{Telemetry, TelemetryWorker};
-use sp_runtime::traits::Block as BlockT;
 use std::sync::Arc;
 
 type HostFunctions = sp_io::SubstrateHostFunctions;
@@ -175,7 +178,7 @@ pub fn new_full<Network: sc_network::NetworkBackend<Block, <Block as BlockT>::Ha
 	);
 
 	// Due to instant seal or low block time multiple blocks can have the same timestamp.
-	// This is because Ethereum only uses second granularity (as opposed to ms).
+	// This is because Etereum only uses second granularity (as opposed to ms).
 	// Here we make sure that we increment by at least a second from the last block.
 	//
 	// # Warning
@@ -190,7 +193,7 @@ pub fn new_full<Network: sc_network::NetworkBackend<Block, <Block as BlockT>::Ha
 			let client = client.clone();
 			async move {
 				let key = sp_core::storage::StorageKey(
-					pallet_timestamp::Now::<Runtime>::hashed_key().to_vec(),
+					polkadot_sdk::pallet_timestamp::Now::<Runtime>::hashed_key().to_vec(),
 				);
 				let current = sp_timestamp::Timestamp::current();
 				let next = client

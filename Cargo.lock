@@ -13348,7 +13348,6 @@ name = "pallet-revive-eth-rpc"
 version = "0.1.0"
 dependencies = [
  "anyhow",
- "asset-hub-westend-runtime",
  "async-trait",
  "clap",
  "derive_more 0.99.17",
@@ -13363,7 +13362,6 @@ dependencies = [
  "parity-scale-codec",
  "pretty_assertions",
  "revive-dev-node",
- "revive-dev-runtime",
  "rlp 0.6.1",
  "sc-cli",
  "sc-client-api 28.0.0",
@@ -18823,34 +18821,8 @@ dependencies = [
  "futures",
  "futures-timer",
  "jsonrpsee",
- "pallet-timestamp",
- "pallet-transaction-payment-rpc",
+ "polkadot-sdk",
  "revive-dev-runtime",
- "sc-basic-authorship",
- "sc-cli",
- "sc-client-api 28.0.0",
- "sc-consensus",
- "sc-consensus-manual-seal",
- "sc-executor 0.32.0",
- "sc-network 0.34.0",
- "sc-rpc",
- "sc-rpc-api",
- "sc-service",
- "sc-telemetry 15.0.0",
- "sc-transaction-pool",
- "sc-transaction-pool-api 28.0.0",
- "sp-api 26.0.0",
- "sp-block-builder",
- "sp-blockchain 28.0.0",
- "sp-core 28.0.0",
- "sp-genesis-builder 0.8.0",
- "sp-inherents 26.0.0",
- "sp-io 30.0.0",
- "sp-keyring",
- "sp-runtime 31.0.1",
- "sp-timestamp",
- "substrate-build-script-utils",
- "substrate-frame-rpc-system",
 ]
 
 [[package]]
@@ -18858,41 +18830,19 @@ name = "revive-dev-runtime"
 version = "0.1.0"
 dependencies = [
  "array-bytes 6.2.2",
- "frame-executive",
- "frame-support",
- "frame-system",
- "frame-system-rpc-runtime-api",
- "frame-try-runtime",
- "pallet-balances",
- "pallet-revive",
- "pallet-sudo",
- "pallet-timestamp",
- "pallet-transaction-payment",
- "pallet-transaction-payment-rpc-runtime-api",
- "parachains-common",
  "parity-scale-codec",
- "polkadot-primitives",
- "polkadot-runtime-common",
+ "polkadot-sdk",
  "scale-info",
  "serde_json",
- "sp-api 26.0.0",
- "sp-block-builder",
- "sp-consensus-aura",
- "sp-core 28.0.0",
  "sp-debug-derive 14.0.0",
- "sp-genesis-builder 0.8.0",
- "sp-inherents 26.0.0",
+]
+
+[[package]]
+name = "revive-gen-metadata"
+version = "0.0.0"
+dependencies = [
+ "revive-dev-runtime",
  "sp-io 30.0.0",
- "sp-keyring",
- "sp-offchain",
- "sp-runtime 31.0.1",
- "sp-session",
- "sp-std 14.0.0",
- "sp-tracing 16.0.0",
- "sp-transaction-pool",
- "sp-version 29.0.0",
- "sp-weights 27.0.0",
- "substrate-wasm-builder",
 ]
 
 [[package]]
