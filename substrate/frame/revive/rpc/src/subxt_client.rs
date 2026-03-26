@@ -534,7 +534,7 @@ impl SubstrateClientT for SubxtClient {
 			StreamOf::new(Box::pin(sub.map_err(|e| e.into())));
 
 		tokio::time::timeout(std::time::Duration::from_secs(5), async {
-			while let Some(status) = stream.next().await {
+			if let Some(status) = stream.next().await {
 				let subxt_status: SubxtTxStatus<SubstrateBlockHash> =
 					status.map_err(ClientError::from)?;
 				let pool_status = subxt_tx_status_to_submit_result(subxt_status);

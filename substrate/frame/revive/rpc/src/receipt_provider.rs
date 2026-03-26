@@ -21,7 +21,7 @@ use crate::{
 	block_sync::{ChainMetadata, SyncCheckpoint, SyncLabel, SyncStateKey},
 	client::SubstrateBlockNumber,
 };
-use pallet_revive::evm::{BlockTag, Filter, Log, ReceiptInfo, TransactionSigned};
+use pallet_revive::evm::{Filter, Log, ReceiptInfo, TransactionSigned};
 use sp_core::{H256, U256};
 use sqlx::{QueryBuilder, Row, Sqlite, SqlitePool, query};
 use std::{
@@ -776,7 +776,7 @@ impl<BP: BlockInfoProvider> ReceiptProvider<BP> {
 mod tests {
 	use super::*;
 	use crate::block_info_provider::test::{MockBlockInfo, MockBlockInfoProvider};
-	use pallet_revive::evm::{ReceiptInfo, TransactionSigned};
+	use pallet_revive::evm::{BlockTag, ReceiptInfo, TransactionSigned};
 	use pretty_assertions::assert_eq;
 	use sp_core::{H160, H256};
 	use sqlx::SqlitePool;

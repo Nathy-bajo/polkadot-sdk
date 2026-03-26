@@ -187,7 +187,6 @@ impl ClientError {
 }
 
 const LOG_TARGET: &str = "eth-rpc::client";
-const LOG_TARGET_SUBSCRIPTION: &str = "eth-rpc::subscription";
 
 const REVERT_CODE: i32 = 3;
 
@@ -237,17 +236,6 @@ pub struct Client<C: SubstrateClientT, BP: BlockInfoProvider> {
 	log_subscription_tx: tokio::sync::broadcast::Sender<Log>,
 	/// Whether historic backfill has completed. `false` if not started or in progress.
 	backfill_complete: Arc<AtomicBool>,
-}
-
-/// Returns the first EVM block number for main and test nets, `None` otherwise.
-fn known_first_evm_block_for_chain(chain_id: u64) -> Option<u32> {
-	match chain_id {
-		420420417 => Some(4_367_914),  // Paseo Asset Hub
-		420420418 => Some(12_234_156), // Kusama Asset Hub
-		420420419 => Some(11_405_259), // Polkadot Asset Hub
-		420420421 => Some(13_169_391), // Westend Asset Hub
-		_ => None,
-	}
 }
 
 impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
@@ -364,15 +352,6 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 				return Ok(());
 			}
 		}
-	}
-
-	/// The earliest block number where the ReviveApi is available.
-	/// Resolution order: in-memory value > known-networks table > 0.
-	fn earliest_block_number(&self) -> u32 {
-		self.receipt_provider
-			.first_evm_block()
-			.or_else(|| known_first_evm_block_for_chain(self.chain_id()))
-			.unwrap_or(0)
 	}
 
 	/// Subscribe to new blocks, and execute the async closure for each block.

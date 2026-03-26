@@ -18,7 +18,7 @@ use crate::{
 	cli::{AuthoringPolicy, DevSealMode},
 	common::{
 		aura::{AuraIdT, AuraRuntimeApi},
-		rpc::{BuildParachainRpcExtensions, BuildRpcExtensions},
+		rpc::{BuildParachainReviveRpcExtensions, BuildRpcExtensions},
 		spec::{
 			BaseNodeSpec, BuildImportQueue, ClientBlockImport, DynNodeSpec, InitBlockImport,
 			NodeSpec, StartConsensus,
@@ -54,6 +54,7 @@ use cumulus_primitives_core::{
 };
 use cumulus_relay_chain_interface::{OverseerHandle, RelayChainInterface};
 use futures::{prelude::*, FutureExt};
+use pallet_revive_eth_rpc::native_client::ReviveRuntimeApiT;
 use polkadot_primitives::{CollatorPair, UpgradeGoAhead};
 use prometheus_endpoint::Registry;
 use sc_client_api::{Backend, BlockchainEvents};
@@ -193,11 +194,12 @@ where
 impl<Block, RuntimeApi, AuraId, StartConsensus, InitBlockImport> NodeSpec
 	for AuraNode<Block, RuntimeApi, AuraId, StartConsensus, InitBlockImport>
 where
-	Block: NodeBlock,
+	Block: NodeBlock<BoundedNumber = u32>,
 	RuntimeApi: ConstructNodeRuntimeApi<Block, ParachainClient<Block, RuntimeApi>>,
 	RuntimeApi::RuntimeApi: AuraRuntimeApi<Block, AuraId>
 		+ pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi<Block, Balance>
-		+ substrate_frame_rpc_system::AccountNonceApi<Block, AccountId, Nonce>,
+		+ substrate_frame_rpc_system::AccountNonceApi<Block, AccountId, Nonce>
+		+ ReviveRuntimeApiT<Block, u64>,
 	AuraId: AuraIdT + Sync,
 	StartConsensus: self::StartConsensus<
 			Block,
@@ -209,7 +211,7 @@ where
 	InitBlockImport::BlockImport:
 		sc_consensus::BlockImport<Block, Error = sp_consensus::Error> + 'static,
 {
-	type BuildRpcExtensions = BuildParachainRpcExtensions<Block, RuntimeApi>;
+	type BuildRpcExtensions = BuildParachainReviveRpcExtensions<Block, RuntimeApi>;
 	type StartConsensus = StartConsensus;
 	const SYBIL_RESISTANCE: CollatorSybilResistance = CollatorSybilResistance::Resistant;
 
@@ -486,12 +488,13 @@ pub fn new_aura_node_spec<Block, RuntimeApi, AuraId>(
 	extra_args: &NodeExtraArgs,
 ) -> Box<dyn DynNodeSpec>
 where
-	Block: NodeBlock,
+	Block: NodeBlock<BoundedNumber = u32>,
 	RuntimeApi: ConstructNodeRuntimeApi<Block, ParachainClient<Block, RuntimeApi>>,
 	RuntimeApi::RuntimeApi: AuraRuntimeApi<Block, AuraId>
 		+ pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi<Block, Balance>
 		+ substrate_frame_rpc_system::AccountNonceApi<Block, AccountId, Nonce>
-		+ GetParachainInfo<Block>,
+		+ GetParachainInfo<Block>
+		+ ReviveRuntimeApiT<Block, u64>,
 	AuraId: AuraIdT + Sync + Send,
 	<AuraId as AppCrypto>::Pair: Send + Sync,
 {

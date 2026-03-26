@@ -35,10 +35,8 @@ use substrate_state_trie_migration_rpc::{StateMigration, StateMigrationApiServer
 /// A type representing all RPC extensions.
 pub type RpcExtension = jsonrpsee::RpcModule<()>;
 
-#[cfg(feature = "eth-rpc")]
 pub use eth_rpc::BuildParachainReviveRpcExtensions;
 
-#[cfg(feature = "eth-rpc")]
 mod eth_rpc {
 	use super::*;
 	use pallet_revive_eth_rpc::{
@@ -203,45 +201,4 @@ pub(crate) trait BuildRpcExtensions<Client, Backend, Pool, StatementStore> {
 		statement_store: Option<Arc<StatementStore>>,
 		spawn_handle: Arc<dyn sp_core::traits::SpawnNamed>,
 	) -> sc_service::error::Result<RpcExtension>;
-}
-
-pub(crate) struct BuildParachainRpcExtensions<Block, RuntimeApi>(PhantomData<(Block, RuntimeApi)>);
-
-impl<Block: BlockT, RuntimeApi>
-	BuildRpcExtensions<
-		ParachainClient<Block, RuntimeApi>,
-		ParachainBackend<Block>,
-		sc_transaction_pool::TransactionPoolHandle<Block, ParachainClient<Block, RuntimeApi>>,
-		sc_statement_store::Store,
-	> for BuildParachainRpcExtensions<Block, RuntimeApi>
-where
-	RuntimeApi:
-		ConstructNodeRuntimeApi<Block, ParachainClient<Block, RuntimeApi>> + Send + Sync + 'static,
-	RuntimeApi::RuntimeApi: pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi<Block, Balance>
-		+ substrate_frame_rpc_system::AccountNonceApi<Block, AccountId, Nonce>,
-{
-	fn build_rpc_extensions(
-		client: Arc<ParachainClient<Block, RuntimeApi>>,
-		backend: Arc<ParachainBackend<Block>>,
-		pool: Arc<
-			sc_transaction_pool::TransactionPoolHandle<Block, ParachainClient<Block, RuntimeApi>>,
-		>,
-		statement_store: Option<Arc<sc_statement_store::Store>>,
-		spawn_handle: Arc<dyn sp_core::traits::SpawnNamed>,
-	) -> sc_service::error::Result<RpcExtension> {
-		let build = || -> Result<RpcExtension, Box<dyn std::error::Error + Send + Sync>> {
-			let mut module = RpcExtension::new(());
-
-			module.merge(System::new(client.clone(), pool).into_rpc())?;
-			module.merge(TransactionPayment::new(client.clone()).into_rpc())?;
-			module.merge(StateMigration::new(client.clone(), backend).into_rpc())?;
-			if let Some(statement_store) = statement_store {
-				module.merge(StatementStore::new(statement_store, spawn_handle).into_rpc())?;
-			}
-			module.merge(Dev::new(client).into_rpc())?;
-
-			Ok(module)
-		};
-		build().map_err(Into::into)
-	}
 }
