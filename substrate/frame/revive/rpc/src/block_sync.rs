@@ -174,7 +174,6 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 
 	async fn sync_backward_inner(&self) -> Result<(), ClientError> {
 		let genesis_hash = self.validate_chain_identity().await?;
-
 		let latest_finalized_block: Arc<BP::Block> = self.latest_finalized_block().await;
 		let latest_finalized =
 			SyncCheckpoint::new(latest_finalized_block.number(), latest_finalized_block.hash());
@@ -192,7 +191,7 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 		match (tail, head) {
 			(Some(tail), Some(head)) => {
 				// Verify boundary hashes still match the finalized chain.
-				tokio::try_join!(self.verify_boundary(&tail), self.verify_boundary(&head))?;
+				tokio::try_join!(self.verify_boundary(&tail), self.verify_boundary(&head),)?;
 				self.sync_backward_resume(tail, head, latest_finalized).await?;
 			},
 			(Some(_), None) => {
@@ -288,7 +287,7 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 		BackwardSyncRange { from, to, set_head, checkpoint_tail }: BackwardSyncRange,
 	) -> Result<(), ClientError> {
 		if from < to {
-			log::debug!(target: LOG_TARGET, "⬇️ Backward sync: nothing to sync (#{from}..#{to})");
+			log::debug!(target: LOG_TARGET,	"⬇️ Backward sync: nothing to sync (#{from}..#{to})");
 			return Ok(());
 		}
 
