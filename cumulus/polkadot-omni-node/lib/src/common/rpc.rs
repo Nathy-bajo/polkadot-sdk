@@ -131,60 +131,72 @@ mod eth_rpc {
 
 				// ETH RPC server.
 				let best_hash = client.chain_info().best_hash;
-				let chain_id = read_revive_chain_id::<Block, _>(&client, best_hash)?;
+				match read_revive_chain_id::<Block, _>(&client, best_hash) {
+					Ok(chain_id) => {
+						let block_provider = NativeClientBlockInfoProvider::new(client.clone())
+							.map_err(|e| format!("block info provider: {e}"))?;
 
-				let block_provider = NativeClientBlockInfoProvider::new(client.clone())
-					.map_err(|e| format!("block info provider: {e}"))?;
+						let native_client =
+							NativeSubstrateClient::new(client.clone(), pool, chain_id, false)
+								.map_err(|e| format!("native substrate client: {e}"))?;
 
-				let native_client =
-					NativeSubstrateClient::new(client.clone(), pool, chain_id, false)
-						.map_err(|e| format!("native substrate client: {e}"))?;
+						let eth_client = tokio::task::block_in_place(|| {
+							tokio::runtime::Handle::current().block_on(
+								build_native_inmemory_client(
+									native_client,
+									block_provider,
+									DEFAULT_KEEP_LATEST_BLOCKS,
+									false,
+								),
+							)
+						})
+						.map_err(|e| format!("ETH RPC client init: {e}"))?;
 
-				let eth_client = tokio::task::block_in_place(|| {
-					tokio::runtime::Handle::current().block_on(build_native_inmemory_client(
-						native_client,
-						block_provider,
-						DEFAULT_KEEP_LATEST_BLOCKS,
-						false,
-					))
-				})
-				.map_err(|e| format!("ETH RPC client init: {e}"))?;
+						let eth_best = eth_client.clone();
+						spawn_handle.spawn(
+							"eth-rpc-best-blocks",
+							Some("eth-rpc"),
+							Box::pin(async move {
+								if let Err(e) = eth_best
+									.subscribe_and_cache_new_blocks(SubscriptionType::BestBlocks)
+									.await
+								{
+									log::error!(
+										target: "eth-rpc",
+										"Best-block subscription error: {e:?}"
+									);
+								}
+							}),
+						);
+						let eth_finalized = eth_client.clone();
+						spawn_handle.spawn(
+							"eth-rpc-finalized-blocks",
+							Some("eth-rpc"),
+							Box::pin(async move {
+								if let Err(e) = eth_finalized
+									.subscribe_and_cache_new_blocks(
+										SubscriptionType::FinalizedBlocks,
+									)
+									.await
+								{
+									log::error!(
+										target: "eth-rpc",
+										"Finalized-block subscription error: {e:?}"
+									);
+								}
+							}),
+						);
 
-				let eth_best = eth_client.clone();
-				spawn_handle.spawn(
-					"eth-rpc-best-blocks",
-					Some("eth-rpc"),
-					Box::pin(async move {
-						if let Err(e) = eth_best
-							.subscribe_and_cache_new_blocks(SubscriptionType::BestBlocks)
-							.await
-						{
-							log::error!(
-								target: "eth-rpc",
-								"Best-block subscription error: {e:?}"
-							);
-						}
-					}),
-				);
-				let eth_finalized = eth_client.clone();
-				spawn_handle.spawn(
-					"eth-rpc-finalized-blocks",
-					Some("eth-rpc"),
-					Box::pin(async move {
-						if let Err(e) = eth_finalized
-							.subscribe_and_cache_new_blocks(SubscriptionType::FinalizedBlocks)
-							.await
-						{
-							log::error!(
-								target: "eth-rpc",
-								"Finalized-block subscription error: {e:?}"
-							);
-						}
-					}),
-				);
-
-				let eth_module = build_eth_rpc_module(false, eth_client, false)?;
-				module.merge(eth_module)?;
+						let eth_module = build_eth_rpc_module(false, eth_client, false)?;
+						module.merge(eth_module)?;
+					},
+					Err(e) => {
+						log::debug!(
+							target: "eth-rpc",
+							"Revive pallet not found in runtime metadata, ETH RPC disabled: {e}"
+						);
+					},
+				}
 
 				Ok(module)
 			};
