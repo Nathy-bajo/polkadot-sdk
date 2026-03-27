@@ -19,13 +19,15 @@
 //! [evm-test-suite](https://github.com/paritytech/evm-test-suite) repository.
 
 use crate::{
-	BlockInfoProvider, ChainMetadata, DebugRpcClient, EthRpcClient, ReceiptExtractor,
-	ReceiptProvider, SubxtBlockInfoProvider, SyncLabel,
+	BlockInfoProvider, DebugRpcClient, EthRpcClient, ReceiptExtractor, ReceiptProvider,
+	SubxtBlockInfoProvider,
+	block_sync::{ChainMetadata, SyncLabel},
 	cli::{self, CliCommand},
-	client::{Client, connect},
+	client::Client,
 	example::TransactionBuilder,
 	subxt_client::{
-		self, SrcChainConfig, src_chain::runtime_types::pallet_revive::primitives::Code,
+		self, SrcChainConfig, SubxtClient, connect,
+		src_chain::runtime_types::pallet_revive::primitives::Code,
 	},
 };
 use anyhow::anyhow;
@@ -1734,7 +1736,7 @@ async fn submit_evm_transfers(count: usize) -> anyhow::Result<()> {
 /// Connects to the same dev-node that [`SharedResources`] started, but uses its own
 /// in-memory SQLite database so that sync labels written by the test do not interfere
 /// with the eth-rpc server's internal database (and vice versa).
-async fn create_sync_test_client() -> anyhow::Result<Client> {
+async fn create_sync_test_client() -> anyhow::Result<Client<SubxtClient, SubxtBlockInfoProvider>> {
 	use sc_cli::{RPC_DEFAULT_MAX_REQUEST_SIZE_MB, RPC_DEFAULT_MAX_RESPONSE_SIZE_MB};
 
 	let node_url = SharedResources::node_rpc_url();
@@ -1742,6 +1744,7 @@ async fn create_sync_test_client() -> anyhow::Result<Client> {
 	let max_response_size = RPC_DEFAULT_MAX_RESPONSE_SIZE_MB * 1024 * 1024;
 	let (api, rpc_client, rpc) = connect(node_url, max_request_size, max_response_size).await?;
 	let block_provider = SubxtBlockInfoProvider::new(api.clone(), rpc.clone()).await?;
+	let backend = SubxtClient::new(api, rpc_client, rpc).await?;
 
 	let pool = SqlitePoolOptions::new()
 		.max_connections(1)
@@ -1750,11 +1753,11 @@ async fn create_sync_test_client() -> anyhow::Result<Client> {
 		.connect_with(SqliteConnectOptions::new().in_memory(true))
 		.await?;
 
-	let receipt_extractor = ReceiptExtractor::new(api.clone()).await?;
+	let receipt_extractor = ReceiptExtractor::new_from_substrate_client(backend.clone(), None);
 	let receipt_provider =
 		ReceiptProvider::new(pool, block_provider.clone(), receipt_extractor, None).await?;
 
-	let client = Client::new(api, rpc_client, rpc, block_provider, receipt_provider, true).await?;
+	let client = Client::from_backend(backend, block_provider, receipt_provider, true)?;
 	Ok(client)
 }
 
