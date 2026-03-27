@@ -18,7 +18,7 @@ use crate::{
 	cli::{AuthoringPolicy, DevSealMode},
 	common::{
 		aura::{AuraIdT, AuraRuntimeApi},
-		rpc::{BuildParachainReviveRpcExtensions, BuildRpcExtensions},
+		rpc::{BuildParachainRpcExtensions, BuildRpcExtensions},
 		spec::{
 			BaseNodeSpec, BuildImportQueue, ClientBlockImport, DynNodeSpec, InitBlockImport,
 			NodeSpec, StartConsensus,
@@ -211,7 +211,7 @@ where
 	InitBlockImport::BlockImport:
 		sc_consensus::BlockImport<Block, Error = sp_consensus::Error> + 'static,
 {
-	type BuildRpcExtensions = BuildParachainReviveRpcExtensions<Block, RuntimeApi>;
+	type BuildRpcExtensions = BuildParachainRpcExtensions<Block, RuntimeApi>;
 	type StartConsensus = StartConsensus;
 	const SYBIL_RESISTANCE: CollatorSybilResistance = CollatorSybilResistance::Resistant;
 

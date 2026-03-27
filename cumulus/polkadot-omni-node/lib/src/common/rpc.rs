@@ -35,7 +35,7 @@ use substrate_state_trie_migration_rpc::{StateMigration, StateMigrationApiServer
 /// A type representing all RPC extensions.
 pub type RpcExtension = jsonrpsee::RpcModule<()>;
 
-pub use eth_rpc::BuildParachainReviveRpcExtensions;
+pub(crate) use eth_rpc::BuildParachainRpcExtensions;
 
 mod eth_rpc {
 	use super::*;
@@ -80,7 +80,7 @@ mod eth_rpc {
 		u64::decode(&mut &value[..]).map_err(|e| format!("ChainId decode error: {e}").into())
 	}
 
-	pub struct BuildParachainReviveRpcExtensions<Block, RuntimeApi>(
+	pub(crate) struct BuildParachainRpcExtensions<Block, RuntimeApi>(
 		PhantomData<(Block, RuntimeApi)>,
 	);
 
@@ -90,7 +90,7 @@ mod eth_rpc {
 			ParachainBackend<Block>,
 			sc_transaction_pool::TransactionPoolHandle<Block, ParachainClient<Block, RuntimeApi>>,
 			sc_statement_store::Store,
-		> for BuildParachainReviveRpcExtensions<Block, RuntimeApi>
+		> for BuildParachainRpcExtensions<Block, RuntimeApi>
 	where
 		Block: BlockT<Hash = H256, Extrinsic = sp_runtime::OpaqueExtrinsic> + Send + Sync + 'static,
 		Block::Header:

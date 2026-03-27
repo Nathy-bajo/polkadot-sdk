@@ -119,25 +119,22 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 		let num = checkpoint.block_number;
 		match checkpoint.block_hash {
 			None => {
-				log::error!(target: LOG_TARGET, "Boundary #{num}: missing stored hash");
+				log::error!(target: LOG_TARGET,
+					"Boundary #{num}: missing stored hash");
 				Err(ClientError::SyncBoundaryMismatch)
 			},
 			Some(stored_hash) => {
 				let block: Arc<BP::Block> =
 					self.block_provider().block_by_number(num).await?.ok_or_else(|| {
-						log::error!(
-							target: LOG_TARGET,
+						log::error!(target: LOG_TARGET,
 							"Boundary #{num}: block not found on chain \
-							 (node may have pruned it — use an archive node with --eth-pruning archive)"
-						);
+							 (node may have pruned it — use an archive node with --eth-pruning archive)");
 						ClientError::SyncBoundaryMismatch
 					})?;
 				if block.hash() != stored_hash {
-					log::error!(
-						target: LOG_TARGET,
-						"Boundary #{num}: hash mismatch — stored {stored_hash:?}, chain {:?}",
-						block.hash()
-					);
+					log::error!(target: LOG_TARGET,
+						"Boundary #{num}: hash mismatch — stored {stored_hash:?}, \
+						 chain {:?}", block.hash());
 					return Err(ClientError::SyncBoundaryMismatch);
 				}
 				Ok(())
@@ -162,11 +159,9 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 	/// Fatal errors (chain/DB mismatch) are propagated; transient errors are swallowed
 	/// to avoid taking down the RPC server.
 	pub async fn sync_backward(&self) -> Result<(), ClientError> {
-		log::info!(
-			target: LOG_TARGET,
+		log::info!(target: LOG_TARGET,
 			"🔄 Historical block sync enabled. \
-			 For a complete sync, the connected node should be an archive node."
-		);
+			 For a complete sync, the connected node should be an archive node.");
 		match self.sync_backward_inner().await {
 			Ok(()) => Ok(()),
 			Err(err) if err.is_chain_validation_error() => Err(err),
@@ -201,20 +196,14 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 				self.sync_backward_resume(tail, head, latest_finalized).await?;
 			},
 			(Some(_), None) => {
-				log::warn!(
-					target: LOG_TARGET,
+				log::warn!(target: LOG_TARGET,
 					"🗄️ Tail exists without Head — possible partial corruption, \
-					 starting fresh sync from #{}",
-					latest_finalized.block_number
-				);
+					 starting fresh sync from #{}", latest_finalized.block_number);
 				self.sync_backward_fresh(latest_finalized.block_number).await?;
 			},
 			_ => {
-				log::info!(
-					target: LOG_TARGET,
-					"🗄️ Fresh sync: syncing backward from #{}",
-					latest_finalized.block_number
-				);
+				log::info!(target: LOG_TARGET,
+					"🗄️ Fresh sync: syncing backward from #{}", latest_finalized.block_number);
 				self.sync_backward_fresh(latest_finalized.block_number).await?;
 			},
 		}
@@ -247,13 +236,9 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 		head: SyncCheckpoint,
 		latest_finalized: SyncCheckpoint,
 	) -> Result<(), ClientError> {
-		log::info!(
-			target: LOG_TARGET,
+		log::info!(target: LOG_TARGET,
 			"🗄️ Resuming sync: DB has blocks #{}..#{}, chain head is #{}",
-			tail.block_number,
-			head.block_number,
-			latest_finalized.block_number
-		);
+			tail.block_number, head.block_number, latest_finalized.block_number);
 
 		let top_gap = async {
 			// Top gap: sync from latest_finalized down to head + 1.
@@ -303,10 +288,7 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 		BackwardSyncRange { from, to, set_head, checkpoint_tail }: BackwardSyncRange,
 	) -> Result<(), ClientError> {
 		if from < to {
-			log::debug!(
-				target: LOG_TARGET,
-				"⬇️ Backward sync: nothing to sync (#{from}..#{to})"
-			);
+			log::debug!(target: LOG_TARGET, "⬇️ Backward sync: nothing to sync (#{from}..#{to})");
 			return Ok(());
 		}
 
@@ -339,10 +321,8 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 						.insert_block_receipts_past(block.as_ref(), &hash)
 						.await
 					{
-						log::error!(
-							target: LOG_TARGET,
-							"⚠️ Insert failed for #{block_number}: {err:?}, stopping"
-						);
+						log::error!(target: LOG_TARGET,
+							"⚠️ Insert failed for #{block_number}: {err:?}, stopping");
 						break Err(err);
 					}
 
@@ -354,10 +334,8 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 					}
 
 					if at_checkpoint(blocks_synced) {
-						log::debug!(
-							target: LOG_TARGET,
-							"⬇️ Backward sync progress: #{block_number} ({blocks_synced} blocks synced)"
-						);
+						log::debug!(target: LOG_TARGET,
+							"⬇️ Backward sync progress: #{block_number} ({blocks_synced} blocks synced)");
 						if checkpoint_tail {
 							self.checkpoint_sync_label(SyncLabel::Tail, block_number, block_hash)
 								.await;
@@ -366,17 +344,12 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 				},
 				None => {
 					let first_evm_block = block_number.saturating_add(1);
-					log::debug!(
-						target: LOG_TARGET,
-						"🔍 No EVM hash at #{block_number}, setting first_evm_block to #{first_evm_block}"
-					);
+					log::debug!(target: LOG_TARGET,
+						"🔍 No EVM hash at #{block_number}, setting first_evm_block to #{first_evm_block}");
 					if let Err(err) =
 						self.receipt_provider().set_first_evm_block(first_evm_block).await
 					{
-						log::warn!(
-							target: LOG_TARGET,
-							"Failed to persist first-evm-block: {err:?}"
-						);
+						log::warn!(target: LOG_TARGET, "Failed to persist first-evm-block: {err:?}");
 					}
 
 					break Ok(());
@@ -394,10 +367,8 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 				{
 					Ok(b) => block = b,
 					Err(err) => {
-						log::error!(
-							target: LOG_TARGET,
-							"⚠️ Could not fetch parent of #{block_number}: {err:?}, stopping"
-						);
+						log::error!(target: LOG_TARGET,
+							"⚠️ Could not fetch parent of #{block_number}: {err:?}, stopping");
 						break Err(err);
 					},
 				}
@@ -413,10 +384,9 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 			}
 		}
 
-		log::info!(
-			target: LOG_TARGET,
-			"⬇️ Backward sync: {blocks_synced} blocks synced (requested #{from}..#{to})"
-		);
+		log::info!(target: LOG_TARGET,
+			"⬇️ Backward sync: {blocks_synced} blocks synced \
+			 (requested #{from}..#{to})");
 
 		loop_result
 	}
