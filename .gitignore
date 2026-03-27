@@ -42,6 +42,7 @@ substrate.code-workspace
 target/
 target.noindex/
 *.scale
+!substrate/frame/revive/rpc/revive_chain.scale
 rustc-ice-*
 /.claude/settings.local.json
 *.local.md
