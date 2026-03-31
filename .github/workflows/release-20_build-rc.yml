@@ -157,7 +157,7 @@ jobs:
     uses: "./.github/workflows/release-reusable-rc-build.yml"
     with:
       binary: '["eth-rpc"]'
-      package: pallet-revive-eth-rpc
+      package: pallet-revive-eth-rpc-server
       release_tag: ${{ needs.validate-inputs.outputs.release_tag }}
       target: x86_64-unknown-linux-gnu
     secrets: inherit
@@ -278,7 +278,7 @@ jobs:
     uses: "./.github/workflows/release-reusable-rc-build.yml"
     with:
       binary: '["eth-rpc"]'
-      package: pallet-revive-eth-rpc
+      package: pallet-revive-eth-rpc-server
       release_tag: ${{ needs.validate-inputs.outputs.release_tag }}
       target: aarch64-apple-darwin
     secrets: inherit
