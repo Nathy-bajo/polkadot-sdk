@@ -19,26 +19,6 @@ jobs:
     needs: isdraft
     uses: ./.github/workflows/reusable-preflight.yml
 
-  check-scale-metadata:
-    needs: [preflight]
-    runs-on: ${{ needs.preflight.outputs.RUNNER }}
-    if: ${{ needs.preflight.outputs.changes_rust }}
-    timeout-minutes: 20
-    container:
-      image: ${{ needs.preflight.outputs.IMAGE }}
-    steps:
-      - name: Checkout
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
-      - name: Check revive_chain.scale is up to date
-        run: |
-          forklift cargo run -p revive-gen-metadata
-          if ! git diff --exit-code substrate/frame/revive/rpc/revive_chain.scale; then
-            echo ""
-            echo "❌ revive_chain.scale is stale."
-            echo "   Run 'cargo run -p revive-gen-metadata' and commit the result."
-            exit 1
-          fi
-
   differential-tests:
     needs: [preflight]
     runs-on: ${{ needs.preflight.outputs.RUNNER }}
@@ -91,7 +71,7 @@ jobs:
 
       - name: script
         run: |
-          forklift cargo build --locked --release -p pallet-revive-eth-rpc --bin eth-rpc --features subxt
+          forklift cargo build --locked --release -p pallet-revive-eth-rpc --bin eth-rpc
           forklift cargo build --locked --release -p revive-dev-node --bin revive-dev-node
 
       - name: Checkout evm-tests
@@ -126,7 +106,6 @@ jobs:
     # If any new job gets added, be sure to add it to this array
     needs:
       - evm-test-suite
-      - check-scale-metadata
     if: always() && !cancelled()
     steps:
       - run: |
