@@ -13432,6 +13432,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "pallet-revive-eth-rpc-server"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "pallet-revive-eth-rpc",
+]
+
+[[package]]
 name = "pallet-revive-fixtures"
 version = "0.1.0"
 dependencies = [
@@ -18876,14 +18884,6 @@ dependencies = [
  "scale-info",
  "serde_json",
  "sp-debug-derive 14.0.0",
-]
-
-[[package]]
-name = "revive-gen-metadata"
-version = "0.0.0"
-dependencies = [
- "revive-dev-runtime",
- "sp-io 30.0.0",
 ]
 
 [[package]]
