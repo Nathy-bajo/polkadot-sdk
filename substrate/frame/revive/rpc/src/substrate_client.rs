@@ -29,8 +29,8 @@ use jsonrpsee::core::async_trait;
 use pallet_revive::{
 	EthTransactInfo,
 	evm::{
-		Block as EthBlock, BlockNumberOrTagOrHash, GenericTransaction, ReceiptGasInfo, Trace,
-		TracerType, U256,
+		Block as EthBlock, BlockNumberOrTagOrHash, GenericTransaction, ReceiptGasInfo,
+		StateOverrideSet, Trace, TracerType, U256,
 	},
 };
 use sc_transaction_pool_api::TransactionStatus;
@@ -93,6 +93,7 @@ pub trait SubstrateClientT: Send + Sync + Clone + 'static {
 		block_hash: SubstrateBlockHash,
 		tx: GenericTransaction,
 		block: BlockNumberOrTagOrHash,
+		state_overrides: Option<StateOverrideSet>,
 	) -> Result<EthTransactInfo<Balance>, crate::client::ClientError>;
 
 	/// Return the current gas price.

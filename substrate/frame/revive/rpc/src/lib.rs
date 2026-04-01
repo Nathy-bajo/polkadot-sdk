@@ -201,7 +201,7 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> EthRpcServer for EthRpcServerIm
 
 		let eth_gas = self
 			.client
-			.dry_run(hash, transaction, block_tag_or_hash)
+			.dry_run(hash, transaction, block_tag_or_hash, None)
 			.await
 			.map_err(ClientError::from)?;
 
@@ -221,7 +221,7 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> EthRpcServer for EthRpcServerIm
 		let info = self
 			.client
 			.backend
-			.dry_run(hash, transaction, block)
+			.dry_run(hash, transaction, block, state_overrides)
 			.await
 			.map_err(ClientError::from)?;
 		Ok(info.data.into())

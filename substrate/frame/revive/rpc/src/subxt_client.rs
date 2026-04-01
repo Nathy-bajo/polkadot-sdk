@@ -90,8 +90,8 @@ use jsonrpsee::core::async_trait;
 use pallet_revive::{
 	EthTransactInfo,
 	evm::{
-		Block as EthBlock, BlockNumberOrTagOrHash, GenericTransaction, ReceiptGasInfo, Trace,
-		TracerType, U256,
+		Block as EthBlock, BlockNumberOrTagOrHash, GenericTransaction, ReceiptGasInfo,
+		StateOverrideSet, Trace, TracerType, U256,
 	},
 };
 use sp_core::H256;
@@ -399,9 +399,12 @@ impl SubstrateClientT for SubxtClient {
 		block_hash: SubstrateBlockHash,
 		tx: GenericTransaction,
 		block: BlockNumberOrTagOrHash,
+		state_overrides: Option<StateOverrideSet>,
 	) -> Result<EthTransactInfo<Balance>, ClientError> {
 		use crate::client::runtime_api::RuntimeApi;
-		RuntimeApi::new(self.api.runtime_api().at(block_hash)).dry_run(tx, block).await
+		RuntimeApi::new(self.api.runtime_api().at(block_hash))
+			.dry_run(tx, block, state_overrides)
+			.await
 	}
 
 	async fn gas_price(&self, block_hash: SubstrateBlockHash) -> Result<U256, ClientError> {

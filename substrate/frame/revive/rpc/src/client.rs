@@ -33,8 +33,8 @@ use pallet_revive::{
 	EthTransactError,
 	evm::{
 		Block, BlockNumberOrTagOrHash, FeeHistoryResult, Filter, GenericTransaction, H256,
-		HashesOrTransactionInfos, Log, ReceiptInfo, SyncingProgress, SyncingStatus, Trace,
-		TransactionSigned, TransactionTrace, decode_revert_reason,
+		HashesOrTransactionInfos, Log, ReceiptInfo, StateOverrideSet, SyncingProgress,
+		SyncingStatus, Trace, TransactionSigned, TransactionTrace, decode_revert_reason,
 	},
 };
 use sp_core::U256;
@@ -799,8 +799,9 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 		block_hash: SubstrateBlockHash,
 		tx: GenericTransaction,
 		block: BlockNumberOrTagOrHash,
+		state_overrides: Option<StateOverrideSet>,
 	) -> Result<pallet_revive::evm::U256, ClientError> {
-		self.backend.dry_run(block_hash, tx, block).await.map(|info| info.eth_gas)
+		self.backend.dry_run(block_hash, tx, block, state_overrides).await.map(|info| info.eth_gas)
 	}
 
 	/// Fetch the raw signed block (used for tracing).

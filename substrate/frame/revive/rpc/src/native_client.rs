@@ -33,8 +33,8 @@ use jsonrpsee::core::async_trait;
 use pallet_revive::{
 	EthTransactInfo, ReviveApi,
 	evm::{
-		Block as EthBlock, BlockNumberOrTagOrHash, GenericTransaction, ReceiptGasInfo, Trace,
-		TracerType, U256,
+		Block as EthBlock, BlockNumberOrTagOrHash, GenericTransaction, ReceiptGasInfo,
+		StateOverrideSet, Trace, TracerType, U256,
 	},
 };
 use sc_client_api::{BlockBackend, BlockchainEvents, HeaderBackend};
@@ -229,6 +229,7 @@ where
 		block_hash: SubstrateBlockHash,
 		tx: GenericTransaction,
 		_block: BlockNumberOrTagOrHash,
+		_state_overrides: Option<StateOverrideSet>,
 	) -> Result<EthTransactInfo<Balance>, ClientError> {
 		self.client
 			.runtime_api()
