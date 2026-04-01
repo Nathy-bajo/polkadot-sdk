@@ -801,7 +801,10 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 		block: BlockNumberOrTagOrHash,
 		state_overrides: Option<StateOverrideSet>,
 	) -> Result<pallet_revive::evm::U256, ClientError> {
-		self.backend.dry_run(block_hash, tx, block, state_overrides).await.map(|info| info.eth_gas)
+		self.backend
+			.dry_run(block_hash, tx, block, state_overrides)
+			.await
+			.map(|info| info.eth_gas)
 	}
 
 	/// Fetch the raw signed block (used for tracing).
