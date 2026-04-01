@@ -14,10 +14,11 @@
 // WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 // See the License for the specific language governing permissions and
 // limitations under the License.
-use std::process::Command;
+use std::{fs, process::Command};
 
 fn main() {
 	generate_git_revision();
+	copy_metadata_file();
 }
 
 fn generate_git_revision() {
@@ -49,4 +50,14 @@ fn generate_git_revision() {
 	println!("cargo:rustc-env=RUSTC_VERSION={rustc_version}");
 	println!("cargo:rustc-env=TARGET={target}");
 	println!("cargo:rustc-env=GIT_REVISION={branch}-{id}");
+}
+
+fn copy_metadata_file() {
+	let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set");
+	let src = std::path::Path::new(&manifest_dir).join("revive_chain.scale");
+	let out_dir = std::env::var("OUT_DIR").expect("OUT_DIR not set");
+	let dst = std::path::Path::new(&out_dir).join("revive_chain.scale");
+	fs::copy(&src, &dst)
+		.unwrap_or_else(|e| panic!("Failed to copy revive_chain.scale from {src:?}: {e}"));
+	println!("cargo:rerun-if-changed=revive_chain.scale");
 }
