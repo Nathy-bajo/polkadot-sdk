@@ -199,6 +199,9 @@ pub trait SubstrateClientT: Send + Sync + Clone + 'static {
 	/// Return whether the node has automine enabled.
 	async fn get_automine(&self) -> bool;
 
+	/// Return the pallet index of `pallet-revive` in the runtime.
+	fn pallet_revive_index(&self) -> u8;
+
 	/// Subscribe to new best or finalized blocks.
 	async fn subscribe_blocks<F, Fut>(
 		&self,
@@ -233,14 +236,6 @@ pub trait SubstrateClientT: Send + Sync + Clone + 'static {
 		&self,
 		_block_hash: SubstrateBlockHash,
 		_extrinsic_index: usize,
-	) -> Option<sp_weights::Weight> {
-		None
-	}
-
-	/// Return the post-dispatch weight for a given transaction hash.
-	async fn post_dispatch_weight(
-		&self,
-		_tx_hash: &SubstrateBlockHash,
 	) -> Option<sp_weights::Weight> {
 		None
 	}

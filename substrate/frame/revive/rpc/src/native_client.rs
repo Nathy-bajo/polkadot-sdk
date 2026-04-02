@@ -31,15 +31,17 @@ use codec::{Decode, Encode};
 use futures::StreamExt;
 use jsonrpsee::core::async_trait;
 use pallet_revive::{
-	EthTransactInfo, ReviveApi,
+	DryRunConfig, EthTransactInfo, ReviveApi,
 	evm::{
-		Block as EthBlock, BlockNumberOrTagOrHash, GenericTransaction, ReceiptGasInfo,
+		Block as EthBlock, BlockNumberOrTagOrHash, BlockTag, GenericTransaction, ReceiptGasInfo,
 		StateOverrideSet, Trace, TracerType, U256,
 	},
 };
 use sc_client_api::{BlockBackend, BlockchainEvents, HeaderBackend};
+use sc_network::NetworkStatusProvider;
 use sc_transaction_pool_api::TransactionPool;
-use sp_api::ProvideRuntimeApi;
+use sp_api::{Metadata, ProvideRuntimeApi};
+use sp_consensus::SyncOracle;
 use sp_core::{H160, H256};
 use sp_runtime::{
 	OpaqueExtrinsic,
@@ -74,6 +76,11 @@ fn native_err(e: impl std::fmt::Display) -> ClientError {
 	ClientError::NativeClientError(e.to_string())
 }
 
+/// A closure that, given a block hash and extrinsic index, returns the post-dispatch
+/// `Weight` for that extrinsic by scanning block events.
+type FetchExtrinsicWeightFn =
+	Arc<dyn Fn(SubstrateBlockHash, usize) -> Option<Weight> + Send + Sync>;
+
 /// A [`SubstrateClientT`] backed by the node's native in-process Substrate client.
 pub struct NativeSubstrateClient<Client, Pool, Block = OpaqueBlock, Moment = u64>
 where
@@ -84,6 +91,14 @@ where
 	chain_id: u64,
 	max_block_weight: Weight,
 	automine: bool,
+	/// The runtime index of `pallet-revive`, discovered from metadata at construction time.
+	pallet_revive_index: u8,
+	/// Optional network-status provider for real peer count in `system_health`.
+	network: Option<Arc<dyn NetworkStatusProvider + Send + Sync>>,
+	/// Optional sync oracle for real `is_syncing` in `system_health`.
+	sync_oracle: Option<Arc<dyn SyncOracle + Send + Sync>>,
+	/// Optional hook that scans block events to return post-dispatch weight.
+	fetch_extrinsic_weight: Option<FetchExtrinsicWeightFn>,
 	_block: PhantomData<Block>,
 	_moment: PhantomData<Moment>,
 }
@@ -99,6 +114,10 @@ where
 			chain_id: self.chain_id,
 			max_block_weight: self.max_block_weight,
 			automine: self.automine,
+			pallet_revive_index: self.pallet_revive_index,
+			network: self.network.clone(),
+			sync_oracle: self.sync_oracle.clone(),
+			fetch_extrinsic_weight: self.fetch_extrinsic_weight.clone(),
 			_block: PhantomData,
 			_moment: PhantomData,
 		}
@@ -109,7 +128,7 @@ impl<Client, Pool, Block, Moment> NativeSubstrateClient<Client, Pool, Block, Mom
 where
 	Block: BlockT<Hash = H256>,
 	Block::Header: HeaderT<Number = u32>,
-	Moment: codec::Codec + Send + Sync + 'static,
+	Moment: codec::Codec + From<u64> + Send + Sync + 'static,
 	Client: HeaderBackend<Block>
 		+ ProvideRuntimeApi<Block>
 		+ BlockBackend<Block>
@@ -135,15 +154,73 @@ where
 			.map(|v: U256| v.min(U256::from(u64::MAX)).as_u64())
 			.unwrap_or(u64::MAX);
 
+		let pallet_revive_index = Self::discover_pallet_index(&client, best_hash);
+
 		Ok(Self {
 			client,
 			pool,
 			chain_id,
 			max_block_weight: Weight::from_parts(block_gas_limit, u64::MAX),
 			automine,
+			pallet_revive_index,
+			network: None,
+			sync_oracle: None,
+			fetch_extrinsic_weight: None,
 			_block: PhantomData,
 			_moment: PhantomData,
 		})
+	}
+
+	pub fn with_network(
+		mut self,
+		network: Arc<impl NetworkStatusProvider + Send + Sync + 'static>,
+		sync_oracle: Arc<impl SyncOracle + Send + Sync + 'static>,
+	) -> Self {
+		self.network = Some(network as Arc<dyn NetworkStatusProvider + Send + Sync>);
+		self.sync_oracle = Some(sync_oracle as Arc<dyn SyncOracle + Send + Sync>);
+		self
+	}
+
+	pub fn with_event_reader(
+		mut self,
+		f: impl Fn(SubstrateBlockHash, usize) -> Option<Weight> + Send + Sync + 'static,
+	) -> Self {
+		self.fetch_extrinsic_weight = Some(Arc::new(f));
+		self
+	}
+
+	/// Attempt to read the pallet index of `pallet-revive` from the runtime metadata.
+	fn discover_pallet_index(client: &Arc<Client>, best_hash: Block::Hash) -> u8 {
+		let opaque = match client.runtime_api().metadata(best_hash) {
+			Ok(m) => m,
+			Err(e) => {
+				log::warn!(
+					target: crate::LOG_TARGET,
+					"Failed to fetch runtime metadata for pallet index discovery: {e:?}. \
+					 Falling back to default index 253."
+				);
+				return 253;
+			},
+		};
+
+		match subxt_metadata::Metadata::decode(&mut &opaque[..]) {
+			Ok(meta) => meta.pallet_by_name("Revive").map(|p| p.index()).unwrap_or_else(|| {
+				log::warn!(
+					target: crate::LOG_TARGET,
+					"Revive pallet not found in runtime metadata; \
+					 falling back to default pallet index 253."
+				);
+				253
+			}),
+			Err(e) => {
+				log::warn!(
+					target: crate::LOG_TARGET,
+					"Failed to decode runtime metadata for pallet index discovery: {e:?}. \
+					 Falling back to default index 253."
+				);
+				253
+			},
+		}
 	}
 
 	/// Build a [`NativeCachedBlock`] from a block hash by querying the in-process client.
@@ -174,7 +251,7 @@ impl<Client, Pool, Block, Moment> SubstrateClientT
 where
 	Block: BlockT<Hash = H256, Extrinsic = OpaqueExtrinsic> + Send + Sync + 'static,
 	Block::Header: HeaderT<Number = u32, Hash = H256> + Send + Sync,
-	Moment: codec::Codec + Clone + Send + Sync + 'static,
+	Moment: codec::Codec + Clone + From<u64> + Send + Sync + 'static,
 	Client: HeaderBackend<Block>
 		+ ProvideRuntimeApi<Block>
 		+ BlockBackend<Block>
@@ -228,12 +305,20 @@ where
 		&self,
 		block_hash: SubstrateBlockHash,
 		tx: GenericTransaction,
-		_block: BlockNumberOrTagOrHash,
-		_state_overrides: Option<StateOverrideSet>,
+		block: BlockNumberOrTagOrHash,
+		state_overrides: Option<StateOverrideSet>,
 	) -> Result<EthTransactInfo<Balance>, ClientError> {
+		let timestamp_override: Option<Moment> =
+			matches!(block, BlockNumberOrTagOrHash::BlockTag(BlockTag::Pending))
+				.then(|| Moment::from(sp_timestamp::Timestamp::current().as_millis()));
+
+		let config = DryRunConfig::<Moment>::default()
+			.with_timestamp_override(timestamp_override)
+			.with_state_overrides(state_overrides);
+
 		self.client
 			.runtime_api()
-			.eth_transact(block_hash, tx)
+			.eth_transact_with_config(block_hash, tx, config)
 			.map_err(native_err)?
 			.map_err(ClientError::TransactError)
 	}
@@ -370,7 +455,27 @@ where
 	}
 
 	async fn system_health(&self) -> Result<NodeHealth, ClientError> {
-		Ok(NodeHealth { peers: 0, is_syncing: false, should_have_peers: false })
+		match &self.network {
+			Some(net) => {
+				let status = net.status().await.map_err(|_| {
+					ClientError::NativeClientError(
+						"network status provider returned an error".to_string(),
+					)
+				})?;
+				let is_syncing =
+					self.sync_oracle.as_ref().map(|o| o.is_major_syncing()).unwrap_or(false);
+				Ok(NodeHealth {
+					peers: status.num_connected_peers,
+					is_syncing,
+					should_have_peers: true,
+				})
+			},
+			None => Ok(NodeHealth { peers: 0, is_syncing: false, should_have_peers: false }),
+		}
+	}
+
+	fn pallet_revive_index(&self) -> u8 {
+		self.pallet_revive_index
 	}
 
 	async fn get_automine(&self) -> bool {
@@ -490,6 +595,16 @@ where
 
 		let encoded = signed.block.encode();
 		OpaqueBlock::decode(&mut &encoded[..]).map_err(native_err)
+	}
+
+	async fn extrinsic_post_dispatch_weight(
+		&self,
+		block_hash: SubstrateBlockHash,
+		extrinsic_index: usize,
+	) -> Option<Weight> {
+		self.fetch_extrinsic_weight
+			.as_ref()
+			.and_then(|f| f(block_hash, extrinsic_index))
 	}
 
 	async fn block_extrinsics(

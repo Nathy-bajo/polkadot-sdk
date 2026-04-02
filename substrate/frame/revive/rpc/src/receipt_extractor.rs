@@ -32,7 +32,6 @@ use std::{
 	},
 };
 
-const PALLET_REVIVE_INDEX: u8 = 253;
 const ETH_TRANSACT_CALL_INDEX: u8 = 0;
 
 /// Sentinel value meaning "not yet discovered".
@@ -88,6 +87,9 @@ pub struct ReceiptExtractor {
 
 	/// Recover the ethereum address from a transaction signature.
 	recover_eth_address: RecoverEthAddressFn,
+
+	/// The pallet index of `pallet-revive` in this runtime.
+	pallet_index: u8,
 }
 
 impl ReceiptExtractor {
@@ -136,6 +138,7 @@ impl ReceiptExtractor {
 
 	/// Create a `ReceiptExtractor` for the **native in-process** path with custom closures.
 	pub fn new_native(
+		pallet_index: u8,
 		fetch_receipt_data_fn: impl Fn(
 			H256,
 		) -> Pin<
@@ -175,6 +178,7 @@ impl ReceiptExtractor {
 			recover_eth_address: Arc::new(|signed_tx: &TransactionSigned| {
 				signed_tx.recover_eth_address()
 			}),
+			pallet_index,
 		}
 	}
 
@@ -182,6 +186,7 @@ impl ReceiptExtractor {
 	pub fn new_native_from_client<Client, Block, Moment>(
 		client: Arc<Client>,
 		earliest_receipt_block: Option<SubstrateBlockNumber>,
+		pallet_index: u8,
 	) -> Self
 	where
 		Block: sp_runtime::traits::Block<Hash = sp_core::H256, Extrinsic = sp_runtime::OpaqueExtrinsic>
@@ -235,6 +240,7 @@ impl ReceiptExtractor {
 		};
 
 		Self::new_native(
+			pallet_index,
 			fetch_receipt_data_fn,
 			fetch_eth_block_hash_fn,
 			earliest_receipt_block,
@@ -251,6 +257,8 @@ impl ReceiptExtractor {
 	where
 		C: crate::SubstrateClientT + Clone + 'static,
 	{
+		let pallet_index = client.pallet_revive_index();
+
 		let client_for_data = client.clone();
 		let fetch_receipt_data_fn = move |block_hash: H256| {
 			let c = client_for_data.clone();
@@ -275,6 +283,7 @@ impl ReceiptExtractor {
 		};
 
 		Self::new_native(
+			pallet_index,
 			fetch_receipt_data_fn,
 			fetch_eth_block_hash_fn,
 			earliest_receipt_block,
@@ -304,11 +313,12 @@ impl ReceiptExtractor {
 			recover_eth_address: Arc::new(|signed_tx: &TransactionSigned| {
 				signed_tx.recover_eth_address()
 			}),
+			pallet_index: 0,
 		}
 	}
 
 	/// Try to decode a raw extrinsic as an `eth_transact` call.
-	fn decode_eth_transact(raw: &RawExtrinsic) -> Option<Vec<u8>> {
+	fn decode_eth_transact(&self, raw: &RawExtrinsic) -> Option<Vec<u8>> {
 		let bytes = &raw.payload;
 
 		let mut offset = 0usize;
@@ -329,7 +339,7 @@ impl ReceiptExtractor {
 		let call_idx = *bytes.get(offset)?;
 		offset += 1;
 
-		if pallet_idx != PALLET_REVIVE_INDEX || call_idx != ETH_TRANSACT_CALL_INDEX {
+		if pallet_idx != self.pallet_index || call_idx != ETH_TRANSACT_CALL_INDEX {
 			return None;
 		}
 
@@ -426,7 +436,7 @@ impl ReceiptExtractor {
 		let eth_extrinsics: Vec<(usize, Vec<u8>)> = raw_extrinsics
 			.iter()
 			.filter_map(|raw| {
-				let payload = Self::decode_eth_transact(raw)?;
+				let payload = self.decode_eth_transact(raw)?;
 				Some((raw.index, payload))
 			})
 			.collect();

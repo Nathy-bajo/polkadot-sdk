@@ -660,6 +660,21 @@ impl SubstrateClientT for SubxtClient {
 		let event = ext.events().await.ok()?.find_first::<ExtrinsicSuccess>().ok()??;
 		Some(event.dispatch_info.weight.0)
 	}
+
+	fn pallet_revive_index(&self) -> u8 {
+		self.api
+			.metadata()
+			.pallet_by_name("Revive")
+			.map(|p| p.index())
+			.unwrap_or_else(|| {
+				log::warn!(
+					target: crate::LOG_TARGET,
+					"Revive pallet not found in subxt metadata; \
+					 falling back to default pallet index 253."
+				);
+				253
+			})
+	}
 }
 
 fn to_hex(bytes: impl AsRef<[u8]>) -> String {
