@@ -55,11 +55,12 @@ fn generate_git_revision() {
 
 #[cfg(feature = "subxt")]
 fn generate_metadata_file() {
-	let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set");
-	let src = std::path::Path::new(&manifest_dir).join("revive_chain.scale");
-	let out_dir = std::env::var("OUT_DIR").expect("OUT_DIR not set");
-	let dst = std::path::Path::new(&out_dir).join("revive_chain.scale");
-	fs::copy(&src, &dst)
-		.unwrap_or_else(|e| panic!("Failed to copy revive_chain.scale from {src:?}: {e}"));
-	println!("cargo:rerun-if-changed=revive_chain.scale");
+	let mut ext = sp_io::TestExternalities::new(Default::default());
+	ext.execute_with(|| {
+		let metadata = revive_dev_runtime::Runtime::metadata_at_version(16).unwrap();
+		let bytes: &[u8] = &metadata;
+		let out_dir = std::env::var("OUT_DIR").expect("OUT_DIR not set");
+		let out_path = std::path::Path::new(&out_dir).join("revive_chain.scale");
+		fs::write(out_path, bytes).unwrap();
+	});
 }
