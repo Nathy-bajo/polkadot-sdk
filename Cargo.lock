@@ -13868,6 +13868,7 @@ dependencies = [
  "parity-scale-codec",
  "pretty_assertions",
  "revive-dev-node",
+ "revive-dev-runtime",
  "rlp 0.6.1",
  "sc-cli",
  "sc-client-api 28.0.0",
@@ -19418,11 +19419,27 @@ name = "revive-dev-runtime"
 version = "0.1.0"
 dependencies = [
  "array-bytes 6.2.2",
+ "frame-executive",
+ "frame-support",
+ "frame-system",
+ "pallet-balances",
+ "pallet-revive",
+ "pallet-sudo",
+ "pallet-timestamp",
+ "pallet-transaction-payment",
+ "pallet-transaction-payment-rpc-runtime-api",
+ "parachains-common",
  "parity-scale-codec",
- "polkadot-sdk",
+ "polkadot-primitives",
+ "polkadot-sdk-frame",
  "scale-info",
  "serde_json",
  "sp-debug-derive 14.0.0",
+ "sp-io 30.0.0",
+ "sp-keyring",
+ "sp-runtime 31.0.1",
+ "sp-weights 27.0.0",
+ "substrate-wasm-builder",
 ]
 
 [[package]]

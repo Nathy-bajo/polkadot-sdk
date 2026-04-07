@@ -18,7 +18,8 @@ use std::{fs, process::Command};
 
 fn main() {
 	generate_git_revision();
-	copy_metadata_file();
+	#[cfg(feature = "subxt")]
+	generate_metadata_file();
 }
 
 fn generate_git_revision() {
@@ -52,7 +53,8 @@ fn generate_git_revision() {
 	println!("cargo:rustc-env=GIT_REVISION={branch}-{id}");
 }
 
-fn copy_metadata_file() {
+#[cfg(feature = "subxt")]
+fn generate_metadata_file() {
 	let manifest_dir = std::env::var("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR not set");
 	let src = std::path::Path::new(&manifest_dir).join("revive_chain.scale");
 	let out_dir = std::env::var("OUT_DIR").expect("OUT_DIR not set");

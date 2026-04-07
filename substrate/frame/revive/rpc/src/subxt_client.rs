@@ -28,7 +28,7 @@ pub use subxt::config::PolkadotConfig as SrcChainConfig;
 	),
 
 	substitute_type(
-		path = "sp_runtime::generic::block::Block<A, B, C, D, E>",
+		path = "sp_runtime::generic::block::Block<A, B>",
 		with = "::subxt::utils::Static<::sp_runtime::generic::Block<
 		::sp_runtime::generic::Header<u32, sp_runtime::traits::BlakeTwo256>,
 		::sp_runtime::OpaqueExtrinsic

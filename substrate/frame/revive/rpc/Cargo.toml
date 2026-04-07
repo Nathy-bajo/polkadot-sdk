@@ -40,6 +40,8 @@ default = ["subxt"]
 subxt = [
 	"dep:subxt",
 	"dep:subxt-signer",
+	"dep:revive-dev-runtime",
+	"dep:sp-io",
 ]
 
 [dependencies]
@@ -100,3 +102,5 @@ tempfile = { workspace = true }
 
 [build-dependencies]
 git2 = { workspace = true }
+revive-dev-runtime = { optional = true, workspace = true, default-features = true }
+sp-io = { optional = true, workspace = true, default-features = true }
