@@ -19,8 +19,6 @@
 
 #[cfg(feature = "subxt")]
 pub(crate) mod runtime_api;
-#[cfg(feature = "subxt")]
-pub(crate) mod storage_api;
 
 use crate::{
 	BlockInfoProvider, BlockNumberOrTag, BlockTag, FeeHistoryProvider, ReceiptProvider, TracerType,
