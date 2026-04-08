@@ -64,7 +64,7 @@ pub mod genesis_config_presets {
 	use sp_keyring::Sr25519Keyring;
 
 	use alloc::{vec, vec::Vec};
-	use pallet_revive::is_eth_derived;
+	use pallet_revive::AddressMapper;
 	use serde_json::Value;
 
 	pub const ENDOWMENT: Balance = 10_000_000_000_001 * DOLLARS;
@@ -112,7 +112,7 @@ pub mod genesis_config_presets {
 			revive: ReviveConfig {
 				mapped_accounts: endowed_accounts
 					.iter()
-					.filter(|x| !is_eth_derived(x))
+					.filter(|x| !<Runtime as pallet_revive::Config>::AddressMapper::is_mapped(x))
 					.cloned()
 					.collect(),
 			},
@@ -312,6 +312,8 @@ impl frame_system::Config for Runtime {
 	type Hash = Hash;
 	type Nonce = Nonce;
 	type AccountData = pallet_balances::AccountData<<Runtime as pallet_balances::Config>::Balance>;
+	type OnNewAccount = pallet_revive::AutoMapper<Runtime>;
+	type OnKilledAccount = pallet_revive::AutoMapper<Runtime>;
 }
 
 parameter_types! {
@@ -365,6 +367,7 @@ impl pallet_revive::Config for Runtime {
 	type Time = Timestamp;
 	type FeeInfo = FeeInfo<Address, Signature, EthExtraImpl>;
 	type DebugEnabled = ConstBool<true>;
+	type AutoMap = ConstBool<true>;
 	type GasScale = ConstU32<50000>;
 }
 
