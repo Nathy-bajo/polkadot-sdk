@@ -385,7 +385,7 @@ mod benchmarks {
 	}
 
 	#[benchmark]
-	fn dust_bounty_acc() -> Result<(), BenchmarkError> {
+	fn dust_bounty_account() -> Result<(), BenchmarkError> {
 		setup_pot_account::<T, I>();
 
 		let (caller, _, _, value, reason) = setup_bounty::<T, I>(0, T::MaximumReasonLength::get());

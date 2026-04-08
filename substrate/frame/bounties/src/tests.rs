@@ -2024,7 +2024,7 @@ fn poke_deposit_works_for_non_proposer() {
 }
 
 #[test]
-fn dust_bounty_acc_works_for_funded_bounty() {
+fn dust_bounty_account_works_for_funded_bounty() {
 	ExtBuilder::default().build_and_execute(|| {
 		Balances::make_free_balance_be(&Treasury::account_id(), 101);
 
@@ -2042,8 +2042,8 @@ fn dust_bounty_acc_works_for_funded_bounty() {
 
 		let treasury_before = Treasury::pot();
 
-		// Anyone can call dust_bounty_acc.
-		assert_ok!(Bounties::dust_bounty_acc(RuntimeOrigin::signed(1), 0));
+		// Anyone can call dust_bounty_account.
+		assert_ok!(Bounties::dust_bounty_account(RuntimeOrigin::signed(1), 0));
 
 		assert_eq!(last_event(), BountiesEvent::BountyAccDusted { bounty_id: 0 },);
 
@@ -2056,7 +2056,7 @@ fn dust_bounty_acc_works_for_funded_bounty() {
 }
 
 #[test]
-fn dust_bounty_acc_works_after_accidental_refund() {
+fn dust_bounty_account_works_after_accidental_refund() {
 	ExtBuilder::default().build_and_execute(|| {
 		Balances::make_free_balance_be(&Treasury::account_id(), 101);
 
@@ -2087,7 +2087,7 @@ fn dust_bounty_acc_works_after_accidental_refund() {
 		let treasury_before = Treasury::pot();
 
 		// Dust the account.
-		assert_ok!(Bounties::dust_bounty_acc(RuntimeOrigin::signed(99), 0));
+		assert_ok!(Bounties::dust_bounty_account(RuntimeOrigin::signed(99), 0));
 		assert_eq!(last_event(), BountiesEvent::BountyAccDusted { bounty_id: 0 },);
 
 		assert_eq!(Balances::free_balance(&bounty_account), 0);
@@ -2096,7 +2096,7 @@ fn dust_bounty_acc_works_after_accidental_refund() {
 }
 
 #[test]
-fn dust_bounty_acc_fails_when_bounty_still_active() {
+fn dust_bounty_account_fails_when_bounty_still_active() {
 	ExtBuilder::default().build_and_execute(|| {
 		Balances::make_free_balance_be(&Treasury::account_id(), 101);
 		assert_ok!(Bounties::propose_bounty(RuntimeOrigin::signed(0), 50, b"12345".to_vec()));
@@ -2105,28 +2105,28 @@ fn dust_bounty_acc_fails_when_bounty_still_active() {
 
 		// Bounty is in Funded state (still exists in storage).
 		assert_noop!(
-			Bounties::dust_bounty_acc(RuntimeOrigin::signed(1), 0),
+			Bounties::dust_bounty_account(RuntimeOrigin::signed(1), 0),
 			Error::<Test>::UnexpectedStatus
 		);
 	});
 }
 
 #[test]
-fn dust_bounty_acc_fails_when_bounty_in_proposed_state() {
+fn dust_bounty_account_fails_when_bounty_in_proposed_state() {
 	ExtBuilder::default().build_and_execute(|| {
 		Balances::make_free_balance_be(&Treasury::account_id(), 101);
 		assert_ok!(Bounties::propose_bounty(RuntimeOrigin::signed(0), 50, b"12345".to_vec()));
 
 		// Bounty is in Proposed state (still exists in storage).
 		assert_noop!(
-			Bounties::dust_bounty_acc(RuntimeOrigin::signed(1), 0),
+			Bounties::dust_bounty_account(RuntimeOrigin::signed(1), 0),
 			Error::<Test>::UnexpectedStatus
 		);
 	});
 }
 
 #[test]
-fn dust_bounty_acc_fails_when_bounty_in_curator_proposed_state() {
+fn dust_bounty_account_fails_when_bounty_in_curator_proposed_state() {
 	ExtBuilder::default().build_and_execute(|| {
 		Balances::make_free_balance_be(&Treasury::account_id(), 101);
 		assert_ok!(Bounties::propose_bounty(RuntimeOrigin::signed(0), 50, b"12345".to_vec()));
@@ -2136,30 +2136,33 @@ fn dust_bounty_acc_fails_when_bounty_in_curator_proposed_state() {
 
 		// Bounty is in CuratorProposed state.
 		assert_noop!(
-			Bounties::dust_bounty_acc(RuntimeOrigin::signed(1), 0),
+			Bounties::dust_bounty_account(RuntimeOrigin::signed(1), 0),
 			Error::<Test>::UnexpectedStatus
 		);
 	});
 }
 
 #[test]
-fn dust_bounty_acc_fails_when_account_already_empty() {
+fn dust_bounty_account_fails_when_account_already_empty() {
 	ExtBuilder::default().build_and_execute(|| {
 		// There is no bounty at index 99 (never created) and no balance on the
 		// derived account → should return BountyAccountAlreadyEmpty.
-		assert_ok!(Bounties::dust_bounty_acc(RuntimeOrigin::signed(1), 99));
+		assert_ok!(Bounties::dust_bounty_account(RuntimeOrigin::signed(1), 99));
 	});
 }
 
 #[test]
-fn dust_bounty_acc_fails_for_unsigned_origin() {
+fn dust_bounty_account_fails_for_unsigned_origin() {
 	ExtBuilder::default().build_and_execute(|| {
-		assert_noop!(Bounties::dust_bounty_acc(RuntimeOrigin::none(), 0), DispatchError::BadOrigin);
+		assert_noop!(
+			Bounties::dust_bounty_account(RuntimeOrigin::none(), 0),
+			DispatchError::BadOrigin
+		);
 	});
 }
 
 #[test]
-fn dust_bounty_acc_can_be_called_by_anyone() {
+fn dust_bounty_account_can_be_called_by_anyone() {
 	ExtBuilder::default().build_and_execute(|| {
 		Balances::make_free_balance_be(&Treasury::account_id(), 101);
 		assert_ok!(Bounties::propose_bounty(RuntimeOrigin::signed(0), 50, b"12345".to_vec()));
@@ -2171,13 +2174,13 @@ fn dust_bounty_acc_can_be_called_by_anyone() {
 		pallet_bounties::BountyDescriptions::<Test>::remove(0);
 
 		// A random account (2) with only 1 token should be able to call this.
-		assert_ok!(Bounties::dust_bounty_acc(RuntimeOrigin::signed(2), 0));
+		assert_ok!(Bounties::dust_bounty_account(RuntimeOrigin::signed(2), 0));
 		assert_eq!(last_event(), BountiesEvent::BountyAccDusted { bounty_id: 0 },);
 	});
 }
 
 #[test]
-fn dust_bounty_acc_works_with_additional_assets() {
+fn dust_bounty_account_works_with_additional_assets() {
 	ExtBuilder::default().build_and_execute(|| {
 		Balances::make_free_balance_be(&Treasury::account_id(), 101);
 		assert_ok!(Bounties::propose_bounty(RuntimeOrigin::signed(0), 50, b"12345".to_vec()));
@@ -2199,7 +2202,7 @@ fn dust_bounty_acc_works_with_additional_assets() {
 		let treasury_native_before = Balances::free_balance(Bounties::account_id());
 		let treasury_asset1_before = Assets::balance(1, &Bounties::account_id());
 
-		assert_ok!(Bounties::dust_bounty_acc(RuntimeOrigin::signed(5), 0));
+		assert_ok!(Bounties::dust_bounty_account(RuntimeOrigin::signed(5), 0));
 
 		assert_eq!(last_event(), BountiesEvent::BountyAccDusted { bounty_id: 0 },);
 
@@ -2219,7 +2222,7 @@ fn dust_bounty_acc_works_with_additional_assets() {
 }
 
 #[test]
-fn dust_bounty_acc_works_after_close_bounty() {
+fn dust_bounty_account_works_after_close_bounty() {
 	ExtBuilder::default().build_and_execute(|| {
 		Balances::make_free_balance_be(&Treasury::account_id(), 101);
 		assert_ok!(Bounties::propose_bounty(RuntimeOrigin::signed(0), 50, b"12345".to_vec()));
@@ -2238,12 +2241,12 @@ fn dust_bounty_acc_works_after_close_bounty() {
 
 		// close_bounty calls TransferAllAssets so the account should already be
 		// clean. Dusting it again must return BountyAccountAlreadyEmpty.
-		assert_ok!(Bounties::dust_bounty_acc(RuntimeOrigin::signed(1), 0));
+		assert_ok!(Bounties::dust_bounty_account(RuntimeOrigin::signed(1), 0));
 	});
 }
 
 #[test]
-fn dust_bounty_acc_is_free_for_caller() {
+fn dust_bounty_account_is_free_for_caller() {
 	// Verify Pays::No is returned on success so the caller isn't charged.
 	ExtBuilder::default().build_and_execute(|| {
 		Balances::make_free_balance_be(&Treasury::account_id(), 101);
@@ -2254,7 +2257,7 @@ fn dust_bounty_acc_is_free_for_caller() {
 		pallet_bounties::Bounties::<Test>::remove(0);
 		pallet_bounties::BountyDescriptions::<Test>::remove(0);
 
-		let result = Bounties::dust_bounty_acc(RuntimeOrigin::signed(1), 0);
+		let result = Bounties::dust_bounty_account(RuntimeOrigin::signed(1), 0);
 		assert_ok!(result.as_ref());
 		// The extrinsic must return Pays::No.
 		assert_eq!(

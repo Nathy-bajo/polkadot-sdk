@@ -1000,8 +1000,8 @@ pub mod pallet {
 		/// - O(1) for the native token; O(A) where A is the number of relevant assets configured in
 		///   `TransferAllAssets`.
 		#[pallet::call_index(11)]
-		#[pallet::weight(<T as Config<I>>::WeightInfo::dust_bounty_acc())]
-		pub fn dust_bounty_acc(
+		#[pallet::weight(<T as Config<I>>::WeightInfo::dust_bounty_account())]
+		pub fn dust_bounty_account(
 			origin: OriginFor<T>,
 			#[pallet::compact] bounty_id: BountyIndex,
 		) -> DispatchResultWithPostInfo {
@@ -1014,8 +1014,15 @@ pub mod pallet {
 			let bounty_account = Self::bounty_account_id(bounty_id);
 			let treasury_account = Self::account_id();
 
-			// Transfer assets BEFORE the native token.
+			// Check native balance before transfer to determine if anything will be moved.
+			// Only return Pays::No when something is actually transferred, to prevent DoS.
+			let native_balance = T::Currency::free_balance(&bounty_account);
+
 			T::TransferAllAssets::force_transfer_all_assets(&bounty_account, &treasury_account)?;
+
+			if native_balance.is_zero() {
+				return Ok(Pays::Yes.into());
+			}
 
 			Self::deposit_event(Event::<T, I>::BountyAccDusted { bounty_id });
 
