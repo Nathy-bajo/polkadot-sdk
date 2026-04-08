@@ -253,18 +253,27 @@ impl<BP: BlockInfoProvider> ReceiptProvider<BP> {
 
 	// Get block hash and transaction index by transaction hash
 	pub async fn find_transaction(&self, transaction_hash: &H256) -> Option<(H256, usize)> {
-		let transaction_hash = transaction_hash.as_ref();
+		let transaction_hash_bytes = transaction_hash.as_ref();
 		let result = query!(
 			r#"
 			SELECT block_hash, transaction_index
 			FROM transaction_hashes
 			WHERE transaction_hash = $1
 			"#,
-			transaction_hash
+			transaction_hash_bytes
 		)
 		.fetch_optional(&self.pool)
 		.await
-		.ok()??;
+		.inspect_err(|err| {
+			log::trace!(target: LOG_TARGET,
+				"find_transaction: DB query failed for tx {transaction_hash:?}: {err:?}");
+		})
+		.ok()?
+		.or_else(|| {
+			log::trace!(target: LOG_TARGET,
+				"find_transaction: tx {transaction_hash:?} not found in DB");
+			None
+		})?;
 
 		let block_hash = H256::from_slice(&result.block_hash[..]);
 		let transaction_index = result.transaction_index.try_into().ok()?;
