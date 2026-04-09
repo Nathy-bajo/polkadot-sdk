@@ -1024,8 +1024,10 @@ pub mod pallet {
 			let bounty_account = Self::bounty_account_id(bounty_id);
 			let treasury_account = Self::account_id();
 
-			let transferred_any =
-				T::TransferAllAssets::force_transfer_all_assets(&bounty_account, &treasury_account)?;
+			let transferred_any = T::TransferAllAssets::force_transfer_all_assets(
+				&bounty_account,
+				&treasury_account,
+			)?;
 
 			if !transferred_any {
 				return Ok(Pays::Yes.into());
