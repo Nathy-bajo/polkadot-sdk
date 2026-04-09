@@ -437,6 +437,12 @@ where
 				futures.push(Box::pin(client.sync_backward()));
 			}
 
+			// Backfill gaps caused by subscription reconnects.
+			futures.push(Box::pin(async {
+				client.run_subscription_gap_filler(gap_fill_rx).await;
+				Ok::<_, ClientError>(())
+			}));
+
 			if let Err(err) = futures::future::try_join_all(futures).await {
 				panic!("Block subscription task failed: {err:?}")
 			}

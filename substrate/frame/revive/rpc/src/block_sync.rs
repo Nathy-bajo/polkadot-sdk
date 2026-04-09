@@ -88,6 +88,8 @@ struct BackwardSyncRange {
 	set_head: bool,
 	/// Checkpoint `Tail` label periodically and at end.
 	checkpoint_tail: bool,
+	/// When true, persist the first EVM block boundary if a non-EVM block is encountered.
+	persist_first_evm_block: bool,
 }
 
 impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
@@ -224,6 +226,7 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 			to: first_evm,
 			set_head: true,
 			checkpoint_tail: true,
+			persist_first_evm_block: true,
 		})
 		.await
 	}
@@ -247,6 +250,7 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 					to: head.block_number.saturating_add(1),
 					set_head: false,
 					checkpoint_tail: false,
+					persist_first_evm_block: false,
 				})
 				.await?;
 
@@ -267,6 +271,7 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 					to: first_evm,
 					set_head: false,
 					checkpoint_tail: true,
+					persist_first_evm_block: true,
 				})
 				.await?;
 			} else {
@@ -284,7 +289,13 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 	/// Stops early if a non-EVM block is discovered (auto-discovery of first EVM block).
 	async fn sync_backward_range(
 		&self,
-		BackwardSyncRange { from, to, set_head, checkpoint_tail }: BackwardSyncRange,
+		BackwardSyncRange {
+			from,
+			to,
+			set_head,
+			checkpoint_tail,
+			persist_first_evm_block,
+		}: BackwardSyncRange,
 	) -> Result<(), ClientError> {
 		if from < to {
 			log::debug!(target: LOG_TARGET,	"⬇️ Backward sync: nothing to sync (#{from}..#{to})");
@@ -342,13 +353,18 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 					}
 				},
 				None => {
-					let first_evm_block = block_number.saturating_add(1);
-					log::debug!(target: LOG_TARGET,
-						"🔍 No EVM hash at #{block_number}, setting first_evm_block to #{first_evm_block}");
-					if let Err(err) =
-						self.receipt_provider().set_first_evm_block(first_evm_block).await
-					{
-						log::warn!(target: LOG_TARGET, "Failed to persist first-evm-block: {err:?}");
+					if persist_first_evm_block {
+						let first_evm_block = block_number.saturating_add(1);
+						log::debug!(target: LOG_TARGET,
+							"🔍 No EVM hash at #{block_number}, setting first_evm_block to #{first_evm_block}");
+						if let Err(err) =
+							self.receipt_provider().set_first_evm_block(first_evm_block).await
+						{
+							log::warn!(target: LOG_TARGET, "Failed to persist first-evm-block: {err:?}");
+						}
+					} else {
+						log::debug!(target: LOG_TARGET,
+							"🔍 No EVM hash at #{block_number}, skipping first EVM block update");
 					}
 
 					break Ok(());
@@ -388,5 +404,33 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 			 (requested #{from}..#{to})");
 
 		loop_result
+	}
+
+	/// Run the background subscription gap filler, processing requests sequentially.
+	pub(crate) async fn run_subscription_gap_filler(&self, mut rx: mpsc::Receiver<GapFillRequest>) {
+		log::info!(target: LOG_TARGET, "🔄 Subscription gap filler started");
+
+		while let Some(GapFillRequest { from_inclusive, to_inclusive }) = rx.recv().await {
+			log::info!(target: LOG_TARGET, "🔄 Subscription gap filler: processing #{from_inclusive} down to #{to_inclusive}");
+			if let Err(err) = self
+				.sync_backward_range(BackwardSyncRange {
+					from: from_inclusive,
+					to: to_inclusive,
+					set_head: false,
+					checkpoint_tail: false,
+					persist_first_evm_block: false,
+				})
+				.await
+			{
+				log::error!(target: LOG_TARGET, "🔄 Subscription gap fill failed for #{from_inclusive}..#{to_inclusive}: {err:?}");
+			} else {
+				log::info!(target: LOG_TARGET, "🔄 Subscription gap filler: done with #{from_inclusive}..#{to_inclusive}");
+			}
+			// Mark done unconditionally — mirrors how subscribe_new_blocks handles
+			// callback errors: log and move on.
+			self.subscription_gap_queue().mark_done();
+		}
+
+		log::info!(target: LOG_TARGET, "🔄 Subscription gap filler stopped");
 	}
 }

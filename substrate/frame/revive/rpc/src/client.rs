@@ -41,11 +41,11 @@ use std::{
 	ops::Range,
 	sync::{
 		Arc,
-		atomic::{AtomicBool, Ordering},
+		atomic::{AtomicBool, AtomicUsize, Ordering},
 	},
 };
 use thiserror::Error;
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, mpsc};
 
 /// The substrate block number type.
 pub type SubstrateBlockNumber = u32;
@@ -189,6 +189,7 @@ const LOG_TARGET: &str = "eth-rpc::client";
 const REVERT_CODE: i32 = 3;
 
 const NOTIFIER_CAPACITY: usize = 16;
+
 impl From<ClientError> for ErrorObjectOwned {
 	fn from(err: ClientError) -> Self {
 		match err {
@@ -234,6 +235,73 @@ pub struct Client<C: SubstrateClientT, BP: BlockInfoProvider> {
 	log_subscription_tx: tokio::sync::broadcast::Sender<Log>,
 	/// Whether historic backfill has completed. `false` if not started or in progress.
 	backfill_complete: Arc<AtomicBool>,
+	/// Queue for backfilling blocks missed during subscription reconnects.
+	subscription_gap_queue: SubscriptionGapQueue,
+}
+
+/// A request to backfill a range of missed blocks (both bounds inclusive).
+pub(crate) struct GapFillRequest {
+	pub from_inclusive: SubstrateBlockNumber,
+	pub to_inclusive: SubstrateBlockNumber,
+}
+
+/// Queues gap-fill requests for blocks missed during subscription reconnects.
+#[derive(Clone)]
+pub(crate) struct SubscriptionGapQueue {
+	/// Sender half of the gap-fill queue.
+	tx: mpsc::Sender<GapFillRequest>,
+	/// Queued + in-flight gap fills. Channel length alone is insufficient
+	/// because it drops to zero as soon as the receiver dequeues the item.
+	pending: Arc<AtomicUsize>,
+}
+
+impl SubscriptionGapQueue {
+	pub(crate) fn new() -> (Self, mpsc::Receiver<GapFillRequest>) {
+		// Each reconnect produces one gap-fill request for the entire missed range,
+		// so 32 allows for 32 rapid disconnects before the consumer processes any.
+		let (tx, rx) = mpsc::channel(32);
+		(Self { tx, pending: Arc::new(AtomicUsize::new(0)) }, rx)
+	}
+
+	/// If `current` is not consecutive to `last`, queue a gap-fill for the missing range.
+	pub fn detect_and_queue(&self, current: SubstrateBlockNumber, last: SubstrateBlockNumber) {
+		if current.saturating_sub(last) <= 1 {
+			return;
+		}
+
+		let from_inclusive = current.saturating_sub(1);
+		let to_inclusive = last.saturating_add(1);
+		let gap_len = from_inclusive.saturating_sub(to_inclusive) + 1;
+		self.pending.fetch_add(1, Ordering::Release);
+		match self.tx.try_send(GapFillRequest { from_inclusive, to_inclusive }) {
+			Ok(_) => {
+				log::info!(target: LOG_TARGET,
+					"🔄 Subscription gap queue: queued #{from_inclusive} down to #{to_inclusive} ({gap_len} blocks)");
+			},
+			Err(err) => {
+				self.pending.fetch_sub(1, Ordering::Release);
+				log::warn!(target: LOG_TARGET,
+					"🔄 Subscription gap queue error, dropping #{from_inclusive}..#{to_inclusive} ({gap_len} blocks): {err}");
+			},
+		}
+	}
+
+	/// Mark one request as processed.
+	pub fn mark_done(&self) {
+		let res = self
+			.pending
+			.fetch_update(Ordering::AcqRel, Ordering::Acquire, |v| v.checked_sub(1));
+		if res.is_err() {
+			debug_assert!(false, "subscription gap queue pending counter underflowed");
+			log::error!(target: LOG_TARGET,
+				"🔄 Subscription gap queue pending counter underflow, delete the database and restart with --eth-pruning=archive to resync");
+		}
+	}
+
+	/// Returns `true` if there are pending gap-fill requests.
+	pub fn has_pending(&self) -> bool {
+		self.pending.load(Ordering::Acquire) > 0
+	}
 }
 
 impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
