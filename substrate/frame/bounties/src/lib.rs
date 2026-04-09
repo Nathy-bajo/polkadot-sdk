@@ -215,12 +215,15 @@ pub trait TransferAllAssets<AccountId> {
 	/// Transfer all assets from one account to another.
 	///
 	/// This will possibly dust and reap the origin account and endow the receiver.
-	fn force_transfer_all_assets(from: &AccountId, to: &AccountId) -> DispatchResult;
+	///
+	/// Returns `true` if any balance was actually transferred, `false` if the account was already
+	/// empty.
+	fn force_transfer_all_assets(from: &AccountId, to: &AccountId) -> Result<bool, DispatchError>;
 }
 
 impl<AccountId> TransferAllAssets<AccountId> for () {
-	fn force_transfer_all_assets(_: &AccountId, _: &AccountId) -> DispatchResult {
-		Ok(())
+	fn force_transfer_all_assets(_: &AccountId, _: &AccountId) -> Result<bool, DispatchError> {
+		Ok(false)
 	}
 }
 
@@ -238,12 +241,13 @@ where
 	RelevantAssets: Get<Vec<<Fungibles as FungiblesInspect<AccountId>>::AssetId>>,
 	AccountId: Eq,
 {
-	fn force_transfer_all_assets(from: &AccountId, to: &AccountId) -> DispatchResult {
+	fn force_transfer_all_assets(from: &AccountId, to: &AccountId) -> Result<bool, DispatchError> {
 		// We iterate through all assets twice in case that the Native asset was not last in the
 		// list and ED remained because of an insufficient asset at the end of the list.
 		let assets_twice =
 			RelevantAssets::get().into_iter().chain(RelevantAssets::get().into_iter());
 
+		let mut transferred_any = false;
 		for id in assets_twice {
 			let balance = Fungibles::reducible_balance(
 				id.clone(),
@@ -255,10 +259,11 @@ where
 				continue;
 			}
 
+			transferred_any = true;
 			// Ignore errors since this can only fail if the receiver does not exist.
 			let _ = Fungibles::transfer(id, from, to, balance, Preservation::Expendable);
 		}
-		Ok(())
+		Ok(transferred_any)
 	}
 }
 
@@ -863,7 +868,7 @@ pub mod pallet {
 
 					BountyDescriptions::<T, I>::remove(bounty_id);
 
-					T::TransferAllAssets::force_transfer_all_assets(
+					let _ = T::TransferAllAssets::force_transfer_all_assets(
 						&bounty_account,
 						&Self::account_id(),
 					)?;
@@ -1011,16 +1016,18 @@ pub mod pallet {
 			// because it is still actively managed.
 			ensure!(!Bounties::<T, I>::contains_key(bounty_id), Error::<T, I>::UnexpectedStatus);
 
+			debug_assert!(
+				T::ChildBountyManager::child_bounties_count(bounty_id) == 0,
+				"child bounties should not exist for a closed bounty"
+			);
+
 			let bounty_account = Self::bounty_account_id(bounty_id);
 			let treasury_account = Self::account_id();
 
-			// Check native balance before transfer to determine if anything will be moved.
-			// Only return Pays::No when something is actually transferred, to prevent DoS.
-			let native_balance = T::Currency::free_balance(&bounty_account);
+			let transferred_any =
+				T::TransferAllAssets::force_transfer_all_assets(&bounty_account, &treasury_account)?;
 
-			T::TransferAllAssets::force_transfer_all_assets(&bounty_account, &treasury_account)?;
-
-			if native_balance.is_zero() {
+			if !transferred_any {
 				return Ok(Pays::Yes.into());
 			}
 
