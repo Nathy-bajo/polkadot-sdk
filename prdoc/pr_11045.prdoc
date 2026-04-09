@@ -1,0 +1,15 @@
+title: '[pallet-bounty]: add `dust_bounty_acc` to sweep stranded funds from closed
+  bounty accounts'
+doc:
+- audience: Runtime Dev
+  description: |-
+    fixes https://github.com/paritytech/polkadot-sdk/issues/10996
+
+    This PR adds a permissionless `dust_bounty_acc` extrinsic that sweeps all
+    remaining native tokens and fungible assets from a stale bounty account
+    back to the treasury.
+crates:
+- name: pallet-bounties
+  bump: minor
+- name: rococo-runtime
+  bump: minor
