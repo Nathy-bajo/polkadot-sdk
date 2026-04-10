@@ -38,10 +38,10 @@ required-features = ["subxt"]
 [features]
 default = ["subxt"]
 subxt = [
-	"dep:subxt",
-	"dep:subxt-signer",
 	"dep:revive-dev-runtime",
 	"dep:sp-io",
+	"dep:subxt",
+	"dep:subxt-signer",
 ]
 
 [dependencies]
