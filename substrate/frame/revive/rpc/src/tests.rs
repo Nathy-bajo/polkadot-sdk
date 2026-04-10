@@ -23,7 +23,7 @@ use crate::{
 	SubxtBlockInfoProvider,
 	block_sync::{ChainMetadata, SyncLabel},
 	cli::{self, CliCommand},
-	client::{Client, SubscriptionGapQueue},
+	client::{Client, GapFillRequest, SubscriptionGapQueue},
 	example::TransactionBuilder,
 	subxt_client::{
 		self, SrcChainConfig, SubxtClient, connect,
@@ -1914,6 +1914,42 @@ async fn create_sync_test_client() -> anyhow::Result<Client<SubxtClient, SubxtBl
 		subscription_gap_queue,
 	)?;
 	Ok(client)
+}
+
+/// Like [`create_sync_test_client`] but also returns the gap-fill receiver so that tests can
+/// drive [`Client::run_subscription_gap_filler`] manually.
+async fn create_sync_test_client_with_subscription_gap_queue(
+) -> anyhow::Result<(Client<SubxtClient, SubxtBlockInfoProvider>, mpsc::Receiver<GapFillRequest>)>
+{
+	use sc_cli::{RPC_DEFAULT_MAX_REQUEST_SIZE_MB, RPC_DEFAULT_MAX_RESPONSE_SIZE_MB};
+
+	let node_url = SharedResources::node_rpc_url();
+	let max_request_size = RPC_DEFAULT_MAX_REQUEST_SIZE_MB * 1024 * 1024;
+	let max_response_size = RPC_DEFAULT_MAX_RESPONSE_SIZE_MB * 1024 * 1024;
+	let (api, rpc_client, rpc) = connect(node_url, max_request_size, max_response_size).await?;
+	let block_provider = SubxtBlockInfoProvider::new(api.clone(), rpc.clone()).await?;
+	let backend = SubxtClient::new(api, rpc_client, rpc).await?;
+
+	let pool = SqlitePoolOptions::new()
+		.max_connections(1)
+		.idle_timeout(None)
+		.max_lifetime(None)
+		.connect_with(SqliteConnectOptions::new().in_memory(true))
+		.await?;
+
+	let receipt_extractor = ReceiptExtractor::new_from_substrate_client(backend.clone(), None);
+	let receipt_provider =
+		ReceiptProvider::new(pool, block_provider.clone(), receipt_extractor, None).await?;
+
+	let (subscription_gap_queue, gap_fill_rx) = SubscriptionGapQueue::new();
+	let client = Client::from_backend(
+		backend,
+		block_provider,
+		receipt_provider,
+		true,
+		subscription_gap_queue,
+	)?;
+	Ok((client, gap_fill_rx))
 }
 
 /// Fresh sync: labels, hash mappings, and re-sync idempotency.
