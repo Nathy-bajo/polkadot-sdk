@@ -24,6 +24,7 @@ use crate::{
 	BlockInfoProvider, BlockNumberOrTag, BlockTag, FeeHistoryProvider, ReceiptProvider, TracerType,
 	TransactionInfo,
 	block_info_provider::BlockInfo,
+	block_sync::{SyncCheckpoint, SyncLabel},
 	substrate_client::{NodeHealth, SubmitResult, SubstrateClientT},
 };
 use jsonrpsee::types::{ErrorObjectOwned, error::CALL_EXECUTION_FAILED_CODE};
@@ -41,7 +42,7 @@ use std::{
 	ops::Range,
 	sync::{
 		Arc,
-		atomic::{AtomicBool, AtomicUsize, Ordering},
+		atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering},
 	},
 };
 use thiserror::Error;
@@ -240,14 +241,14 @@ pub struct Client<C: SubstrateClientT, BP: BlockInfoProvider> {
 }
 
 /// A request to backfill a range of missed blocks (both bounds inclusive).
-pub(crate) struct GapFillRequest {
+pub struct GapFillRequest {
 	pub from_inclusive: SubstrateBlockNumber,
 	pub to_inclusive: SubstrateBlockNumber,
 }
 
 /// Queues gap-fill requests for blocks missed during subscription reconnects.
 #[derive(Clone)]
-pub(crate) struct SubscriptionGapQueue {
+pub struct SubscriptionGapQueue {
 	/// Sender half of the gap-fill queue.
 	tx: mpsc::Sender<GapFillRequest>,
 	/// Queued + in-flight gap fills. Channel length alone is insufficient
@@ -256,7 +257,7 @@ pub(crate) struct SubscriptionGapQueue {
 }
 
 impl SubscriptionGapQueue {
-	pub(crate) fn new() -> (Self, mpsc::Receiver<GapFillRequest>) {
+	pub fn new() -> (Self, mpsc::Receiver<GapFillRequest>) {
 		// Each reconnect produces one gap-fill request for the entire missed range,
 		// so 32 allows for 32 rapid disconnects before the consumer processes any.
 		let (tx, rx) = mpsc::channel(32);
@@ -311,6 +312,7 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 		block_provider: BP,
 		receipt_provider: ReceiptProvider<BP>,
 		automine: bool,
+		subscription_gap_queue: SubscriptionGapQueue,
 	) -> Result<Self, ClientError> {
 		let block_notifier =
 			automine.then(|| tokio::sync::broadcast::channel::<H256>(NOTIFIER_CAPACITY).0);
@@ -330,6 +332,7 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 			backfill_complete: Arc::new(AtomicBool::new(false)),
 			block_subscription_tx,
 			log_subscription_tx,
+			subscription_gap_queue,
 		})
 	}
 
@@ -338,8 +341,9 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 		block_provider: BP,
 		receipt_provider: ReceiptProvider<BP>,
 		automine: bool,
+		subscription_gap_queue: SubscriptionGapQueue,
 	) -> Result<Self, ClientError> {
-		Self::from_backend(backend, block_provider, receipt_provider, automine)
+		Self::from_backend(backend, block_provider, receipt_provider, automine, subscription_gap_queue)
 	}
 
 	/// Mark historic backfill as complete.
@@ -355,6 +359,10 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 	/// Expose the block provider (used by block_sync).
 	pub(crate) fn block_provider(&self) -> &BP {
 		&self.block_provider
+	}
+
+	pub(crate) fn subscription_gap_queue(&self) -> &SubscriptionGapQueue {
+		&self.subscription_gap_queue
 	}
 
 	/// Creates a block notifier instance.
@@ -433,12 +441,18 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 		let callback = Arc::new(callback);
 		let lock = self.subscription_lock.clone();
 		let block_provider = self.block_provider.clone();
+		let subscription_gap_queue = self.subscription_gap_queue.clone();
+		// Tracks the last finalized block number seen, used for gap detection.
+		// u32::MAX is used as a sentinel meaning "not yet seen".
+		let last_finalized_seen = Arc::new(AtomicU32::new(u32::MAX));
 
 		self.backend
 			.subscribe_blocks(subscription_type, move |info: C::BlockInfo| {
 				let callback = Arc::clone(&callback);
 				let lock_ref = Arc::clone(&lock);
 				let block_provider = block_provider.clone();
+				let subscription_gap_queue = subscription_gap_queue.clone();
+				let last_finalized_seen = last_finalized_seen.clone();
 
 				async move {
 					let block = block_provider
@@ -447,6 +461,17 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 						.ok_or(ClientError::BlockNotFound)?;
 
 					let _guard = lock_ref.lock().await;
+
+					// Detect and queue gap-fills for missed finalized blocks.
+					if subscription_type == SubscriptionType::FinalizedBlocks {
+						let block_number = block.number();
+						let last = last_finalized_seen.load(Ordering::Acquire);
+						if last != u32::MAX {
+							subscription_gap_queue.detect_and_queue(block_number, last);
+						}
+						last_finalized_seen.store(block_number, Ordering::Release);
+					}
+
 					callback(block).await
 				}
 			})
@@ -471,6 +496,8 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 		// ↓ NEW: capture the broadcast senders
 		let block_subscription_tx = self.block_subscription_tx.clone();
 		let log_subscription_tx = self.log_subscription_tx.clone();
+		let backfill_complete = self.backfill_complete.clone();
+		let subscription_gap_queue = self.subscription_gap_queue.clone();
 
 		self.subscribe_new_blocks(subscription_type, move |block: Arc<BP::Block>| {
 			let backend = backend.clone();
@@ -480,6 +507,8 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 			let block_notifier = block_notifier.clone();
 			let block_subscription_tx = block_subscription_tx.clone();
 			let log_subscription_tx = log_subscription_tx.clone();
+			let backfill_complete = backfill_complete.clone();
+			let subscription_gap_queue = subscription_gap_queue.clone();
 
 			async move {
 				let hash = block.hash();
@@ -511,7 +540,21 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 					}
 				}
 
+				let should_advance_head = subscription_type == SubscriptionType::FinalizedBlocks &&
+					backfill_complete.load(Ordering::Acquire) &&
+					!subscription_gap_queue.has_pending();
+
 				match (subscription_type, &block_notifier) {
+					_ if should_advance_head => {
+						// Advance the persistent sync head so a restart resumes from here.
+						if let Err(err) = receipt_provider
+							.advance_sync_label(SyncLabel::Head, SyncCheckpoint::new(number, hash))
+							.await
+						{
+							log::warn!(target: LOG_TARGET,
+								"Failed to update sync_label[{}]: {err:?}", SyncLabel::Head);
+						}
+					},
 					(SubscriptionType::BestBlocks, Some(sender)) if sender.receiver_count() > 0 => {
 						let _ = sender.send(hash);
 					},

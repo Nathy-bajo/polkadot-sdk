@@ -20,11 +20,12 @@
 use crate::{
 	BlockInfoProvider,
 	block_info_provider::BlockInfo,
-	client::{Client, ClientError, SubstrateBlockNumber},
+	client::{Client, ClientError, GapFillRequest, SubstrateBlockNumber},
 	substrate_client::SubstrateClientT,
 };
 use pallet_revive::evm::H256;
 use std::sync::Arc;
+use tokio::sync::mpsc;
 
 const LOG_TARGET: &str = "eth-rpc::block-sync";
 

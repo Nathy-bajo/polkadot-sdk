@@ -19,7 +19,7 @@ use crate::{
 	BlockInfoProvider, DebugRpcServer, DebugRpcServerImpl, EthRpcServer, EthRpcServerImpl,
 	LOG_TARGET, PolkadotRpcServer, PolkadotRpcServerImpl, ReceiptExtractor, ReceiptProvider,
 	SubstrateClientT, SystemHealthRpcServer, SystemHealthRpcServerImpl,
-	client::{Client, SubscriptionType, SubstrateBlockNumber},
+	client::{Client, ClientError, SubscriptionGapQueue, SubscriptionType, SubstrateBlockNumber},
 };
 use clap::{CommandFactory, FromArgMatches, Parser};
 use futures::{FutureExt, future::BoxFuture, pin_mut};
@@ -272,12 +272,14 @@ where
 	BP: BlockInfoProvider,
 {
 	let db_options = SqliteConnectOptions::new().in_memory(true);
+	let (subscription_gap_queue, _gap_fill_rx) = SubscriptionGapQueue::new();
 	build_client_from_backend(
 		backend,
 		block_provider,
 		EthPruningMode::KeepLatest(keep_latest_n_blocks),
 		db_options,
 		automine,
+		subscription_gap_queue,
 	)
 	.await
 }
@@ -289,6 +291,7 @@ pub async fn build_client_from_backend<C, BP>(
 	eth_pruning: EthPruningMode,
 	db_options: SqliteConnectOptions,
 	automine: bool,
+	subscription_gap_queue: SubscriptionGapQueue,
 ) -> anyhow::Result<Client<C, BP>>
 where
 	C: SubstrateClientT,
@@ -319,7 +322,13 @@ where
 		ReceiptProvider::new(pool, block_provider.clone(), receipt_extractor, keep_latest_n_blocks)
 			.await?;
 
-	let client = Client::from_backend(backend, block_provider, receipt_provider, automine)?;
+	let client = Client::from_backend(
+		backend,
+		block_provider,
+		receipt_provider,
+		automine,
+		subscription_gap_queue,
+	)?;
 	Ok(client)
 }
 
@@ -390,10 +399,17 @@ where
 	let tokio_handle = tokio_runtime.handle();
 	let mut task_manager = TaskManager::new(tokio_handle.clone(), prometheus_registry)?;
 
+	let (subscription_gap_queue, gap_fill_rx) = SubscriptionGapQueue::new();
 	let client = {
-		let fut =
-			build_client_from_backend(backend, block_provider, eth_pruning, db_options, false)
-				.fuse();
+		let fut = build_client_from_backend(
+			backend,
+			block_provider,
+			eth_pruning,
+			db_options,
+			false,
+			subscription_gap_queue,
+		)
+		.fuse();
 		pin_mut!(fut);
 
 		let abort_signal = tokio_runtime.block_on(async { Signals::capture() })?;
@@ -520,6 +536,7 @@ pub fn run(cmd: CliCommand) -> anyhow::Result<()> {
 	let tokio_handle = tokio_runtime.handle();
 	let mut task_manager = TaskManager::new(tokio_handle.clone(), prometheus_registry)?;
 
+	let (subscription_gap_queue, gap_fill_rx) = SubscriptionGapQueue::new();
 	let (client, _block_provider) = {
 		let fut = async {
 			let (api, rpc_client, rpc) =
@@ -537,6 +554,7 @@ pub fn run(cmd: CliCommand) -> anyhow::Result<()> {
 				eth_pruning,
 				db_options,
 				false,
+				subscription_gap_queue,
 			)
 			.await?;
 
@@ -590,10 +608,16 @@ pub fn run(cmd: CliCommand) -> anyhow::Result<()> {
 	task_manager
 		.spawn_essential_handle()
 		.spawn("block-subscription", None, async move {
-			let futures: Vec<BoxFuture<'_, Result<(), crate::client::ClientError>>> = vec![
+			let mut futures: Vec<BoxFuture<'_, Result<(), crate::client::ClientError>>> = vec![
 				Box::pin(client.subscribe_and_cache_new_blocks(SubscriptionType::BestBlocks)),
 				Box::pin(client.subscribe_and_cache_new_blocks(SubscriptionType::FinalizedBlocks)),
 			];
+
+			// Backfill gaps caused by subscription reconnects.
+			futures.push(Box::pin(async {
+				client.run_subscription_gap_filler(gap_fill_rx).await;
+				Ok::<_, ClientError>(())
+			}));
 
 			if let Err(err) = futures::future::try_join_all(futures).await {
 				panic!("Block subscription task failed: {err:?}")

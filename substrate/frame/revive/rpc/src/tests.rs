@@ -23,7 +23,7 @@ use crate::{
 	SubxtBlockInfoProvider,
 	block_sync::{ChainMetadata, SyncLabel},
 	cli::{self, CliCommand},
-	client::Client,
+	client::{Client, SubscriptionGapQueue},
 	example::TransactionBuilder,
 	subxt_client::{
 		self, SrcChainConfig, SubxtClient, connect,
@@ -1807,7 +1807,9 @@ async fn create_sync_test_client() -> anyhow::Result<Client<SubxtClient, SubxtBl
 	let receipt_provider =
 		ReceiptProvider::new(pool, block_provider.clone(), receipt_extractor, None).await?;
 
-	let client = Client::from_backend(backend, block_provider, receipt_provider, true)?;
+	let (subscription_gap_queue, _gap_fill_rx) = SubscriptionGapQueue::new();
+	let client =
+		Client::from_backend(backend, block_provider, receipt_provider, true, subscription_gap_queue)?;
 	Ok(client)
 }
 
