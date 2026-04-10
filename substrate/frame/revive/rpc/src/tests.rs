@@ -1918,9 +1918,8 @@ async fn create_sync_test_client() -> anyhow::Result<Client<SubxtClient, SubxtBl
 
 /// Like [`create_sync_test_client`] but also returns the gap-fill receiver so that tests can
 /// drive [`Client::run_subscription_gap_filler`] manually.
-async fn create_sync_test_client_with_subscription_gap_queue(
-) -> anyhow::Result<(Client<SubxtClient, SubxtBlockInfoProvider>, mpsc::Receiver<GapFillRequest>)>
-{
+async fn create_sync_test_client_with_subscription_gap_queue()
+-> anyhow::Result<(Client<SubxtClient, SubxtBlockInfoProvider>, mpsc::Receiver<GapFillRequest>)> {
 	use sc_cli::{RPC_DEFAULT_MAX_REQUEST_SIZE_MB, RPC_DEFAULT_MAX_RESPONSE_SIZE_MB};
 
 	let node_url = SharedResources::node_rpc_url();
