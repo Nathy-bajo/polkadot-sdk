@@ -343,7 +343,13 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 		automine: bool,
 		subscription_gap_queue: SubscriptionGapQueue,
 	) -> Result<Self, ClientError> {
-		Self::from_backend(backend, block_provider, receipt_provider, automine, subscription_gap_queue)
+		Self::from_backend(
+			backend,
+			block_provider,
+			receipt_provider,
+			automine,
+			subscription_gap_queue,
+		)
 	}
 
 	/// Mark historic backfill as complete.

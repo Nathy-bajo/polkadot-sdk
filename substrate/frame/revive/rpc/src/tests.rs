@@ -1906,8 +1906,13 @@ async fn create_sync_test_client() -> anyhow::Result<Client<SubxtClient, SubxtBl
 		ReceiptProvider::new(pool, block_provider.clone(), receipt_extractor, None).await?;
 
 	let (subscription_gap_queue, _gap_fill_rx) = SubscriptionGapQueue::new();
-	let client =
-		Client::from_backend(backend, block_provider, receipt_provider, true, subscription_gap_queue)?;
+	let client = Client::from_backend(
+		backend,
+		block_provider,
+		receipt_provider,
+		true,
+		subscription_gap_queue,
+	)?;
 	Ok(client)
 }
 
