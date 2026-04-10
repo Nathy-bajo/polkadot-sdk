@@ -281,12 +281,12 @@ impl SubxtClient {
 		);
 
 		let chain_id = {
-			let query = constants().revive().chain_id();
+			let query = constants().revive().chain_id().unvalidated();
 			api.constants().at(&query)?
 		};
 
 		let max_block_weight = {
-			let query = constants().system().block_weights();
+			let query = constants().system().block_weights().unvalidated();
 			let weights = api.constants().at(&query)?;
 			let max_block = weights.per_class.normal.max_extrinsic.unwrap_or(weights.max_block);
 			max_block.0
