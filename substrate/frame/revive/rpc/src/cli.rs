@@ -540,8 +540,12 @@ pub fn run(cmd: CliCommand) -> anyhow::Result<()> {
 	let (client, _block_provider) = {
 		let fut = async {
 			let (api, rpc_client, rpc) =
-				connect(&node_rpc_url, rpc_config.max_request_size, rpc_config.max_response_size)
-					.await?;
+				connect(
+					&node_rpc_url,
+					rpc_config.max_request_size * 1024 * 1024,
+					rpc_config.max_response_size * 1024 * 1024,
+				)
+				.await?;
 
 			let subxt_client = SubxtClient::new(api.clone(), rpc_client, rpc.clone()).await?;
 			// Explicit type annotation to resolve the inference ambiguity

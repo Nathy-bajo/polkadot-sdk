@@ -260,26 +260,12 @@ pub struct SubxtClient {
 	pub(crate) max_block_weight: Weight,
 }
 
-/// Maximum number of retries when fetching the initial block during startup.
-const MAX_STARTUP_RETRIES: u32 = 10;
-
-/// Delay between startup retries.
-const STARTUP_RETRY_DELAY_MS: u64 = 500;
-
 impl SubxtClient {
 	pub async fn new(
 		api: OnlineClient<SrcChainConfig>,
 		rpc_client: RpcClient,
 		rpc: LegacyRpcMethods<SrcChainConfig>,
 	) -> Result<Self, ClientError> {
-		let latest = Self::fetch_latest_block_with_retry(&api).await?;
-		log::info!(
-			target: crate::LOG_TARGET,
-			"🔗 Connected to node at block #{} ({:?})",
-			latest.number(),
-			latest.hash()
-		);
-
 		let chain_id = {
 			let query = constants().revive().chain_id().unvalidated();
 			api.constants().at(&query)?
@@ -293,49 +279,6 @@ impl SubxtClient {
 		};
 
 		Ok(Self { api, rpc_client, rpc, chain_id, max_block_weight })
-	}
-
-	/// Fetch the latest block, retrying up to [`MAX_STARTUP_RETRIES`] times.
-	async fn fetch_latest_block_with_retry(
-		api: &OnlineClient<SrcChainConfig>,
-	) -> Result<SubstrateBlock, ClientError> {
-		let retry_delay = Duration::from_millis(STARTUP_RETRY_DELAY_MS);
-		let mut last_error: Option<subxt::Error> = None;
-
-		for attempt in 0..MAX_STARTUP_RETRIES {
-			match api.blocks().at_latest().await {
-				Ok(block) => {
-					if attempt > 0 {
-						log::info!(
-							target: crate::LOG_TARGET,
-							"✅ Fetched latest block after {} attempt(s)",
-							attempt + 1
-						);
-					}
-					return Ok(block);
-				},
-				Err(err) => {
-					log::warn!(
-						target: crate::LOG_TARGET,
-						"⏳ Node not ready yet (attempt {}/{}): {err}. \
-						 Retrying in {}ms...",
-						attempt + 1,
-						MAX_STARTUP_RETRIES,
-						retry_delay.as_millis(),
-					);
-					last_error = Some(err);
-					tokio::time::sleep(retry_delay).await;
-				},
-			}
-		}
-
-		let err = last_error.expect("loop ran at least once; qed");
-		log::error!(
-			target: crate::LOG_TARGET,
-			"❌ Failed to fetch the latest block after {MAX_STARTUP_RETRIES} attempts. \
-			 The node may be misconfigured or still starting. Last error: {err}"
-		);
-		Err(ClientError::from(err))
 	}
 
 	/// Build a [`SubxtBlockInfo`] from a [`SubstrateBlock`] reference.
