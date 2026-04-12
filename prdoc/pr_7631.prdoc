@@ -24,8 +24,8 @@ crates:
 - name: pallet-conviction-voting
   bump: minor
 - name: asset-hub-westend-runtime
-  bump: patch
+  bump: minor
 - name: rococo-runtime
-  bump: patch
+  bump: minor
 - name: westend-runtime
-  bump: patch
+  bump: minor
