@@ -1024,10 +1024,22 @@ pub mod pallet {
 			let bounty_account = Self::bounty_account_id(bounty_id);
 			let treasury_account = Self::account_id();
 
-			let transferred_any = T::TransferAllAssets::force_transfer_all_assets(
+			let mut transferred_any = T::TransferAllAssets::force_transfer_all_assets(
 				&bounty_account,
 				&treasury_account,
 			)?;
+
+			// Always attempt to transfer any remaining native currency.
+			let native_balance = T::Currency::free_balance(&bounty_account);
+			if !native_balance.is_zero() {
+				let res = T::Currency::transfer(
+					&bounty_account,
+					&treasury_account,
+					native_balance,
+					AllowDeath,
+				);
+				transferred_any |= res.is_ok();
+			}
 
 			if !transferred_any {
 				return Ok(Pays::Yes.into());
