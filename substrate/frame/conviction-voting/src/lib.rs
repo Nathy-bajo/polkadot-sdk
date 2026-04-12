@@ -422,11 +422,7 @@ pub mod pallet {
 			Ok(())
 		}
 
-<<<<<<< HEAD
 		/// Remove an empty/stale `VotingFor` entry and/or zero-balance `ClassLocksFor` entries
-=======
-		/// Remove an empty/stale `VotingFor` entry and any zero-balance `ClassLocksFor` entries
->>>>>>> 92c4c24486 (remove migrations)
 		/// for the given account and class.
 		///
 		/// A `VotingFor` entry is considered empty when it contains no active votes, no
@@ -438,11 +434,7 @@ pub mod pallet {
 		/// incentivise callers to participate in storage cleanup.
 		///
 		/// - `who`: The account whose stale storage entry should be removed.
-<<<<<<< HEAD
 		/// - `class`: The voting class of the `VotingFor` entry to remove.
-=======
-		/// - `class`: The voting class of the entry to remove.
->>>>>>> 92c4c24486 (remove migrations)
 		///
 		/// Emits nothing. Returns `Pays::No` on success so the caller is fee-refunded.
 		///
@@ -458,11 +450,7 @@ pub mod pallet {
 			let who = T::Lookup::lookup(who)?;
 
 			// Remove the VotingFor entry only if it is truly empty.
-<<<<<<< HEAD
 			let voting_cleaned = VotingFor::<T, I>::mutate_exists(&who, &class, |voting_opt| {
-=======
-			let was_cleaned = VotingFor::<T, I>::mutate_exists(&who, &class, |voting_opt| {
->>>>>>> 92c4c24486 (remove migrations)
 				if let Some(voting) = voting_opt {
 					if Self::is_empty_voting(voting) {
 						*voting_opt = None;
@@ -472,7 +460,6 @@ pub mod pallet {
 				false
 			});
 
-<<<<<<< HEAD
 			// Also prune any zero-balance class lock entries for this account.
 			let locks_cleaned = ClassLocksFor::<T, I>::mutate_exists(&who, |locks_opt| {
 				if let Some(locks) = locks_opt {
@@ -490,13 +477,7 @@ pub mod pallet {
 
 			ensure!(voting_cleaned || locks_cleaned, Error::<T, I>::NotVoter);
 
-=======
-			ensure!(was_cleaned, Error::<T, I>::NotVoter);
 
-			// Also prune any zero-balance class lock entries for this account.
-			Self::maybe_clean_class_locks(&who);
-
->>>>>>> 92c4c24486 (remove migrations)
 			// Refund the fee on success to incentivise third parties to clean up stale storage.
 			Ok(Pays::No.into())
 		}
@@ -511,11 +492,7 @@ impl<T: Config<I>, I: 'static> Pallet<T, I> {
 		vote: AccountVote<BalanceOf<T, I>>,
 	) -> DispatchResult {
 		// Votes with zero balance serve no purpose and would create empty storage entries.
-<<<<<<< HEAD
 		ensure!(!vote.balance().is_zero(), Error::<T, I>::ZeroVote);
-=======
-		ensure!(!vote.balance().is_zero(), Error::<T, I>::InsufficientFunds);
->>>>>>> 92c4c24486 (remove migrations)
 		ensure!(
 			vote.balance() <= T::Currency::total_balance(who),
 			Error::<T, I>::InsufficientFunds
