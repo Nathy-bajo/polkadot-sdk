@@ -112,6 +112,9 @@ impl SomeAssociation2 for u64 {
 	type _2 = u64;
 }
 
+/// Storage key written by `Example::on_pallet_initialize` so tests can detect the call.
+const ON_PALLET_INITIALIZE_KEY: &[u8] = b":test:on_pallet_initialize:";
+
 #[frame_support::pallet]
 /// Pallet documentation
 // Comments should not be included in the pallet documentation
@@ -200,6 +203,10 @@ pub mod pallet {
 			let _ = T::AccountId::from(SomeType2); // Test for where clause
 			Self::deposit_event(Event::Something(30));
 			Weight::from_parts(30, 0)
+		}
+		fn on_pallet_initialize() {
+			// Write a marker so tests can assert this hook was called.
+			unhashed::put(ON_PALLET_INITIALIZE_KEY, &true);
 		}
 		fn integrity_test() {
 			let _ = T::AccountId::from(SomeType1); // Test for where clause
@@ -2377,6 +2384,45 @@ fn pallet_on_chain_storage_version_initializes_correctly() {
 		let on_chain_version_after = StorageVersion::get::<Example4>();
 		assert_eq!(StorageVersion::exists::<Example4>(), true);
 		assert_eq!(on_chain_version_after, StorageVersion::new(0));
+	});
+}
+
+/// `on_pallet_initialize` must fire when `OnGenesis::on_genesis` is called at genesis.
+#[test]
+fn on_pallet_initialize_called_at_genesis() {
+	use frame_support::traits::OnGenesis;
+
+	TestExternalities::default().execute_with(|| {
+		assert!(!unhashed::exists(ON_PALLET_INITIALIZE_KEY), "hook must not have run yet");
+		Example::on_genesis();
+		assert!(unhashed::exists(ON_PALLET_INITIALIZE_KEY), "hook must have run during on_genesis");
+	});
+}
+
+/// `on_pallet_initialize` must fire during `execute_on_runtime_upgrade` when the pallet is new
+/// to the runtime (i.e., it has no existing prefixed storage keys).
+#[test]
+fn on_pallet_initialize_called_for_new_pallet_post_genesis() {
+	type Executive = frame_executive::Executive<
+		Runtime,
+		Block,
+		frame_system::ChainContext<Runtime>,
+		Runtime,
+		AllPalletsWithSystem,
+	>;
+
+	TestExternalities::default().execute_with(|| {
+		let pallet_prefix = twox_128(Example::name().as_bytes());
+		assert!(!contains_prefixed_key(&pallet_prefix));
+
+		assert!(!unhashed::exists(ON_PALLET_INITIALIZE_KEY), "hook must not have run yet");
+
+		Executive::execute_on_runtime_upgrade();
+
+		assert!(
+			unhashed::exists(ON_PALLET_INITIALIZE_KEY),
+			"hook must have run when new pallet is detected post-genesis"
+		);
 	});
 }
 

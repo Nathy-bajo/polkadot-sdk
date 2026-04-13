@@ -67,6 +67,18 @@ pub fn expand_hooks(def: &mut Def) -> proc_macro2::TokenStream {
 		}
 	};
 
+	let genesis_version_init = if let Some(in_code_version) = &def.pallet_struct.storage_version {
+		quote::quote! {
+			let storage_version: #frame_support::traits::StorageVersion = #in_code_version;
+			storage_version.put::<Self>();
+		}
+	} else {
+		quote::quote! {
+			let storage_version = #frame_support::traits::StorageVersion::default();
+			storage_version.put::<Self>();
+		}
+	};
+
 	let log_runtime_upgrade = if has_runtime_upgrade {
 		// a migration is defined here.
 		quote::quote! {
@@ -142,6 +154,21 @@ pub fn expand_hooks(def: &mut Def) -> proc_macro2::TokenStream {
 
 	quote::quote_spanned!(span =>
 		#hooks_impl
+
+		impl<#type_impl_gen>
+			#frame_support::traits::OnGenesis
+			for #pallet_ident<#type_use_gen> #where_clause
+		{
+			fn on_genesis() {
+				#genesis_version_init
+				// Invoke the user-facing first-initialization hook.
+				<
+					Self as #frame_support::traits::Hooks<
+						#frame_system::pallet_prelude::BlockNumberFor::<T>
+					>
+				>::on_pallet_initialize();
+			}
+		}
 
 		impl<#type_impl_gen>
 			#frame_support::traits::OnFinalize<#frame_system::pallet_prelude::BlockNumberFor::<T>>
@@ -228,6 +255,10 @@ pub fn expand_hooks(def: &mut Def) -> proc_macro2::TokenStream {
 				let exists = contains_prefixed_key(&pallet_hashed_prefix);
 				if !exists {
 					#initialize_on_chain_storage_version
+					// Call the pallet's first-initialization hook now that storage version is set.
+					<Self as #frame_support::traits::Hooks<
+						#frame_system::pallet_prelude::BlockNumberFor::<T>
+					>>::on_pallet_initialize();
 					<T as #frame_system::Config>::DbWeight::get().reads_writes(1, 1)
 				} else {
 					<T as #frame_system::Config>::DbWeight::get().reads(1)

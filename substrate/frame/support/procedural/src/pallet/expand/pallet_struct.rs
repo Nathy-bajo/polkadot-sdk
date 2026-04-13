@@ -20,7 +20,6 @@ use frame_support_procedural_tools::get_doc_literals;
 
 /// * Add derive trait on Pallet
 /// * Implement GetStorageVersion on Pallet
-/// * Implement OnGenesis on Pallet
 /// * Implement `fn error_metadata` on Pallet
 /// * declare Module type alias for construct_runtime
 /// * replace the first field type of `struct Pallet` with `PhantomData` if it is `_`
@@ -220,17 +219,6 @@ pub fn expand_pallet_struct(def: &mut Def) -> proc_macro2::TokenStream {
 
 			fn on_chain_storage_version() -> #frame_support::traits::StorageVersion {
 				#frame_support::traits::StorageVersion::get::<Self>()
-			}
-		}
-
-		// Implement `OnGenesis` for `Pallet`
-		impl<#type_impl_gen> #frame_support::traits::OnGenesis
-			for #pallet_ident<#type_use_gen>
-			#config_where_clause
-		{
-			fn on_genesis() {
-				let storage_version: #frame_support::traits::StorageVersion = #storage_version;
-				storage_version.put::<Self>();
 			}
 		}
 

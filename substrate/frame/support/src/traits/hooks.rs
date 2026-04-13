@@ -463,6 +463,27 @@ pub trait Hooks<BlockNumber> {
 	/// This is the non-mandatory version of [`Hooks::on_initialize`].
 	fn on_poll(_n: BlockNumber, _weight: &mut WeightMeter) {}
 
+	/// Hook called when a pallet is being initialized for the first time.
+	///
+	/// This is called:
+	/// - **At genesis**: for all pallets, as part of [`OnGenesis`].
+	/// - **Post-genesis**: for any pallet that is newly added to the runtime (i.e. mid-flight),
+	///   during the first block of the upgraded runtime, before any [`Hooks::on_runtime_upgrade`]
+	///   migrations run.
+	///
+	/// Use this hook for pallet-internal initialization logic that can be derived entirely from
+	/// within the pallet (e.g. writing default storage values). For initialization that requires
+	/// external data — such as values from a genesis config or another pallet — use a
+	/// runtime-level migration instead.
+	///
+	/// ## Ordering
+	///
+	/// When a new pallet is detected post-genesis, `on_pallet_initialize` is called inside
+	/// [`BeforeAllRuntimeMigrations::before_all_runtime_migrations`], which runs **before** any
+	/// [`Hooks::on_runtime_upgrade`] logic. At the point this hook runs, the pallet's storage is
+	/// empty and its on-chain storage version has just been written to match the in-code version.
+	fn on_pallet_initialize() {}
+
 	/// Hook executed when a code change (aka. a "runtime upgrade") is detected by the FRAME
 	/// `Executive` pallet.
 	///
