@@ -112,16 +112,10 @@ impl Default for TransferLimitData {
 	}
 }
 
-use std::cell::RefCell;
-
-thread_local! {
-	static TRANSFER_USAGE: RefCell<Vec<(u64, u64, u64)>> = RefCell::new(Vec::new()); // (delegator, delegatee, amount_used)
-}
-
 impl InstanceFilter<RuntimeCall> for ProxyType {
 	type ProxyData = TransferLimitData;
 
-	fn filter_with_data(&self, c: &RuntimeCall, proxy_data: &TransferLimitData) -> bool {
+	fn filter(&self, c: &RuntimeCall) -> bool {
 		match self {
 			ProxyType::Any => true,
 			ProxyType::JustTransfer => {
@@ -131,69 +125,57 @@ impl InstanceFilter<RuntimeCall> for ProxyType {
 				)
 			},
 			ProxyType::JustUtility => matches!(c, RuntimeCall::Utility { .. }),
+			ProxyType::TransferWithLimit => false, // must use filter_with_data
+		}
+	}
+
+	fn filter_with_data(&self, c: &RuntimeCall, proxy_data: &TransferLimitData) -> bool {
+		match self {
 			ProxyType::TransferWithLimit => {
-				// Check if it's a transfer call
 				if let RuntimeCall::Balances(pallet_balances::Call::transfer_allow_death {
 					value,
 					..
 				}) = c
 				{
-					// Get current block
 					let current_block = System::block_number();
+					let period_end = proxy_data.period_start + proxy_data.period_length;
 
-					// Check if period has reset
-					if current_block >= proxy_data.period_start + proxy_data.period_length {
-						// Period reset - clear usage for this proxy
-						TRANSFER_USAGE.with(|usage| {
-							usage.borrow_mut().retain(|&(d, p, _)| {
-								!(d == proxy_data.period_start && p == proxy_data.period_length)
-							});
-						});
-						return true;
-					}
+					// If the current period has expired, treat used amount as 0.
+					let effective_used =
+						if proxy_data.period_length > 0 && current_block >= period_end {
+							0
+						} else {
+							proxy_data.amount_used
+						};
 
-					// Get current usage
-					let mut current_usage = 0;
-					TRANSFER_USAGE.with(|usage| {
-						for &(d, p, amount) in usage.borrow().iter() {
-							if d == proxy_data.period_start && p == proxy_data.period_length {
-								current_usage = amount;
-								break;
-							}
-						}
-					});
-
-					// Check limit
-					if current_usage + *value > proxy_data.max_amount {
-						return false;
-					}
-
-					// Update usage
-					TRANSFER_USAGE.with(|usage| {
-						let mut borrow = usage.borrow_mut();
-						let mut found = false;
-						for entry in borrow.iter_mut() {
-							if entry.0 == proxy_data.period_start &&
-								entry.1 == proxy_data.period_length
-							{
-								entry.2 = current_usage + *value;
-								found = true;
-								break;
-							}
-						}
-						if !found {
-							borrow.push((
-								proxy_data.period_start,
-								proxy_data.period_length,
-								current_usage + *value,
-							));
-						}
-					});
-
-					return true;
+					effective_used.saturating_add(*value) <= proxy_data.max_amount
+				} else {
+					false
 				}
-				false
 			},
+			other => other.filter(c),
+		}
+	}
+
+	/// After a successful transfer, persist the updated usage (and reset the period if needed).
+	fn post_dispatch(&self, call: &RuntimeCall, proxy_data: &mut TransferLimitData) {
+		if let ProxyType::TransferWithLimit = self {
+			if let RuntimeCall::Balances(pallet_balances::Call::transfer_allow_death {
+				value,
+				..
+			}) = call
+			{
+				let current_block = System::block_number();
+				let period_end = proxy_data.period_start + proxy_data.period_length;
+
+				// Reset the period window when it has expired.
+				if proxy_data.period_length > 0 && current_block >= period_end {
+					proxy_data.period_start = current_block;
+					proxy_data.amount_used = 0;
+				}
+
+				proxy_data.amount_used = proxy_data.amount_used.saturating_add(*value);
+			}
 		}
 	}
 
@@ -235,6 +217,7 @@ impl Config for Test {
 	type ProxyData = TransferLimitData;
 	type ProxyDepositBase = ProxyDepositBase;
 	type ProxyDepositFactor = ProxyDepositFactor;
+	type ProxyDataDepositFactor = ConstU64<0>;
 	type MaxProxies = ConstU32<4>;
 	type WeightInfo = ();
 	type CallHasher = BlakeTwo256;
@@ -1241,12 +1224,12 @@ fn poke_deposit_fails_for_unsigned_origin() {
 fn transfer_with_limit_works() {
 	new_test_ext().execute_with(|| {
 		System::set_block_number(1);
+		Balances::make_free_balance_be(&1, 100);
 
-		// Create transfer limit data: max 5 tokens per 10 blocks
+		// max 5 tokens per 10-block period
 		let limit_data =
 			TransferLimitData { max_amount: 5, period_start: 1, period_length: 10, amount_used: 0 };
 
-		// Add proxy with transfer limit
 		assert_ok!(Proxy::add_proxy(
 			RuntimeOrigin::signed(1),
 			2,
@@ -1255,30 +1238,29 @@ fn transfer_with_limit_works() {
 			0
 		));
 
-		// First transfer of 3 tokens should succeed
-		let call = Box::new(call_transfer(6, 3));
-		assert_ok!(Proxy::proxy(RuntimeOrigin::signed(2), 1, None, call.clone()));
+		// First transfer of 3 tokens succeeds; amount_used in storage becomes 3.
+		assert_ok!(Proxy::proxy(RuntimeOrigin::signed(2), 1, None, Box::new(call_transfer(6, 3))));
 		System::assert_last_event(ProxyEvent::ProxyExecuted { result: Ok(()) }.into());
+		assert_eq!(Proxy::proxies(1).0[0].proxy_data.amount_used, 3);
 
-		// Second transfer of 3 tokens should fail (would exceed limit of 5)
-		let call = Box::new(call_transfer(6, 3));
-		assert_ok!(Proxy::proxy(RuntimeOrigin::signed(2), 1, None, call.clone()));
-		// Should fail because 3 + 3 > 5
+		// 3 + 3 = 6 > 5: must be filtered; amount_used stays at 3.
+		assert_ok!(Proxy::proxy(RuntimeOrigin::signed(2), 1, None, Box::new(call_transfer(6, 3))));
 		System::assert_last_event(
 			ProxyEvent::ProxyExecuted { result: Err(SystemError::CallFiltered.into()) }.into(),
 		);
+		assert_eq!(Proxy::proxies(1).0[0].proxy_data.amount_used, 3);
 
-		// Transfer of 2 tokens should succeed (3 + 2 = 5, at limit)
-		let call = Box::new(call_transfer(6, 2));
-		assert_ok!(Proxy::proxy(RuntimeOrigin::signed(2), 1, None, call.clone()));
+		// 3 + 2 = 5 == limit: succeeds; amount_used becomes 5.
+		assert_ok!(Proxy::proxy(RuntimeOrigin::signed(2), 1, None, Box::new(call_transfer(6, 2))));
 		System::assert_last_event(ProxyEvent::ProxyExecuted { result: Ok(()) }.into());
+		assert_eq!(Proxy::proxies(1).0[0].proxy_data.amount_used, 5);
 
-		// Another transfer of 1 token should fail (at limit)
-		let call = Box::new(call_transfer(6, 1));
-		assert_ok!(Proxy::proxy(RuntimeOrigin::signed(2), 1, None, call.clone()));
+		// 5 + 1 = 6 > 5: filtered; amount_used stays at 5.
+		assert_ok!(Proxy::proxy(RuntimeOrigin::signed(2), 1, None, Box::new(call_transfer(6, 1))));
 		System::assert_last_event(
 			ProxyEvent::ProxyExecuted { result: Err(SystemError::CallFiltered.into()) }.into(),
 		);
+		assert_eq!(Proxy::proxies(1).0[0].proxy_data.amount_used, 5);
 	});
 }
 
@@ -1286,12 +1268,12 @@ fn transfer_with_limit_works() {
 fn transfer_limit_resets_after_period() {
 	new_test_ext().execute_with(|| {
 		System::set_block_number(1);
+		Balances::make_free_balance_be(&1, 100);
 
-		// Create transfer limit data: max 5 tokens per 10 blocks
+		// max 5 tokens per 10-block period (period_end = block 11)
 		let limit_data =
 			TransferLimitData { max_amount: 5, period_start: 1, period_length: 10, amount_used: 0 };
 
-		// Add proxy with transfer limit
 		assert_ok!(Proxy::add_proxy(
 			RuntimeOrigin::signed(1),
 			2,
@@ -1300,20 +1282,26 @@ fn transfer_limit_resets_after_period() {
 			0
 		));
 
-		// Use all 5 tokens
-		let call = Box::new(call_transfer(6, 5));
-		assert_ok!(Proxy::proxy(RuntimeOrigin::signed(2), 1, None, call.clone()));
+		// Exhaust the limit.
+		assert_ok!(Proxy::proxy(RuntimeOrigin::signed(2), 1, None, Box::new(call_transfer(6, 5))));
+		System::assert_last_event(ProxyEvent::ProxyExecuted { result: Ok(()) }.into());
+		assert_eq!(Proxy::proxies(1).0[0].proxy_data.amount_used, 5);
 
-		// Try to transfer more in same period
-		let call = Box::new(call_transfer(6, 1));
-		assert_ok!(Proxy::proxy(RuntimeOrigin::signed(2), 1, None, call.clone()));
+		// Attempt within same period is blocked.
+		assert_ok!(Proxy::proxy(RuntimeOrigin::signed(2), 1, None, Box::new(call_transfer(6, 1))));
+		System::assert_last_event(
+			ProxyEvent::ProxyExecuted { result: Err(SystemError::CallFiltered.into()) }.into(),
+		);
 
-		// Move to next period (block 11)
+		// Move into the next period (block >= period_start + period_length = 11).
 		System::set_block_number(11);
 
-		// Now transfers should succeed again
-		let call = Box::new(call_transfer(6, 3));
-		assert_ok!(Proxy::proxy(RuntimeOrigin::signed(2), 1, None, call.clone()));
+		// Period has expired: transfer succeeds; storage is reset then incremented.
+		assert_ok!(Proxy::proxy(RuntimeOrigin::signed(2), 1, None, Box::new(call_transfer(6, 3))));
+		System::assert_last_event(ProxyEvent::ProxyExecuted { result: Ok(()) }.into());
+		let stored = Proxy::proxies(1).0[0].proxy_data;
+		assert_eq!(stored.period_start, 11);
+		assert_eq!(stored.amount_used, 3);
 	});
 }
 
@@ -1321,40 +1309,45 @@ fn transfer_limit_resets_after_period() {
 fn different_proxies_have_separate_limits() {
 	new_test_ext().execute_with(|| {
 		System::set_block_number(1);
+		Balances::make_free_balance_be(&1, 100);
 
-		// Add two different proxies with their own limits
-		let limit_data_1 =
+		// Two delegates, each with its own independent limit.
+		let limit_2 =
 			TransferLimitData { max_amount: 5, period_start: 1, period_length: 10, amount_used: 0 };
-
-		let limit_data_2 =
+		let limit_3 =
 			TransferLimitData { max_amount: 3, period_start: 1, period_length: 10, amount_used: 0 };
 
 		assert_ok!(Proxy::add_proxy(
 			RuntimeOrigin::signed(1),
 			2,
 			ProxyType::TransferWithLimit,
-			limit_data_1,
+			limit_2,
 			0
 		));
-
 		assert_ok!(Proxy::add_proxy(
 			RuntimeOrigin::signed(1),
 			3,
 			ProxyType::TransferWithLimit,
-			limit_data_2,
+			limit_3,
 			0
 		));
 
-		// Proxy 2 can transfer 5 tokens
-		let call = Box::new(call_transfer(6, 5));
-		assert_ok!(Proxy::proxy(RuntimeOrigin::signed(2), 1, None, call.clone()));
+		// Proxy 2 exhausts its own limit of 5; proxy 3's counter must be unaffected.
+		assert_ok!(Proxy::proxy(RuntimeOrigin::signed(2), 1, None, Box::new(call_transfer(6, 5))));
+		System::assert_last_event(ProxyEvent::ProxyExecuted { result: Ok(()) }.into());
 
-		// Proxy 3 can only transfer 3 tokens
-		let call = Box::new(call_transfer(6, 3));
-		assert_ok!(Proxy::proxy(RuntimeOrigin::signed(3), 1, None, call.clone()));
+		// Proxy 3 can still transfer up to its own limit of 3.
+		assert_ok!(Proxy::proxy(RuntimeOrigin::signed(3), 1, None, Box::new(call_transfer(6, 3))));
+		System::assert_last_event(ProxyEvent::ProxyExecuted { result: Ok(()) }.into());
+		assert_eq!(Proxy::proxies(1).0[0].proxy_data.amount_used, 5); // proxy 2 unchanged
+		assert_eq!(Proxy::proxies(1).0[1].proxy_data.amount_used, 3); // proxy 3 independent
 
-		// Proxy 3 cannot transfer 4 tokens
-		let call = Box::new(call_transfer(6, 4));
-		assert_ok!(Proxy::proxy(RuntimeOrigin::signed(3), 1, None, call.clone()));
+		// Proxy 3 is now at its limit; any further transfer must be filtered.
+		assert_ok!(Proxy::proxy(RuntimeOrigin::signed(3), 1, None, Box::new(call_transfer(6, 1))));
+		System::assert_last_event(
+			ProxyEvent::ProxyExecuted { result: Err(SystemError::CallFiltered.into()) }.into(),
+		);
+		// amount_used for proxy 3 stays at 3 (post_dispatch not called on filtered calls).
+		assert_eq!(Proxy::proxies(1).0[1].proxy_data.amount_used, 3);
 	});
 }

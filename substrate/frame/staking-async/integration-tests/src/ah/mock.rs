@@ -1144,10 +1144,6 @@ impl frame_support::traits::InstanceFilter<RuntimeCall> for ProxyType {
 		}
 	}
 
-	fn filter_with_data(&self, c: &RuntimeCall, _data: &Self::ProxyData) -> bool {
-		self.filter(c)
-	}
-
 	fn is_superset(&self, o: &Self) -> bool {
 		match (self, o) {
 			(x, y) if x == y => true,
@@ -1165,6 +1161,7 @@ impl pallet_proxy::Config for Runtime {
 	type ProxyData = ();
 	type ProxyDepositBase = ConstU128<1>;
 	type ProxyDepositFactor = ConstU128<1>;
+	type ProxyDataDepositFactor = ConstU128<0>;
 	type MaxProxies = ConstU32<32>;
 	type MaxPending = ConstU32<32>;
 	type CallHasher = frame::deps::sp_runtime::traits::BlakeTwo256;

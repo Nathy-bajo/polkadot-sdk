@@ -184,6 +184,13 @@ pub mod pallet {
 		#[pallet::constant]
 		type ProxyDepositFactor: Get<BalanceOf<Self>>;
 
+		/// The amount of currency needed per byte of `ProxyData` stored per proxy.
+		///
+		/// Since `ProxyData` is stored inline with each `ProxyDefinition`, larger data types
+		/// require a proportionally larger deposit. Set to zero when `ProxyData = ()`.
+		#[pallet::constant]
+		type ProxyDataDepositFactor: Get<BalanceOf<Self>>;
+
 		/// The maximum amount of proxies allowed for a single account.
 		#[pallet::constant]
 		type MaxProxies: Get<u32>;
@@ -800,12 +807,17 @@ pub mod pallet {
 
 	#[pallet::view_functions]
 	impl<T: Config> Pallet<T> {
-		/// Check if a `RuntimeCall` is allowed for a given `ProxyType`.
+		/// Check if a `RuntimeCall` is allowed for a given `ProxyType` and its associated data.
+		///
+		/// Passing the actual `proxy_data` is required when the proxy type uses data-dependent
+		/// filtering (e.g. a transfer-amount limit). Use `T::ProxyData::default()` when no data
+		/// is relevant.
 		pub fn check_permissions(
 			call: <T as Config>::RuntimeCall,
 			proxy_type: T::ProxyType,
+			proxy_data: T::ProxyData,
 		) -> bool {
-			proxy_type.filter(&call)
+			proxy_type.filter_with_data(&call, &proxy_data)
 		}
 
 		/// Check if one `ProxyType` is a super-set of another `ProxyType`.
@@ -964,7 +976,10 @@ impl<T: Config> Pallet<T> {
 		if num_proxies == 0 {
 			Zero::zero()
 		} else {
-			T::ProxyDepositBase::get() + T::ProxyDepositFactor::get() * num_proxies.into()
+			let data_size = T::ProxyData::max_encoded_len() as u32;
+			T::ProxyDepositBase::get() +
+				T::ProxyDepositFactor::get() * num_proxies.into() +
+				T::ProxyDataDepositFactor::get() * (data_size * num_proxies).into()
 		}
 	}
 
@@ -1042,6 +1057,14 @@ impl<T: Config> Pallet<T> {
 		call: <T as Config>::RuntimeCall,
 	) {
 		use frame::traits::{InstanceFilter as _, OriginTrait as _};
+
+		// Retain identifiers needed after the filter closure consumes `def`.
+		let real_for_update = real.clone();
+		let delegate_for_update = def.delegate.clone();
+		let proxy_type_for_update = def.proxy_type.clone();
+		// Clone the call so we can pass it to `post_dispatch` after it is dispatched.
+		let call_for_post = call.clone();
+
 		// This is a freshly authenticated new account, the origin restrictions doesn't apply.
 		let mut origin: T::RuntimeOrigin = frame_system::RawOrigin::Signed(real).into();
 		origin.add_filter(move |c: &<T as frame_system::Config>::RuntimeCall| {
@@ -1067,6 +1090,18 @@ impl<T: Config> Pallet<T> {
 			}
 		});
 		let e = call.dispatch(origin);
+
+		// On success, let the proxy type update its stored data (e.g. increment amount_used).
+		if e.is_ok() {
+			Proxies::<T>::mutate(&real_for_update, |(proxies, _)| {
+				if let Some(stored) = proxies.iter_mut().find(|p| {
+					p.delegate == delegate_for_update && p.proxy_type == proxy_type_for_update
+				}) {
+					proxy_type_for_update.post_dispatch(&call_for_post, &mut stored.proxy_data);
+				}
+			});
+		}
+
 		Self::deposit_event(Event::ProxyExecuted { result: e.map(|_| ()).map_err(|e| e.error) });
 	}
 

@@ -997,10 +997,6 @@ impl InstanceFilter<RuntimeCall> for ProxyType {
 		}
 	}
 
-	fn filter_with_data(&self, c: &RuntimeCall, _data: &Self::ProxyData) -> bool {
-		self.filter(c)
-	}
-
 	fn is_superset(&self, o: &Self) -> bool {
 		match (self, o) {
 			(x, y) if x == y => true,
@@ -1020,6 +1016,7 @@ impl pallet_proxy::Config for Runtime {
 	type ProxyData = ();
 	type ProxyDepositBase = ProxyDepositBase;
 	type ProxyDepositFactor = ProxyDepositFactor;
+	type ProxyDataDepositFactor = ConstU128<0>;
 	type MaxProxies = MaxProxies;
 	type WeightInfo = weights::pallet_proxy::WeightInfo<Runtime>;
 	type MaxPending = MaxPending;
