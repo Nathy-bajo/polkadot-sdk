@@ -1,0 +1,28 @@
+title: '[FRAME] Remove storage generator indirection layer'
+doc:
+- audience: Runtime Dev
+  description: |-
+    closes https://github.com/paritytech/polkadot-sdk/issues/142
+
+    Removes the storage generator module and its internal generator traits by inlining the blanket implementations directly into the concrete `StorageValue`, `StorageMap`, `StorageDoubleMap`, and `StorageNMap` types, eliminating the two-layer indirection that was originally introduced to support the now-removed decl_storage! V1 pallet macro and updating all call-sites across bridges, RPC support, and remote-test utilities to use the equivalent public trait methods (`hashed_key`, `hashed_key_for`, `final_prefix`).
+crates:
+- name: bridge-runtime-common
+  bump: minor
+- name: pallet-bridge-grandpa
+  bump: minor
+- name: pallet-bridge-messages
+  bump: minor
+- name: pallet-bridge-parachains
+  bump: minor
+- name: bp-runtime
+  bump: minor
+- name: frame-support
+  bump: minor
+- name: substrate-frame-rpc-support
+  bump: minor
+- name: pallet-bounties
+  bump: minor
+- name: pallet-session
+  bump: minor
+- name: snowbridge-core
+  bump: minor
