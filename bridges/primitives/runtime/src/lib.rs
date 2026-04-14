@@ -220,11 +220,10 @@ impl<BlockNumber: Copy + UniqueSaturatedInto<u64>, BlockHash: Copy>
 	}
 }
 
-/// This is a copy of the
-/// `frame_support::storage::generator::StorageMap::storage_map_final_key` for maps based
-/// on selected hasher.
+/// This is a copy of the key computation from `frame_support::storage::StorageMap::hashed_key_for`
+/// for maps based on selected hasher.
 ///
-/// We're using it because to call `storage_map_final_key` directly, we need access to the runtime
+/// We're using it because to call `hashed_key_for` directly, we need access to the runtime
 /// and pallet instance, which (sometimes) is impossible.
 pub fn storage_map_final_key<H: StorageHasher>(
 	pallet_prefix: &str,
@@ -272,10 +271,10 @@ pub trait StorageMapKeyProvider {
 	/// The same as `StorageMap::Value`.
 	type Value: 'static + FullCodec;
 
-	/// This is a copy of the
-	/// `frame_support::storage::generator::StorageMap::storage_map_final_key`.
+	/// This is a copy of the key computation from
+	/// `frame_support::storage::StorageMap::hashed_key_for`.
 	///
-	/// We're using it because to call `storage_map_final_key` directly, we need access
+	/// We're using it because to call `hashed_key_for` directly, we need access
 	/// to the runtime and pallet instance, which (sometimes) is impossible.
 	fn final_key(pallet_prefix: &str, key: &Self::Key) -> StorageKey {
 		storage_map_final_key::<Self::Hasher>(pallet_prefix, Self::MAP_NAME, &key.encode())
@@ -298,10 +297,10 @@ pub trait StorageDoubleMapKeyProvider {
 	/// The same as `StorageDoubleMap::Value`.
 	type Value: 'static + FullCodec;
 
-	/// This is a copy of the
-	/// `frame_support::storage::generator::StorageDoubleMap::storage_double_map_final_key`.
+	/// This is a copy of the key computation from
+	/// `frame_support::storage::StorageDoubleMap::hashed_key_for`.
 	///
-	/// We're using it because to call `storage_double_map_final_key` directly, we need access
+	/// We're using it because to call `hashed_key_for` directly, we need access
 	/// to the runtime and pallet instance, which (sometimes) is impossible.
 	fn final_key(pallet_prefix: &str, key1: &Self::Key1, key2: &Self::Key2) -> StorageKey {
 		let key1_hashed = Self::Hasher1::hash(&key1.encode());

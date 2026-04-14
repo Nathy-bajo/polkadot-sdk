@@ -856,7 +856,7 @@ pub(crate) mod tests {
 		assert_noop, assert_ok,
 		dispatch::DispatchResultWithPostInfo,
 		pallet_prelude::Pays,
-		storage::generator::{StorageDoubleMap, StorageMap},
+		storage::{StorageDoubleMap, StorageMap},
 		traits::Get,
 		weights::Weight,
 	};
@@ -1639,12 +1639,12 @@ pub(crate) mod tests {
 	#[test]
 	fn storage_keys_computed_properly() {
 		assert_eq!(
-			ParasInfo::<TestRuntime>::storage_map_final_key(ParaId(42)).to_vec(),
+			ParasInfo::<TestRuntime>::hashed_key_for(ParaId(42)).to_vec(),
 			ParasInfoKeyProvider::final_key("Parachains", &ParaId(42)).0
 		);
 
 		assert_eq!(
-			ImportedParaHeads::<TestRuntime>::storage_double_map_final_key(
+			ImportedParaHeads::<TestRuntime>::hashed_key_for(
 				ParaId(42),
 				ParaHash::from([21u8; 32])
 			)

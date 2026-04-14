@@ -17,7 +17,7 @@
 //! Test to execute the sanity-check of the voter bag.
 
 use frame_support::{
-	storage::generator::StorageMap,
+	storage::StoragePrefixedMap,
 	traits::{Get, PalletInfoAccess},
 };
 use remote_externalities::{Builder, Mode, OnlineConfig};
@@ -39,8 +39,8 @@ pub async fn execute<Runtime, Block>(
 			pallets: vec![pallet_bags_list::Pallet::<Runtime, pallet_bags_list::Instance1>::name()
 				.to_string()],
 			hashed_prefixes: vec![
-				<pallet_staking::Bonded<Runtime>>::prefix_hash().to_vec(),
-				<pallet_staking::Ledger<Runtime>>::prefix_hash().to_vec(),
+				<pallet_staking::Bonded<Runtime>>::final_prefix().to_vec(),
+				<pallet_staking::Ledger<Runtime>>::final_prefix().to_vec(),
 			],
 			..Default::default()
 		}))

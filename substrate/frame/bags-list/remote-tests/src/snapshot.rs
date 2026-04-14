@@ -34,7 +34,7 @@ where
 	Block: BlockT + DeserializeOwned,
 	Block::Header: DeserializeOwned,
 {
-	use frame_support::storage::generator::StorageMap;
+	use frame_support::storage::StoragePrefixedMap;
 
 	let mut ext = Builder::<Block>::new()
 		.mode(Mode::Online(OnlineConfig {
@@ -45,8 +45,8 @@ where
 				.to_string()],
 			at: None,
 			hashed_prefixes: vec![
-				<pallet_staking::Bonded<Runtime>>::prefix_hash().to_vec(),
-				<pallet_staking::Ledger<Runtime>>::prefix_hash().to_vec(),
+				<pallet_staking::Bonded<Runtime>>::final_prefix().to_vec(),
+				<pallet_staking::Ledger<Runtime>>::final_prefix().to_vec(),
 				<pallet_staking::Validators<Runtime>>::map_storage_final_prefix(),
 				<pallet_staking::Nominators<Runtime>>::map_storage_final_prefix(),
 			],

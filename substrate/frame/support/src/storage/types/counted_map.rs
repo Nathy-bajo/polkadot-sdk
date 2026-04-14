@@ -19,12 +19,11 @@
 
 use crate::{
 	storage::{
-		generator::StorageMap as _,
 		types::{
 			OptionQuery, QueryKindTrait, StorageEntryMetadataBuilder, StorageMap, StorageValue,
 			ValueQuery,
 		},
-		StorageAppend, StorageDecodeLength, StorageTryAppend,
+		StorageAppend, StorageDecodeLength, StoragePrefixedMap, StorageTryAppend,
 	},
 	traits::{Get, GetDefault, StorageInfo, StorageInfoTrait, StorageInstance},
 	Never,
@@ -155,8 +154,7 @@ where
 
 	/// The prefix used to generate the key of the map.
 	pub fn map_storage_final_prefix() -> Vec<u8> {
-		use crate::storage::generator::StorageMap;
-		<Self as MapWrapper>::Map::prefix_hash().to_vec()
+		<Self as MapWrapper>::Map::final_prefix().to_vec()
 	}
 
 	/// Get the storage key used to fetch a value corresponding to a specific key.
@@ -227,9 +225,9 @@ where
 	{
 		Self::try_mutate_exists(key, |option_value_ref| {
 			let option_value = core::mem::replace(option_value_ref, None);
-			let mut query = <Self as MapWrapper>::Map::from_optional_value_to_query(option_value);
+			let mut query = QueryKind::from_optional_value_to_query(option_value);
 			let res = f(&mut query);
-			let option_value = <Self as MapWrapper>::Map::from_query_to_optional_value(query);
+			let option_value = QueryKind::from_query_to_optional_value(query);
 			let _ = core::mem::replace(option_value_ref, option_value);
 			res
 		})
@@ -276,7 +274,7 @@ where
 		if removed_value.is_some() {
 			CounterFor::<Prefix>::mutate(|value| value.saturating_dec());
 		}
-		<Self as MapWrapper>::Map::from_optional_value_to_query(removed_value)
+		QueryKind::from_optional_value_to_query(removed_value)
 	}
 
 	/// Append the given items to the value in the storage.

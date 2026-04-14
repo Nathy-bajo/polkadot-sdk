@@ -40,7 +40,7 @@ use codec::Encode;
 use frame_support::{
 	assert_err, assert_noop, assert_ok,
 	dispatch::Pays,
-	storage::generator::{StorageMap, StorageValue},
+	storage::{StorageMap, StorageValue},
 	weights::Weight,
 };
 use frame_system::{EventRecord, Pallet as System, Phase};
@@ -972,12 +972,12 @@ fn receive_messages_delivery_proof_rejects_proof_if_trying_to_confirm_more_messa
 #[test]
 fn storage_keys_computed_properly() {
 	assert_eq!(
-		PalletOperatingMode::<TestRuntime>::storage_value_final_key().to_vec(),
+		PalletOperatingMode::<TestRuntime>::hashed_key().to_vec(),
 		bp_messages::storage_keys::operating_mode_key("Messages").0,
 	);
 
 	assert_eq!(
-		OutboundMessages::<TestRuntime>::storage_map_final_key(MessageKey {
+		OutboundMessages::<TestRuntime>::hashed_key_for(MessageKey {
 			lane_id: test_lane_id(),
 			nonce: 42
 		}),
@@ -985,12 +985,12 @@ fn storage_keys_computed_properly() {
 	);
 
 	assert_eq!(
-		OutboundLanes::<TestRuntime>::storage_map_final_key(test_lane_id()),
+		OutboundLanes::<TestRuntime>::hashed_key_for(test_lane_id()),
 		bp_messages::storage_keys::outbound_lane_data_key("Messages", &test_lane_id()).0,
 	);
 
 	assert_eq!(
-		InboundLanes::<TestRuntime>::storage_map_final_key(test_lane_id()),
+		InboundLanes::<TestRuntime>::hashed_key_for(test_lane_id()),
 		bp_messages::storage_keys::inbound_lane_data_key("Messages", &test_lane_id()).0,
 	);
 }

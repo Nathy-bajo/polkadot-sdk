@@ -23,7 +23,7 @@ use bp_header_chain::ChainWithGrandpa;
 use bp_messages::{ChainWithMessages, InboundLaneData, MessageNonce};
 use bp_runtime::{AccountIdOf, Chain};
 use codec::Encode;
-use frame_support::{storage::generator::StorageValue, traits::Get, weights::Weight};
+use frame_support::{storage::StorageValue, traits::Get, weights::Weight};
 use frame_system::limits;
 use pallet_bridge_messages::{ThisChainOf, WeightInfoExt as _};
 
@@ -202,7 +202,7 @@ where
 {
 	// check that the bridge GRANDPA pallet has required name
 	assert_eq!(
-			pallet_bridge_grandpa::PalletOwner::<R, GI>::storage_value_final_key().to_vec(),
+			pallet_bridge_grandpa::PalletOwner::<R, GI>::hashed_key().to_vec(),
 			bp_runtime::storage_value_key(
 				params.with_bridged_chain_grandpa_pallet_name,
 				"PalletOwner",
@@ -210,7 +210,7 @@ where
 			.0,
 		);
 	assert_eq!(
-		pallet_bridge_grandpa::PalletOperatingMode::<R, GI>::storage_value_final_key().to_vec(),
+		pallet_bridge_grandpa::PalletOperatingMode::<R, GI>::hashed_key().to_vec(),
 		bp_runtime::storage_value_key(
 			params.with_bridged_chain_grandpa_pallet_name,
 			"PalletOperatingMode",
@@ -236,7 +236,7 @@ where
 {
 	// check that the bridge messages pallet has required name
 	assert_eq!(
-		pallet_bridge_messages::PalletOwner::<R, MI>::storage_value_final_key().to_vec(),
+		pallet_bridge_messages::PalletOwner::<R, MI>::hashed_key().to_vec(),
 		bp_runtime::storage_value_key(
 			params.with_bridged_chain_messages_pallet_name,
 			"PalletOwner",
@@ -244,7 +244,7 @@ where
 		.0,
 	);
 	assert_eq!(
-		pallet_bridge_messages::PalletOperatingMode::<R, MI>::storage_value_final_key().to_vec(),
+		pallet_bridge_messages::PalletOperatingMode::<R, MI>::hashed_key().to_vec(),
 		bp_runtime::storage_value_key(
 			params.with_bridged_chain_messages_pallet_name,
 			"PalletOperatingMode",

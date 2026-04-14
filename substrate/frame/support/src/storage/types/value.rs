@@ -19,11 +19,12 @@
 
 use crate::{
 	storage::{
-		generator::StorageValue as StorageValueT,
+		self,
 		types::{OptionQuery, QueryKindTrait, StorageEntryMetadataBuilder},
-		StorageAppend, StorageDecodeLength, StorageTryAppend,
+		unhashed, StorageAppend, StorageDecodeLength, StorageTryAppend,
 	},
 	traits::{Get, GetDefault, StorageInfo, StorageInstance},
+	Never,
 };
 use alloc::{vec, vec::Vec};
 use codec::{Decode, Encode, EncodeLike, FullCodec, MaxEncodedLen};
@@ -66,7 +67,7 @@ pub struct StorageValue<Prefix, Value, QueryKind = OptionQuery, OnEmpty = GetDef
 	core::marker::PhantomData<(Prefix, Value, QueryKind, OnEmpty)>,
 );
 
-impl<Prefix, Value, QueryKind, OnEmpty> crate::storage::generator::StorageValue<Value>
+impl<Prefix, Value, QueryKind, OnEmpty> storage::StorageValue<Value>
 	for StorageValue<Prefix, Value, QueryKind, OnEmpty>
 where
 	Prefix: StorageInstance,
@@ -75,20 +76,108 @@ where
 	OnEmpty: Get<QueryKind::Query> + 'static,
 {
 	type Query = QueryKind::Query;
-	fn pallet_prefix() -> &'static [u8] {
-		Prefix::pallet_prefix().as_bytes()
-	}
-	fn storage_prefix() -> &'static [u8] {
-		Prefix::STORAGE_PREFIX.as_bytes()
-	}
-	fn from_optional_value_to_query(v: Option<Value>) -> Self::Query {
-		QueryKind::from_optional_value_to_query(v)
-	}
-	fn from_query_to_optional_value(v: Self::Query) -> Option<Value> {
-		QueryKind::from_query_to_optional_value(v)
-	}
-	fn storage_value_final_key() -> [u8; 32] {
+
+	fn hashed_key() -> [u8; 32] {
 		Prefix::prefix_hash()
+	}
+
+	fn exists() -> bool {
+		unhashed::exists(&Prefix::prefix_hash())
+	}
+
+	fn get() -> Self::Query {
+		let value = unhashed::get(&Prefix::prefix_hash());
+		QueryKind::from_optional_value_to_query(value)
+	}
+
+	fn try_get() -> Result<Value, ()> {
+		unhashed::get(&Prefix::prefix_hash()).ok_or(())
+	}
+
+	fn translate<O: Decode, F: FnOnce(Option<O>) -> Option<Value>>(
+		f: F,
+	) -> Result<Option<Value>, ()> {
+		let key = Prefix::prefix_hash();
+		let maybe_old = unhashed::get_raw(&key)
+			.map(|old_data| O::decode(&mut &old_data[..]).map_err(|_| ()))
+			.transpose()?;
+		let maybe_new = f(maybe_old);
+		if let Some(new) = maybe_new.as_ref() {
+			new.using_encoded(|d| unhashed::put_raw(&key, d));
+		} else {
+			unhashed::kill(&key);
+		}
+		Ok(maybe_new)
+	}
+
+	fn put<Arg: EncodeLike<Value>>(val: Arg) {
+		unhashed::put(&Prefix::prefix_hash(), &val)
+	}
+
+	fn set(maybe_val: Self::Query) {
+		if let Some(val) = QueryKind::from_query_to_optional_value(maybe_val) {
+			unhashed::put(&Prefix::prefix_hash(), &val)
+		} else {
+			unhashed::kill(&Prefix::prefix_hash())
+		}
+	}
+
+	fn mutate<R, F: FnOnce(&mut Self::Query) -> R>(f: F) -> R {
+		Self::try_mutate(|v| Ok::<R, Never>(f(v))).expect("`Never` can not be constructed; qed")
+	}
+
+	fn try_mutate<R, E, F: FnOnce(&mut Self::Query) -> Result<R, E>>(f: F) -> Result<R, E> {
+		let mut val = Self::get();
+		let ret = f(&mut val);
+		if ret.is_ok() {
+			match QueryKind::from_query_to_optional_value(val) {
+				Some(ref val) => Self::put(val),
+				None => Self::kill(),
+			}
+		}
+		ret
+	}
+
+	fn mutate_exists<R, F: FnOnce(&mut Option<Value>) -> R>(f: F) -> R {
+		Self::try_mutate_exists(|v| Ok::<R, Never>(f(v)))
+			.expect("`Never` can not be constructed; qed")
+	}
+
+	fn try_mutate_exists<R, E, F: FnOnce(&mut Option<Value>) -> Result<R, E>>(
+		f: F,
+	) -> Result<R, E> {
+		let mut val = QueryKind::from_query_to_optional_value(Self::get());
+		let ret = f(&mut val);
+		if ret.is_ok() {
+			match val {
+				Some(ref val) => Self::put(val),
+				None => Self::kill(),
+			}
+		}
+		ret
+	}
+
+	fn kill() {
+		unhashed::kill(&Prefix::prefix_hash())
+	}
+
+	fn take() -> Self::Query {
+		let key = Prefix::prefix_hash();
+		let value = unhashed::get(&key);
+		if value.is_some() {
+			unhashed::kill(&key)
+		}
+		QueryKind::from_optional_value_to_query(value)
+	}
+
+	fn append<Item, EncodeLikeItem>(item: EncodeLikeItem)
+	where
+		Item: Encode,
+		EncodeLikeItem: EncodeLike<Item>,
+		Value: StorageAppend<Item>,
+	{
+		let key = Prefix::prefix_hash();
+		sp_io::storage::append(&key, item.encode());
 	}
 }
 
@@ -297,6 +386,23 @@ where
 	}
 }
 
+impl<Prefix, Value, QueryKind, OnEmpty> storage::StoragePrefixedContainer
+	for StorageValue<Prefix, Value, QueryKind, OnEmpty>
+where
+	Prefix: StorageInstance,
+	Value: FullCodec,
+	QueryKind: QueryKindTrait<Value, OnEmpty>,
+	OnEmpty: Get<QueryKind::Query> + 'static,
+{
+	fn pallet_prefix() -> &'static [u8] {
+		Prefix::pallet_prefix().as_bytes()
+	}
+
+	fn storage_prefix() -> &'static [u8] {
+		Prefix::STORAGE_PREFIX.as_bytes()
+	}
+}
+
 impl<Prefix, Value, QueryKind, OnEmpty> crate::traits::StorageInfoTrait
 	for StorageValue<Prefix, Value, QueryKind, OnEmpty>
 where
@@ -307,8 +413,8 @@ where
 {
 	fn storage_info() -> Vec<StorageInfo> {
 		vec![StorageInfo {
-			pallet_name: Self::pallet_prefix().to_vec(),
-			storage_name: Self::storage_prefix().to_vec(),
+			pallet_name: Prefix::pallet_prefix().as_bytes().to_vec(),
+			storage_name: Prefix::STORAGE_PREFIX.as_bytes().to_vec(),
 			prefix: Self::hashed_key().to_vec(),
 			max_values: Some(1),
 			max_size: Some(Value::max_encoded_len().saturated_into()),
@@ -327,8 +433,8 @@ where
 {
 	fn partial_storage_info() -> Vec<StorageInfo> {
 		vec![StorageInfo {
-			pallet_name: Self::pallet_prefix().to_vec(),
-			storage_name: Self::storage_prefix().to_vec(),
+			pallet_name: Prefix::pallet_prefix().as_bytes().to_vec(),
+			storage_name: Prefix::STORAGE_PREFIX.as_bytes().to_vec(),
 			prefix: Self::hashed_key().to_vec(),
 			max_values: Some(1),
 			max_size: None,

@@ -23,7 +23,7 @@ use crate::{
 			EncodeLikeTuple, HasKeyPrefix, HasReversibleKeyPrefix, OptionQuery, QueryKindTrait,
 			StorageEntryMetadataBuilder, StorageNMap, StorageValue, TupleToEncodedIter, ValueQuery,
 		},
-		KeyGenerator, PrefixIterator, StorageAppend, StorageDecodeLength,
+		KeyGenerator, PrefixIterator, StorageAppend, StorageDecodeLength, StoragePrefixedMap,
 	},
 	traits::{Get, GetDefault, StorageInfo, StorageInstance},
 	Never,
@@ -148,8 +148,7 @@ where
 
 	/// The prefix used to generate the key of the map.
 	pub fn map_storage_final_prefix() -> Vec<u8> {
-		use crate::storage::generator::StorageNMap;
-		<Self as MapWrapper>::Map::prefix_hash().to_vec()
+		<Self as MapWrapper>::Map::final_prefix().to_vec()
 	}
 
 	/// Get the storage key used to fetch a value corresponding to a specific key.

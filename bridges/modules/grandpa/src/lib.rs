@@ -846,7 +846,7 @@ mod tests {
 	use frame_support::{
 		assert_err, assert_noop, assert_ok,
 		dispatch::{Pays, PostDispatchInfo},
-		storage::generator::StorageValue,
+		storage::StorageValue,
 	};
 	use frame_system::{EventRecord, Phase};
 	use sp_consensus_grandpa::{ConsensusLog, GRANDPA_ENGINE_ID};
@@ -1665,17 +1665,17 @@ mod tests {
 	#[test]
 	fn storage_keys_computed_properly() {
 		assert_eq!(
-			PalletOperatingMode::<TestRuntime>::storage_value_final_key().to_vec(),
+			PalletOperatingMode::<TestRuntime>::hashed_key().to_vec(),
 			bp_header_chain::storage_keys::pallet_operating_mode_key("Grandpa").0,
 		);
 
 		assert_eq!(
-			CurrentAuthoritySet::<TestRuntime>::storage_value_final_key().to_vec(),
+			CurrentAuthoritySet::<TestRuntime>::hashed_key().to_vec(),
 			bp_header_chain::storage_keys::current_authority_set_key("Grandpa").0,
 		);
 
 		assert_eq!(
-			BestFinalized::<TestRuntime>::storage_value_final_key().to_vec(),
+			BestFinalized::<TestRuntime>::hashed_key().to_vec(),
 			bp_header_chain::storage_keys::best_finalized_key("Grandpa").0,
 		);
 	}
