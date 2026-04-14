@@ -86,36 +86,11 @@ where
 #[cfg(test)]
 mod tests {
 	use super::*;
-	use frame_support::{
-		storage::{generator::StorageMap as StorageMapHelper, storage_prefix},
-		Twox64Concat,
-	};
+	use frame_support::{storage::types::ValueQuery, storage_alias, Twox64Concat};
 	use sp_io::TestExternalities;
-	pub struct MockStorageMap;
 
-	impl StorageMapHelper<u64, u128> for MockStorageMap {
-		type Query = u128;
-		type Hasher = Twox64Concat;
-		fn pallet_prefix() -> &'static [u8] {
-			b"MyModule"
-		}
-
-		fn storage_prefix() -> &'static [u8] {
-			b"MyStorageMap"
-		}
-
-		fn prefix_hash() -> [u8; 32] {
-			storage_prefix(Self::pallet_prefix(), Self::storage_prefix())
-		}
-
-		fn from_optional_value_to_query(v: Option<u128>) -> Self::Query {
-			v.unwrap_or_default()
-		}
-
-		fn from_query_to_optional_value(v: Self::Query) -> Option<u128> {
-			Some(v)
-		}
-	}
+	#[storage_alias]
+	type MockStorageMap = StorageMap<MyModule, Twox64Concat, u64, u128, ValueQuery>;
 
 	type TestSparseBitmap = SparseBitmapImpl<MockStorageMap>;
 
