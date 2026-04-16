@@ -66,7 +66,7 @@ fn transfer_should_never_burn() {
 		// Exactly one consumer ref remaining.
 		assert_eq!(System::consumers(&2), 1);
 
-		let _ = <Assets as fungibles::Mutate<_>>::transfer(0, &1, &2, 50, Protect);
+		let _ = <Assets as fungibles::Mutate<_>>::transfer(&0, &1, &2, 50, Protect);
 		System::assert_has_event(RuntimeEvent::Assets(crate::Event::Transferred {
 			asset_id: 0,
 			from: 1,
@@ -1681,7 +1681,7 @@ fn imbalances_should_work() {
 	build_and_execute(|| {
 		assert_ok!(Assets::force_create(RuntimeOrigin::root(), 0, 1, true, 1));
 
-		let imb = Assets::issue(0, 100);
+		let imb = Assets::issue(&0, 100);
 		assert_eq!(Assets::total_supply(0), 100);
 		assert_eq!(imb.peek(), 100);
 
@@ -1949,9 +1949,9 @@ fn querying_name_symbol_and_decimals_should_work() {
 			12,
 			false
 		));
-		assert_eq!(Assets::name(0), vec![0u8; 10]);
-		assert_eq!(Assets::symbol(0), vec![1u8; 10]);
-		assert_eq!(Assets::decimals(0), 12);
+		assert_eq!(Assets::name(&0), vec![0u8; 10]);
+		assert_eq!(Assets::symbol(&0), vec![1u8; 10]);
+		assert_eq!(Assets::decimals(&0), 12);
 	});
 }
 
@@ -1962,11 +1962,11 @@ fn querying_allowance_should_work() {
 		assert_ok!(Assets::force_create(RuntimeOrigin::root(), 0, 1, true, 1));
 		assert_ok!(Assets::mint(RuntimeOrigin::signed(1), 0, 1, 100));
 		Balances::make_free_balance_be(&1, 2);
-		assert_ok!(Assets::approve(0, &1, &2, 50));
-		assert_eq!(Assets::allowance(0, &1, &2), 50);
+		assert_ok!(Assets::approve(&0, &1, &2, 50));
+		assert_eq!(Assets::allowance(&0, &1, &2), 50);
 		// Transfer asset 0, from owner 1 and delegate 2 to destination 3
-		assert_ok!(Assets::transfer_from(0, &1, &2, &3, 50));
-		assert_eq!(Assets::allowance(0, &1, &2), 0);
+		assert_ok!(Assets::transfer_from(&0, &1, &2, &3, 50));
+		assert_eq!(Assets::allowance(&0, &1, &2), 0);
 	});
 }
 
@@ -1995,10 +1995,10 @@ fn querying_roles_should_work() {
 			// Freezer
 			4,
 		));
-		assert_eq!(Assets::owner(0), Some(1));
-		assert_eq!(Assets::issuer(0), Some(2));
-		assert_eq!(Assets::admin(0), Some(3));
-		assert_eq!(Assets::freezer(0), Some(4));
+		assert_eq!(Assets::owner(&0), Some(1));
+		assert_eq!(Assets::issuer(&0), Some(2));
+		assert_eq!(Assets::admin(&0), Some(3));
+		assert_eq!(Assets::freezer(&0), Some(4));
 	});
 }
 
@@ -2161,20 +2161,20 @@ fn increasing_or_decreasing_destroying_asset_should_not_work() {
 		assert_ok!(Assets::mint(RuntimeOrigin::signed(1), 0, 1, 100));
 		assert_eq!(Assets::balance(0, 1), 100);
 
-		assert_eq!(Assets::can_deposit(0, &1, 10, Provenance::Extant), DepositConsequence::Success);
-		assert_eq!(Assets::can_withdraw(0, &1, 10), WithdrawConsequence::<_>::Success);
-		assert_eq!(Assets::can_increase(0, &1, 10, false), DepositConsequence::Success);
-		assert_eq!(Assets::can_decrease(0, &1, 10, false), WithdrawConsequence::<_>::Success);
+		assert_eq!(Assets::can_deposit(&0, &1, 10, Provenance::Extant), DepositConsequence::Success);
+		assert_eq!(Assets::can_withdraw(&0, &1, 10), WithdrawConsequence::<_>::Success);
+		assert_eq!(Assets::can_increase(&0, &1, 10, false), DepositConsequence::Success);
+		assert_eq!(Assets::can_decrease(&0, &1, 10, false), WithdrawConsequence::<_>::Success);
 
 		assert_ok!(Assets::start_destroy(admin_origin, 0));
 
 		assert_eq!(
-			Assets::can_deposit(0, &1, 10, Provenance::Extant),
+			Assets::can_deposit(&0, &1, 10, Provenance::Extant),
 			DepositConsequence::UnknownAsset
 		);
-		assert_eq!(Assets::can_withdraw(0, &1, 10), WithdrawConsequence::<_>::UnknownAsset);
-		assert_eq!(Assets::can_increase(0, &1, 10, false), DepositConsequence::UnknownAsset);
-		assert_eq!(Assets::can_decrease(0, &1, 10, false), WithdrawConsequence::<_>::UnknownAsset);
+		assert_eq!(Assets::can_withdraw(&0, &1, 10), WithdrawConsequence::<_>::UnknownAsset);
+		assert_eq!(Assets::can_increase(&0, &1, 10, false), DepositConsequence::UnknownAsset);
+		assert_eq!(Assets::can_decrease(&0, &1, 10, false), WithdrawConsequence::<_>::UnknownAsset);
 	});
 }
 
