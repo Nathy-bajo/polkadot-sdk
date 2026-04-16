@@ -40,7 +40,7 @@ fn pay_over_xcm_works() {
 
 	new_test_ext().execute_with(|| {
 		// Check starting balance
-		assert_eq!(mock::Assets::balance(&0, &recipient), 0);
+		assert_eq!(mock::Assets::balance(0, &recipient), 0);
 
 		assert_ok!(PayOverXcm::<
 			InteriorAccount,
@@ -89,7 +89,7 @@ fn pay_over_xcm_works() {
 			Weight::MAX,
 			Weight::zero(),
 		);
-		assert_eq!(mock::Assets::balance(&0, &recipient), amount);
+		assert_eq!(mock::Assets::balance(0, &recipient), amount);
 	});
 }
 
@@ -108,7 +108,7 @@ fn pay_over_xcm_governance_body() {
 
 	new_test_ext().execute_with(|| {
 		// Check starting balance
-		assert_eq!(mock::Assets::balance(&relay_asset_index, &recipient), 0);
+		assert_eq!(mock::Assets::balance(relay_asset_index, &recipient), 0);
 
 		assert_ok!(PayOverXcm::<
 			InteriorBody,
@@ -156,7 +156,7 @@ fn pay_over_xcm_governance_body() {
 			Weight::MAX,
 			Weight::zero(),
 		);
-		assert_eq!(mock::Assets::balance(&relay_asset_index, &recipient), amount);
+		assert_eq!(mock::Assets::balance(relay_asset_index, &recipient), amount);
 	});
 }
 
@@ -183,7 +183,7 @@ fn pay_over_xcm_fails_when_delivery_fees_cannot_be_paid() {
 		// Verify sender doesn't have funds to pay delivery fees
 		// SenderAccount is AccountId::new([3u8; 32]) which is different from
 		// sibling_chain_account_id(42, [3u8; 32]) that has funds in genesis
-		assert_eq!(mock::Assets::balance(&0, &SenderAccount::get()), 0);
+		assert_eq!(mock::Assets::balance(0, &SenderAccount::get()), 0);
 
 		// Pay should fail because delivery fees cannot be charged
 		// The error is FailedToTransactAsset because the asset transactor cannot withdraw fees
@@ -228,7 +228,7 @@ fn pay_over_xcm_charges_delivery_fees_before_sending() {
 	new_test_ext().execute_with(|| {
 		// Fund the sender account with the delivery fee asset
 		mock::Assets::mint_into(&0, &SenderAccount::get(), sender_initial_balance).unwrap();
-		assert_eq!(mock::Assets::balance(&0, &SenderAccount::get()), sender_initial_balance);
+		assert_eq!(mock::Assets::balance(0, &SenderAccount::get()), sender_initial_balance);
 
 		// Set delivery fee
 		set_send_price((Here, delivery_fee_amount));
@@ -247,7 +247,7 @@ fn pay_over_xcm_charges_delivery_fees_before_sending() {
 
 		// Verify delivery fees were charged from sender
 		assert_eq!(
-			mock::Assets::balance(&0, &SenderAccount::get()),
+			mock::Assets::balance(0, &SenderAccount::get()),
 			sender_initial_balance - delivery_fee_amount,
 			"Delivery fees should be deducted from sender's balance"
 		);

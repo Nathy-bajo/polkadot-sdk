@@ -321,7 +321,7 @@ fn register_rococo_asset_on_ethereum_from_rah() {
 	// SA-of-RAH-on-WAH needs to have balance to pay for fees and asset creation deposit
 	AssetHubWestend::execute_with(|| {
 		assert_ok!(<AssetHubWestend as AssetHubWestendPallet>::ForeignAssets::mint_into(
-			ethereum().try_into().unwrap(),
+			&ethereum(),
 			&sa_of_rah_on_wah,
 			INITIAL_FUND,
 		));

@@ -93,7 +93,7 @@ fn send_token_to_rococo_v2() {
 		));
 
 		assert!(<AssetHubRococo as AssetHubRococoPallet>::ForeignAssets::asset_exists(
-			token_location.clone().try_into().unwrap(),
+			&token_location,
 		));
 	});
 	register_foreign_asset(token_location.clone());
@@ -228,7 +228,7 @@ fn send_token_to_rococo_v2() {
 
 		// Beneficiary received the token transfer value
 		assert_eq!(
-			ForeignAssets::balance(&token_location, &AccountId::from(beneficiary_acc_bytes)),
+			ForeignAssets::balance(token_location, &AccountId::from(beneficiary_acc_bytes)),
 			token_transfer_value
 		);
 

@@ -245,11 +245,11 @@ fn send_token_v2() {
 
 		// Beneficiary received the token transfer value
 		assert_eq!(
-			ForeignAssets::balance(&token_location, &AccountId::from(beneficiary_acc_bytes)),
+			ForeignAssets::balance(token_location, &AccountId::from(beneficiary_acc_bytes)),
 			token_transfer_value
 		);
 		// Claimer received eth refund for fees paid
-		assert!(ForeignAssets::balance(&eth_location(), &receiver) > 0);
+		assert!(ForeignAssets::balance(eth_location(), &receiver) > 0);
 
 		let events = AssetHubWestend::events();
 		// Check that no assets were trapped
@@ -348,13 +348,13 @@ fn send_weth_v2() {
 
 		// Beneficiary received the token transfer value
 		assert_eq!(
-			ForeignAssets::balance(&weth_location(), &AccountId::from(beneficiary_acc_bytes)),
+			ForeignAssets::balance(weth_location(), &AccountId::from(beneficiary_acc_bytes)),
 			token_transfer_value
 		);
 
 		// Claimer received eth refund for fees paid
 		assert!(
-			ForeignAssets::balance(&eth_location(), &AccountId::from(beneficiary_acc_bytes)) > 0
+			ForeignAssets::balance(eth_location(), &AccountId::from(beneficiary_acc_bytes)) > 0
 		);
 
 		let events = AssetHubWestend::events();
@@ -540,7 +540,7 @@ fn send_token_to_penpal_v2() {
 		));
 
 		assert!(<PenpalB as PenpalBPallet>::Assets::asset_exists(
-			token_location.clone().try_into().unwrap(),
+			&token_location,
 		));
 
 		// Register eth on Penpal
@@ -553,7 +553,7 @@ fn send_token_to_penpal_v2() {
 		));
 
 		assert!(<PenpalB as PenpalBPallet>::Assets::asset_exists(
-			eth_location().try_into().unwrap(),
+			&eth_location(),
 		));
 
 		assert_ok!(<PenpalB as Chain>::System::set_storage(
@@ -701,7 +701,7 @@ fn send_token_to_penpal_v2() {
 
 		// Beneficiary received the token transfer value
 		assert_eq!(
-			Assets::balance(&token_location, &AccountId::from(beneficiary_acc_bytes)),
+			Assets::balance(token_location, &AccountId::from(beneficiary_acc_bytes)),
 			token_transfer_value
 		);
 
@@ -1006,7 +1006,7 @@ fn invalid_claimer_does_not_fail_the_message() {
 
 		// Beneficiary received the token transfer value
 		assert_eq!(
-			ForeignAssets::balance(&weth_location(), &AccountId::from(beneficiary_acc)),
+			ForeignAssets::balance(weth_location(), &AccountId::from(beneficiary_acc)),
 			token_transfer_value
 		);
 

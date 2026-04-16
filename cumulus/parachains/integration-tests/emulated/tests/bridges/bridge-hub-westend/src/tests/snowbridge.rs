@@ -1443,7 +1443,7 @@ fn transfer_penpal_native_asset() {
 
 	PenpalB::execute_with(|| {
 		assert_ok!(<PenpalB as PenpalBPallet>::Assets::mint_into(
-			Location::parent(),
+			&Location::parent(),
 			&PenpalBSender::get(),
 			INITIAL_FUND,
 		));
@@ -1646,12 +1646,12 @@ fn transfer_penpal_teleport_enabled_asset() {
 	PenpalB::fund_accounts(vec![(PenpalCheckingAccount::get(), INITIAL_FUND)]);
 	PenpalB::execute_with(|| {
 		assert_ok!(<PenpalB as PenpalBPallet>::Assets::mint_into(
-			PenpalLocalPen2Asset::get(),
+			&PenpalLocalPen2Asset::get(),
 			&PenpalBSender::get(),
 			INITIAL_FUND,
 		));
 		assert_ok!(<PenpalB as PenpalBPallet>::Assets::mint_into(
-			Location::parent(),
+			&Location::parent(),
 			&PenpalBSender::get(),
 			INITIAL_FUND,
 		));

@@ -196,7 +196,7 @@ fn test_buy_and_refund_weight_with_swap_local_asset_xcm_trader() {
 			// init asset, balances and pool.
 			assert_ok!(<Assets as Create<_>>::create(asset_1, bob.clone(), true, 10));
 
-			assert_ok!(Assets::mint_into(asset_1, &bob, initial_balance));
+			assert_ok!(Assets::mint_into(&asset_1, &bob, initial_balance));
 			assert_ok!(Balances::mint_into(&bob, initial_balance));
 			assert_ok!(Balances::mint_into(&staking_pot, initial_balance));
 
@@ -218,7 +218,7 @@ fn test_buy_and_refund_weight_with_swap_local_asset_xcm_trader() {
 			));
 
 			// keep initial total issuance to assert later.
-			let asset_total_issuance = Assets::total_issuance(asset_1);
+			let asset_total_issuance = Assets::total_issuance(&asset_1);
 			let native_total_issuance = Balances::total_issuance();
 
 			// prepare input to buy weight.
@@ -242,7 +242,7 @@ fn test_buy_and_refund_weight_with_swap_local_asset_xcm_trader() {
 				.get(&asset_1_location.clone().into())
 				.map_or(0, |a| a.amount());
 			assert_eq!(unused_amount, extra_amount);
-			assert_eq!(Assets::total_issuance(asset_1), asset_total_issuance);
+			assert_eq!(Assets::total_issuance(&asset_1), asset_total_issuance);
 
 			// prepare input to refund weight.
 			let refund_weight = Weight::from_parts(1_000_000_000, 0);
@@ -266,7 +266,7 @@ fn test_buy_and_refund_weight_with_swap_local_asset_xcm_trader() {
 			// account.
 			drop(trader);
 			assert_eq!(Balances::balance(&staking_pot), initial_balance + fee - refund);
-			assert_eq!(Assets::total_issuance(asset_1), asset_total_issuance);
+			assert_eq!(Assets::total_issuance(&asset_1), asset_total_issuance);
 			assert_eq!(Balances::total_issuance(), native_total_issuance);
 		})
 }
@@ -303,7 +303,7 @@ fn test_buy_and_refund_weight_with_swap_foreign_asset_xcm_trader() {
 				10
 			));
 
-			assert_ok!(ForeignAssets::mint_into(foreign_location.clone(), &bob, initial_balance));
+			assert_ok!(ForeignAssets::mint_into(&foreign_location.clone(), &bob, initial_balance));
 			assert_ok!(Balances::mint_into(&bob, initial_balance));
 			assert_ok!(Balances::mint_into(&staking_pot, initial_balance));
 
@@ -325,7 +325,7 @@ fn test_buy_and_refund_weight_with_swap_foreign_asset_xcm_trader() {
 			));
 
 			// keep initial total issuance to assert later.
-			let asset_total_issuance = ForeignAssets::total_issuance(foreign_location.clone());
+			let asset_total_issuance = ForeignAssets::total_issuance(&foreign_location.clone());
 			let native_total_issuance = Balances::total_issuance();
 
 			// prepare input to buy weight.
@@ -350,7 +350,7 @@ fn test_buy_and_refund_weight_with_swap_foreign_asset_xcm_trader() {
 				.map_or(0, |a| a.amount());
 			assert_eq!(unused_amount, extra_amount);
 			assert_eq!(
-				ForeignAssets::total_issuance(foreign_location.clone()),
+				ForeignAssets::total_issuance(&foreign_location.clone()),
 				asset_total_issuance
 			);
 
@@ -373,7 +373,7 @@ fn test_buy_and_refund_weight_with_swap_foreign_asset_xcm_trader() {
 			// account.
 			drop(trader);
 			assert_eq!(Balances::balance(&staking_pot), initial_balance + fee - refund);
-			assert_eq!(ForeignAssets::total_issuance(foreign_location), asset_total_issuance);
+			assert_eq!(ForeignAssets::total_issuance(&foreign_location), asset_total_issuance);
 			assert_eq!(Balances::total_issuance(), native_total_issuance);
 		})
 }

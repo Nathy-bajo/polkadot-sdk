@@ -79,14 +79,14 @@ pub fn register_assets_on_penpal() {
 	PenpalB::execute_with(|| {
 		assert_ok!(<PenpalB as PenpalBPallet>::Assets::force_create(
 			<PenpalB as Chain>::RuntimeOrigin::root(),
-			weth_location().try_into().unwrap(),
+			weth_location(),
 			ethereum_sovereign.clone().into(),
 			true,
 			1,
 		));
 		assert_ok!(<PenpalB as PenpalBPallet>::Assets::force_create(
 			<PenpalB as Chain>::RuntimeOrigin::root(),
-			ethereum().try_into().unwrap(),
+			ethereum(),
 			ethereum_sovereign.into(),
 			true,
 			1,
@@ -107,7 +107,7 @@ pub fn register_foreign_asset(token_location: Location) {
 			1000,
 		));
 		assert!(<AssetHubWestend as AssetHubWestendPallet>::ForeignAssets::asset_exists(
-			token_location.clone().try_into().unwrap(),
+			&token_location,
 		));
 	});
 	AssetHubWestend::set_foreign_asset_reserves(
@@ -123,17 +123,17 @@ pub fn mint_pal_on_ah() {
 		let penpal_asset_id = Location::new(1, Parachain(PenpalB::para_id().into()));
 
 		assert!(<AssetHubWestend as AssetHubWestendPallet>::ForeignAssets::asset_exists(
-			penpal_asset_id.clone(),
+			&penpal_asset_id,
 		));
 
 		assert_ok!(<AssetHubWestend as AssetHubWestendPallet>::ForeignAssets::mint_into(
-			penpal_asset_id.clone(),
+			&penpal_asset_id,
 			&AssetHubWestendReceiver::get(),
 			TOKEN_AMOUNT,
 		));
 
 		assert_ok!(<AssetHubWestend as AssetHubWestendPallet>::ForeignAssets::mint_into(
-			penpal_asset_id.clone(),
+			&penpal_asset_id,
 			&AssetHubWestendSender::get(),
 			TOKEN_AMOUNT,
 		));
@@ -160,17 +160,17 @@ pub fn fund_on_penpal() {
 	]);
 	PenpalB::execute_with(|| {
 		assert_ok!(<PenpalB as PenpalBPallet>::Assets::mint_into(
-			Location::parent(),
+			&Location::parent(),
 			&PenpalBReceiver::get(),
 			INITIAL_FUND,
 		));
 		assert_ok!(<PenpalB as PenpalBPallet>::Assets::mint_into(
-			Location::parent(),
+			&Location::parent(),
 			&PenpalBSender::get(),
 			INITIAL_FUND,
 		));
 		assert_ok!(<PenpalB as PenpalBPallet>::Assets::mint_into(
-			Location::parent(),
+			&Location::parent(),
 			&sudo_account,
 			INITIAL_FUND,
 		));
@@ -188,49 +188,49 @@ pub fn fund_on_penpal() {
 	});
 	PenpalB::execute_with(|| {
 		assert_ok!(<PenpalB as PenpalBPallet>::Assets::mint_into(
-			PenpalLocalPen2Asset::get(),
+			&PenpalLocalPen2Asset::get(),
 			&PenpalBReceiver::get(),
 			INITIAL_FUND,
 		));
 		assert_ok!(<PenpalB as PenpalBPallet>::Assets::mint_into(
-			PenpalLocalPen2Asset::get(),
+			&PenpalLocalPen2Asset::get(),
 			&PenpalBSender::get(),
 			INITIAL_FUND,
 		));
 		assert_ok!(<PenpalB as PenpalBPallet>::Assets::mint_into(
-			PenpalLocalPen2Asset::get(),
+			&PenpalLocalPen2Asset::get(),
 			&sudo_account,
 			INITIAL_FUND,
 		));
 	});
 	PenpalB::execute_with(|| {
 		assert_ok!(<PenpalB as PenpalBPallet>::Assets::mint_into(
-			weth_location().try_into().unwrap(),
+			&weth_location(),
 			&PenpalBReceiver::get(),
 			INITIAL_FUND,
 		));
 		assert_ok!(<PenpalB as PenpalBPallet>::Assets::mint_into(
-			weth_location().try_into().unwrap(),
+			&weth_location(),
 			&PenpalBSender::get(),
 			INITIAL_FUND,
 		));
 		assert_ok!(<PenpalB as PenpalBPallet>::Assets::mint_into(
-			weth_location().try_into().unwrap(),
+			&weth_location(),
 			&sudo_account,
 			INITIAL_FUND,
 		));
 		assert_ok!(<PenpalB as PenpalBPallet>::Assets::mint_into(
-			ethereum().try_into().unwrap(),
+			&ethereum(),
 			&PenpalBReceiver::get(),
 			INITIAL_FUND,
 		));
 		assert_ok!(<PenpalB as PenpalBPallet>::Assets::mint_into(
-			ethereum().try_into().unwrap(),
+			&ethereum(),
 			&PenpalBSender::get(),
 			INITIAL_FUND,
 		));
 		assert_ok!(<PenpalB as PenpalBPallet>::Assets::mint_into(
-			ethereum().try_into().unwrap(),
+			&ethereum(),
 			&sudo_account,
 			INITIAL_FUND,
 		));
@@ -270,43 +270,43 @@ pub fn fund_on_ah() {
 
 	AssetHubWestend::execute_with(|| {
 		assert_ok!(<AssetHubWestend as AssetHubWestendPallet>::ForeignAssets::mint_into(
-			weth_location().try_into().unwrap(),
+			&weth_location(),
 			&penpal_sovereign,
 			INITIAL_FUND,
 		));
 		assert_ok!(<AssetHubWestend as AssetHubWestendPallet>::ForeignAssets::mint_into(
-			weth_location().try_into().unwrap(),
+			&weth_location(),
 			&penpal_user_sovereign,
 			INITIAL_FUND,
 		));
 		assert_ok!(<AssetHubWestend as AssetHubWestendPallet>::ForeignAssets::mint_into(
-			weth_location().try_into().unwrap(),
+			&weth_location(),
 			&AssetHubWestendReceiver::get(),
 			INITIAL_FUND,
 		));
 		assert_ok!(<AssetHubWestend as AssetHubWestendPallet>::ForeignAssets::mint_into(
-			weth_location().try_into().unwrap(),
+			&weth_location(),
 			&AssetHubWestendSender::get(),
 			INITIAL_FUND,
 		));
 
 		assert_ok!(<AssetHubWestend as AssetHubWestendPallet>::ForeignAssets::mint_into(
-			ethereum().try_into().unwrap(),
+			&ethereum(),
 			&penpal_sovereign,
 			INITIAL_FUND,
 		));
 		assert_ok!(<AssetHubWestend as AssetHubWestendPallet>::ForeignAssets::mint_into(
-			ethereum().try_into().unwrap(),
+			&ethereum(),
 			&penpal_user_sovereign,
 			INITIAL_FUND,
 		));
 		assert_ok!(<AssetHubWestend as AssetHubWestendPallet>::ForeignAssets::mint_into(
-			ethereum().try_into().unwrap(),
+			&ethereum(),
 			&AssetHubWestendReceiver::get(),
 			INITIAL_FUND,
 		));
 		assert_ok!(<AssetHubWestend as AssetHubWestendPallet>::ForeignAssets::mint_into(
-			ethereum().try_into().unwrap(),
+			&ethereum(),
 			&AssetHubWestendSender::get(),
 			INITIAL_FUND,
 		));

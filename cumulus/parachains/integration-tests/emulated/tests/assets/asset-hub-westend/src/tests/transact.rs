@@ -105,7 +105,7 @@ fn transact_from_para_to_para_through_asset_hub() {
 	AssetHubWestend::execute_with(|| {
 		type Assets = <AssetHubWestend as AssetHubWestendPallet>::Assets;
 		assert_ok!(<Assets as Mutate<_>>::mint_into(
-			USDT_ID,
+			&USDT_ID,
 			&sov_of_sender_on_asset_hub.clone().into(),
 			fee_amount_to_send,
 		));
@@ -137,7 +137,7 @@ fn transact_from_para_to_para_through_asset_hub() {
 	PenpalA::execute_with(|| {
 		type Assets = <PenpalA as PenpalAPallet>::Assets;
 		assert_ok!(<Assets as Mutate<_>>::mint_into(
-			usdt_from_asset_hub.clone(),
+			&usdt_from_asset_hub,
 			&sender,
 			fee_amount_to_send,
 		));

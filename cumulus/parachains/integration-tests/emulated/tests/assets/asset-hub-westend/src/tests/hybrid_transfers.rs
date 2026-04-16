@@ -244,7 +244,7 @@ fn transfer_foreign_assets_from_asset_hub_to_para() {
 	let sender_rocs_before = AssetHubWestend::execute_with(|| {
 		type ForeignAssets = <AssetHubWestend as AssetHubWestendPallet>::ForeignAssets;
 		<ForeignAssets as Inspect<_>>::balance(
-			roc_at_westend_parachains.clone().try_into().unwrap(),
+			&roc_at_westend_parachains,
 			&sender,
 		)
 	});
@@ -271,7 +271,7 @@ fn transfer_foreign_assets_from_asset_hub_to_para() {
 	let sender_rocs_after = AssetHubWestend::execute_with(|| {
 		type ForeignAssets = <AssetHubWestend as AssetHubWestendPallet>::ForeignAssets;
 		<ForeignAssets as Inspect<_>>::balance(
-			roc_at_westend_parachains.clone().try_into().unwrap(),
+			&roc_at_westend_parachains,
 			&sender,
 		)
 	});
@@ -417,7 +417,7 @@ fn transfer_foreign_assets_from_para_to_asset_hub() {
 	let receiver_rocs_before = AssetHubWestend::execute_with(|| {
 		type ForeignAssets = <AssetHubWestend as AssetHubWestendPallet>::ForeignAssets;
 		<ForeignAssets as Inspect<_>>::balance(
-			roc_at_westend_parachains.clone().try_into().unwrap(),
+			&roc_at_westend_parachains,
 			&receiver,
 		)
 	});
@@ -444,7 +444,7 @@ fn transfer_foreign_assets_from_para_to_asset_hub() {
 	let receiver_rocs_after = AssetHubWestend::execute_with(|| {
 		type ForeignAssets = <AssetHubWestend as AssetHubWestendPallet>::ForeignAssets;
 		<ForeignAssets as Inspect<_>>::balance(
-			roc_at_westend_parachains.clone().try_into().unwrap(),
+			&roc_at_westend_parachains,
 			&receiver,
 		)
 	});
@@ -595,7 +595,7 @@ fn transfer_foreign_assets_from_para_to_para_through_asset_hub() {
 	let rocs_in_sender_reserve_on_ah_before = AssetHubWestend::execute_with(|| {
 		type Assets = <AssetHubWestend as AssetHubWestendPallet>::ForeignAssets;
 		<Assets as Inspect<_>>::balance(
-			roc_at_westend_parachains.clone().try_into().unwrap(),
+			&roc_at_westend_parachains,
 			&sov_of_sender_on_ah,
 		)
 	});
@@ -604,7 +604,7 @@ fn transfer_foreign_assets_from_para_to_para_through_asset_hub() {
 	let rocs_in_receiver_reserve_on_ah_before = AssetHubWestend::execute_with(|| {
 		type Assets = <AssetHubWestend as AssetHubWestendPallet>::ForeignAssets;
 		<Assets as Inspect<_>>::balance(
-			roc_at_westend_parachains.clone().try_into().unwrap(),
+			&roc_at_westend_parachains,
 			&sov_of_receiver_on_ah,
 		)
 	});
@@ -643,7 +643,7 @@ fn transfer_foreign_assets_from_para_to_para_through_asset_hub() {
 	let rocs_in_sender_reserve_on_ah_after = AssetHubWestend::execute_with(|| {
 		type Assets = <AssetHubWestend as AssetHubWestendPallet>::ForeignAssets;
 		<Assets as Inspect<_>>::balance(
-			roc_at_westend_parachains.clone().try_into().unwrap(),
+			&roc_at_westend_parachains,
 			&sov_of_sender_on_ah,
 		)
 	});
@@ -652,7 +652,7 @@ fn transfer_foreign_assets_from_para_to_para_through_asset_hub() {
 	let rocs_in_receiver_reserve_on_ah_after = AssetHubWestend::execute_with(|| {
 		type Assets = <AssetHubWestend as AssetHubWestendPallet>::ForeignAssets;
 		<Assets as Inspect<_>>::balance(
-			roc_at_westend_parachains.clone().try_into().unwrap(),
+			&roc_at_westend_parachains,
 			&sov_of_receiver_on_ah,
 		)
 	});

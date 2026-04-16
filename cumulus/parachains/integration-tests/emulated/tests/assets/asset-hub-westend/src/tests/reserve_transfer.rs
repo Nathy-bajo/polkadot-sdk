@@ -1352,7 +1352,7 @@ fn reserve_transfer_usdt_from_asset_hub_to_para() {
 		use frame_support::traits::tokens::fungibles::Mutate;
 		type Assets = <AssetHubWestend as AssetHubWestendPallet>::Assets;
 		assert_ok!(<Assets as Mutate<_>>::mint_into(
-			usdt_id.into(),
+			(&usdt_id).into(),
 			&AssetHubWestendSender::get(),
 			asset_amount_to_send + 10_000_000_000_000, // Make sure it has enough.
 		));
@@ -1467,7 +1467,7 @@ fn reserve_transfer_usdt_from_para_to_para_through_asset_hub() {
 		use frame_support::traits::tokens::fungibles::Mutate;
 		type Assets = <AssetHubWestend as AssetHubWestendPallet>::Assets;
 		assert_ok!(<Assets as Mutate<_>>::mint_into(
-			usdt_id.into(),
+			(&usdt_id).into(),
 			&sov_of_sender_on_asset_hub.clone().into(),
 			asset_amount_to_send + fee_amount_to_send,
 		));
@@ -1491,7 +1491,7 @@ fn reserve_transfer_usdt_from_para_to_para_through_asset_hub() {
 		use frame_support::traits::tokens::fungibles::Mutate;
 		type Assets = <PenpalA as PenpalAPallet>::Assets;
 		assert_ok!(<Assets as Mutate<_>>::mint_into(
-			usdt_from_asset_hub.clone(),
+			&usdt_from_asset_hub,
 			&sender,
 			asset_amount_to_send + fee_amount_to_send,
 		));
