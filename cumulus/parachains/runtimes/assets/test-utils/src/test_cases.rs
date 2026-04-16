@@ -1298,25 +1298,25 @@ pub fn create_and_manage_foreign_assets_for_local_consensus_parachain_assets_wor
 			use frame_support::traits::fungibles::roles::Inspect as InspectRoles;
 			assert_eq!(
 				<pallet_assets::Pallet<Runtime, ForeignAssetsPalletInstance>>::owner(
-					asset_id.clone().into()
+					&asset_id.clone().into()
 				),
 				Some(foreign_creator_as_account_id.clone())
 			);
 			assert_eq!(
 				<pallet_assets::Pallet<Runtime, ForeignAssetsPalletInstance>>::admin(
-					asset_id.clone().into()
+					&asset_id.clone().into()
 				),
 				Some(foreign_creator_as_account_id.clone())
 			);
 			assert_eq!(
 				<pallet_assets::Pallet<Runtime, ForeignAssetsPalletInstance>>::issuer(
-					asset_id.clone().into()
+					&asset_id.clone().into()
 				),
 				Some(foreign_creator_as_account_id.clone())
 			);
 			assert_eq!(
 				<pallet_assets::Pallet<Runtime, ForeignAssetsPalletInstance>>::freezer(
-					asset_id.clone().into()
+					&asset_id.clone().into()
 				),
 				Some(bob_account.clone())
 			);
@@ -2007,7 +2007,7 @@ pub fn exchange_asset_on_asset_hub_works<
 
 			if create_pool {
 				assert_ok!(pallet_assets::Pallet::<Runtime, ForeignAssetsPalletInstance>::mint_into(
-					asset_location.clone(),
+					&asset_location.clone(),
 					&account,
 					10_000_000_000_000
 				));
@@ -2036,7 +2036,7 @@ pub fn exchange_asset_on_asset_hub_works<
 
 			let foreign_balance_before = pallet_assets::Pallet::<Runtime, ForeignAssetsPalletInstance>::balance(asset_location.clone().into(), &account);
 			let native_balance_before = pallet_balances::Pallet::<Runtime>::total_balance(&account);
-			let foreign_issuance_before = pallet_assets::Pallet::<Runtime, ForeignAssetsPalletInstance>::total_issuance(asset_location.clone());
+			let foreign_issuance_before = pallet_assets::Pallet::<Runtime, ForeignAssetsPalletInstance>::total_issuance(&asset_location.clone());
 			let native_issuance_before = pallet_balances::Pallet::<Runtime>::total_issuance();
 
 			let want_amount_min = if create_pool && expected_error.is_none() {
@@ -2100,7 +2100,7 @@ pub fn exchange_asset_on_asset_hub_works<
 					"Expected WND balance to decrease by {give_amount} units, got {native_balance_after} from {native_balance_before}"
 				);
 			}
-			let foreign_issuance_after = pallet_assets::Pallet::<Runtime, ForeignAssetsPalletInstance>::total_issuance(asset_location.into());
+			let foreign_issuance_after = pallet_assets::Pallet::<Runtime, ForeignAssetsPalletInstance>::total_issuance((&asset_location).into());
 			let native_issuance_after = pallet_balances::Pallet::<Runtime>::total_issuance();
 			assert_eq!(
 				foreign_issuance_before, foreign_issuance_after,
