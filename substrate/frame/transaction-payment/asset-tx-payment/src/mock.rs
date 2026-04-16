@@ -243,7 +243,7 @@ impl BenchmarkHelperTrait<u64, u32, u32> for Helper {
 		let beneficiary = <Runtime as system::Config>::Lookup::unlookup(caller);
 		let balance = 1000;
 		assert_ok!(Assets::mint_into(&asset_id, &beneficiary, balance));
-		assert_eq!(Assets::balance(&asset_id, &caller), balance);
+		assert_eq!(Assets::balance(asset_id, &caller), balance);
 
 		use frame_support::traits::Currency;
 		let _ = Balances::deposit_creating(&account, u32::MAX.into());
@@ -252,6 +252,6 @@ impl BenchmarkHelperTrait<u64, u32, u32> for Helper {
 		let balance = 1000;
 
 		assert_ok!(Assets::mint_into(&asset_id, &beneficiary, balance));
-		assert_eq!(Assets::balance(&asset_id, &account), balance);
+		assert_eq!(Assets::balance(asset_id, &account), balance);
 	}
 }

@@ -367,6 +367,6 @@ impl BenchmarkHelperTrait<u64, NativeOrWithId<u32>, NativeOrWithId<u32>> for Hel
 		let balance = 1000;
 
 		assert_ok!(Assets::mint_into(&asset_idx, &beneficiary, balance));
-		assert_eq!(Assets::balance(&asset_idx, &account), balance);
+		assert_eq!(Assets::balance(asset_idx, &account), balance);
 	}
 }

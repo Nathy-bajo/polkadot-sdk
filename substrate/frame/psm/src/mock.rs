@@ -149,7 +149,7 @@ impl crate::BenchmarkHelper<u32, u64> for PsmBenchmarkHelper {
 		// Fund the owner's native balance so they can pay the metadata deposit.
 		let _ = Balances::force_set_balance(RuntimeOrigin::root(), *owner, INITIAL_BALANCE);
 		let _ = <Assets as MetadataMutate<u64>>::set(
-			asset_id,
+			&asset_id,
 			owner,
 			b"Benchmark".to_vec(),
 			b"BNC".to_vec(),
