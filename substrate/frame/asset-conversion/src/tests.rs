@@ -81,7 +81,7 @@ fn create_tokens_with_ed(owner: u128, tokens: Vec<NativeOrWithId<u32>>, ed: u128
 }
 
 fn balance(owner: u128, token_id: NativeOrWithId<u32>) -> u128 {
-	<<Test as Config>::Assets>::balance(token_id, &owner)
+	<<Test as Config>::Assets>::balance(&token_id, &owner)
 }
 
 fn pool_balance(owner: u128, token_id: u32) -> u128 {
@@ -89,7 +89,7 @@ fn pool_balance(owner: u128, token_id: u32) -> u128 {
 }
 
 fn get_native_ed() -> u128 {
-	<<Test as Config>::Assets>::minimum_balance(NativeOrWithId::Native)
+	<<Test as Config>::Assets>::minimum_balance(&NativeOrWithId::Native)
 }
 
 macro_rules! bvec {
@@ -535,7 +535,7 @@ fn can_remove_liquidity() {
 		));
 
 		let ed_token_1 = <Balances as fungible::Inspect<_>>::minimum_balance();
-		let ed_token_2 = <Assets as fungibles::Inspect<_>>::minimum_balance(2);
+		let ed_token_2 = <Assets as fungibles::Inspect<_>>::minimum_balance(&2);
 		assert_ok!(Balances::force_set_balance(
 			RuntimeOrigin::root(),
 			user,
@@ -2301,8 +2301,8 @@ fn swap_transactional() {
 		.unwrap();
 
 		// swap credit with `swap_tokens_for_exact_tokens` transactional
-		let credit_in = NativeAndAssets::issue(token_2.clone(), amount_in);
-		let credit_in_err_expected = NativeAndAssets::issue(token_2.clone(), amount_in);
+		let credit_in = NativeAndAssets::issue(&token_2.clone(), amount_in);
+		let credit_in_err_expected = NativeAndAssets::issue(&token_2.clone(), amount_in);
 		// avoiding drop of any credit, to assert any storage mutation from an actual call.
 		let error;
 		assert_storage_noop!(
@@ -2316,8 +2316,8 @@ fn swap_transactional() {
 		assert_eq!(error, (credit_in_err_expected, TokenError::NotExpendable.into()));
 
 		// swap credit with `swap_exact_tokens_for_tokens` transactional
-		let credit_in = NativeAndAssets::issue(token_2.clone(), amount_in);
-		let credit_in_err_expected = NativeAndAssets::issue(token_2.clone(), amount_in);
+		let credit_in = NativeAndAssets::issue(&token_2.clone(), amount_in);
+		let credit_in_err_expected = NativeAndAssets::issue(&token_2.clone(), amount_in);
 		// avoiding drop of any credit, to assert any storage mutation from an actual call.
 		let error;
 		assert_storage_noop!(
@@ -2395,15 +2395,15 @@ fn swap_credit_returns_change() {
 			user,
 		));
 
-		let expected_change = NativeAndAssets::issue(token_1.clone(), 100);
-		let expected_credit_out = NativeAndAssets::issue(token_2.clone(), 20);
+		let expected_change = NativeAndAssets::issue(&token_1.clone(), 100);
+		let expected_credit_out = NativeAndAssets::issue(&token_2.clone(), 20);
 
 		let amount_in_max =
 			AssetConversion::get_amount_in(&expected_credit_out.peek(), &liquidity1, &liquidity2)
 				.unwrap();
 
 		let credit_in =
-			NativeAndAssets::issue(token_1.clone(), amount_in_max + expected_change.peek());
+			NativeAndAssets::issue(&token_1.clone(), amount_in_max + expected_change.peek());
 		assert_ok!(
 			<AssetConversion as SwapCredit<_>>::swap_tokens_for_exact_tokens(
 				vec![token_1.clone(), token_2.clone()],
@@ -2456,8 +2456,8 @@ fn swap_credit_insufficient_amount_bounds() {
 		let amount_in =
 			AssetConversion::get_amount_in(&(amount_out_min - 1), &liquidity2, &liquidity1)
 				.unwrap();
-		let credit_in = NativeAndAssets::issue(token_1.clone(), amount_in);
-		let expected_credit_in = NativeAndAssets::issue(token_1.clone(), amount_in);
+		let credit_in = NativeAndAssets::issue(&token_1.clone(), amount_in);
+		let expected_credit_in = NativeAndAssets::issue(&token_1.clone(), amount_in);
 		let error = <AssetConversion as SwapCredit<_>>::swap_exact_tokens_for_tokens(
 			vec![token_1.clone(), token_2.clone()],
 			credit_in,
@@ -2473,8 +2473,8 @@ fn swap_credit_insufficient_amount_bounds() {
 		let amount_out = 20;
 		let amount_in_max =
 			AssetConversion::get_amount_in(&(amount_out - 1), &liquidity2, &liquidity1).unwrap();
-		let credit_in = NativeAndAssets::issue(token_1.clone(), amount_in_max);
-		let expected_credit_in = NativeAndAssets::issue(token_1.clone(), amount_in_max);
+		let credit_in = NativeAndAssets::issue(&token_1.clone(), amount_in_max);
+		let expected_credit_in = NativeAndAssets::issue(&token_1.clone(), amount_in_max);
 		let error = <AssetConversion as SwapCredit<_>>::swap_tokens_for_exact_tokens(
 			vec![token_1.clone(), token_2.clone()],
 			credit_in,
@@ -2547,8 +2547,8 @@ fn swap_credit_zero_amount() {
 		assert_eq!(error, (expected_credit_in, Error::<Test>::ZeroAmount.into()));
 
 		// swap with zero amount_out_min fails for `swap_exact_tokens_for_tokens`
-		let credit_in = NativeAndAssets::issue(token_1.clone(), 10);
-		let expected_credit_in = NativeAndAssets::issue(token_1.clone(), 10);
+		let credit_in = NativeAndAssets::issue(&token_1.clone(), 10);
+		let expected_credit_in = NativeAndAssets::issue(&token_1.clone(), 10);
 		let error = <AssetConversion as SwapCredit<_>>::swap_exact_tokens_for_tokens(
 			vec![token_1.clone(), token_2.clone()],
 			credit_in,
@@ -2558,8 +2558,8 @@ fn swap_credit_zero_amount() {
 		assert_eq!(error, (expected_credit_in, Error::<Test>::ZeroAmount.into()));
 
 		// swap with zero amount_out fails with `swap_tokens_for_exact_tokens` fails
-		let credit_in = NativeAndAssets::issue(token_1.clone(), 10);
-		let expected_credit_in = NativeAndAssets::issue(token_1.clone(), 10);
+		let credit_in = NativeAndAssets::issue(&token_1.clone(), 10);
+		let expected_credit_in = NativeAndAssets::issue(&token_1.clone(), 10);
 		let error = <AssetConversion as SwapCredit<_>>::swap_tokens_for_exact_tokens(
 			vec![token_1.clone(), token_2.clone()],
 			credit_in,
@@ -2607,8 +2607,8 @@ fn swap_credit_invalid_path() {
 		));
 
 		// swap with credit_in.asset different from path[0] asset fails
-		let credit_in = NativeAndAssets::issue(token_1.clone(), 10);
-		let expected_credit_in = NativeAndAssets::issue(token_1.clone(), 10);
+		let credit_in = NativeAndAssets::issue(&token_1.clone(), 10);
+		let expected_credit_in = NativeAndAssets::issue(&token_1.clone(), 10);
 		let error = <AssetConversion as SwapCredit<_>>::swap_exact_tokens_for_tokens(
 			vec![token_2.clone(), token_1.clone()],
 			credit_in,
@@ -2618,8 +2618,8 @@ fn swap_credit_invalid_path() {
 		assert_eq!(error, (expected_credit_in, Error::<Test>::InvalidPath.into()));
 
 		// swap with credit_in.asset different from path[0] asset fails
-		let credit_in = NativeAndAssets::issue(token_2.clone(), 10);
-		let expected_credit_in = NativeAndAssets::issue(token_2.clone(), 10);
+		let credit_in = NativeAndAssets::issue(&token_2.clone(), 10);
+		let expected_credit_in = NativeAndAssets::issue(&token_2.clone(), 10);
 		let error = <AssetConversion as SwapCredit<_>>::swap_tokens_for_exact_tokens(
 			vec![token_1.clone(), token_2.clone()],
 			credit_in,
@@ -2629,8 +2629,8 @@ fn swap_credit_invalid_path() {
 		assert_eq!(error, (expected_credit_in, Error::<Test>::InvalidPath.into()));
 
 		// swap with path.len < 2 fails
-		let credit_in = NativeAndAssets::issue(token_1.clone(), 10);
-		let expected_credit_in = NativeAndAssets::issue(token_1.clone(), 10);
+		let credit_in = NativeAndAssets::issue(&token_1.clone(), 10);
+		let expected_credit_in = NativeAndAssets::issue(&token_1.clone(), 10);
 		let error = <AssetConversion as SwapCredit<_>>::swap_exact_tokens_for_tokens(
 			vec![token_2.clone()],
 			credit_in,
@@ -2640,8 +2640,8 @@ fn swap_credit_invalid_path() {
 		assert_eq!(error, (expected_credit_in, Error::<Test>::InvalidPath.into()));
 
 		// swap with path.len < 2 fails
-		let credit_in = NativeAndAssets::issue(token_2.clone(), 10);
-		let expected_credit_in = NativeAndAssets::issue(token_2.clone(), 10);
+		let credit_in = NativeAndAssets::issue(&token_2.clone(), 10);
+		let expected_credit_in = NativeAndAssets::issue(&token_2.clone(), 10);
 		let error =
 			<AssetConversion as SwapCredit<_>>::swap_tokens_for_exact_tokens(vec![], credit_in, 10)
 				.unwrap_err();
