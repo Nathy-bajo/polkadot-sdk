@@ -242,7 +242,7 @@ impl BenchmarkHelperTrait<u64, u32, u32> for Helper {
 		let caller = 2;
 		let beneficiary = <Runtime as system::Config>::Lookup::unlookup(caller);
 		let balance = 1000;
-		assert_ok!(Assets::mint_into(asset_id.into(), &beneficiary, balance));
+		assert_ok!(Assets::mint_into(&asset_id, &beneficiary, balance));
 		assert_eq!(Assets::balance(asset_id, caller), balance);
 
 		use frame_support::traits::Currency;
@@ -251,7 +251,7 @@ impl BenchmarkHelperTrait<u64, u32, u32> for Helper {
 		let beneficiary = <Runtime as system::Config>::Lookup::unlookup(account);
 		let balance = 1000;
 
-		assert_ok!(Assets::mint_into(asset_id.into(), &beneficiary, balance));
+		assert_ok!(Assets::mint_into(&asset_id, &beneficiary, balance));
 		assert_eq!(Assets::balance(asset_id, account), balance);
 	}
 }

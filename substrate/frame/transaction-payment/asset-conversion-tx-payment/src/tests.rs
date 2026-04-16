@@ -119,7 +119,7 @@ fn default_post_info() -> PostDispatchInfo {
 fn setup_lp(asset_id: u32, balance_factor: u64) {
 	let lp_provider = 5;
 	let ed = Balances::minimum_balance();
-	let ed_asset = Assets::minimum_balance(asset_id);
+	let ed_asset = Assets::minimum_balance(&asset_id);
 	assert_ok!(Balances::force_set_balance(
 		RuntimeOrigin::root(),
 		lp_provider,
@@ -127,7 +127,7 @@ fn setup_lp(asset_id: u32, balance_factor: u64) {
 	));
 	let lp_provider_account = <Runtime as system::Config>::Lookup::unlookup(lp_provider);
 	assert_ok!(Assets::mint_into(
-		asset_id.into(),
+		&asset_id,
 		&lp_provider_account,
 		10_000 * balance_factor + ed_asset
 	));
@@ -235,7 +235,7 @@ fn transaction_payment_in_asset_possible() {
 			let beneficiary = <Runtime as system::Config>::Lookup::unlookup(caller);
 			let balance = 1000;
 
-			assert_ok!(Assets::mint_into(asset_id.into(), &beneficiary, balance));
+			assert_ok!(Assets::mint_into(&asset_id, &beneficiary, balance));
 			assert_eq!(Assets::balance(asset_id, caller), balance);
 
 			let len = 10;
@@ -315,7 +315,7 @@ fn transaction_payment_in_asset_fails_if_no_pool_for_that_asset() {
 			let beneficiary = <Runtime as system::Config>::Lookup::unlookup(caller);
 			let balance = 1000;
 
-			assert_ok!(Assets::mint_into(asset_id.into(), &beneficiary, balance));
+			assert_ok!(Assets::mint_into(&asset_id, &beneficiary, balance));
 			assert_eq!(Assets::balance(asset_id, caller), balance);
 
 			let len = 10;
@@ -361,7 +361,7 @@ fn transaction_payment_without_fee() {
 
 			// mint into the caller account
 			let beneficiary = <Runtime as system::Config>::Lookup::unlookup(caller);
-			assert_ok!(Assets::mint_into(asset_id.into(), &beneficiary, balance));
+			assert_ok!(Assets::mint_into(&asset_id, &beneficiary, balance));
 			assert_eq!(Assets::balance(asset_id, caller), balance);
 
 			let weight = 5;
@@ -443,7 +443,7 @@ fn asset_transaction_payment_with_tip_and_refund() {
 			let beneficiary = <Runtime as system::Config>::Lookup::unlookup(caller);
 			let balance = 10000;
 
-			assert_ok!(Assets::mint_into(asset_id.into(), &beneficiary, balance));
+			assert_ok!(Assets::mint_into(&asset_id, &beneficiary, balance));
 			assert_eq!(Assets::balance(asset_id, caller), balance);
 
 			let weight = 100;
@@ -540,7 +540,7 @@ fn payment_from_account_with_only_assets() {
 			let beneficiary = <Runtime as system::Config>::Lookup::unlookup(caller);
 			let balance = 1000;
 
-			assert_ok!(Assets::mint_into(asset_id.into(), &beneficiary, balance));
+			assert_ok!(Assets::mint_into(&asset_id, &beneficiary, balance));
 			assert_eq!(Assets::balance(asset_id, caller), balance);
 
 			// assert that native balance is not necessary
@@ -612,7 +612,7 @@ fn converted_fee_is_never_zero_if_input_fee_is_not() {
 			let beneficiary = <Runtime as system::Config>::Lookup::unlookup(caller);
 			let balance = 1000;
 
-			assert_ok!(Assets::mint_into(asset_id.into(), &beneficiary, balance));
+			assert_ok!(Assets::mint_into(&asset_id, &beneficiary, balance));
 			assert_eq!(Assets::balance(asset_id, caller), balance);
 
 			let weight = 1;
@@ -698,7 +698,7 @@ fn post_dispatch_fee_is_zero_if_pre_dispatch_fee_is_zero() {
 			let beneficiary = <Runtime as system::Config>::Lookup::unlookup(caller);
 			let balance = 1000;
 
-			assert_ok!(Assets::mint_into(asset_id.into(), &beneficiary, balance));
+			assert_ok!(Assets::mint_into(&asset_id, &beneficiary, balance));
 			assert_eq!(Assets::balance(asset_id, caller), balance);
 
 			let weight = 1;
@@ -821,7 +821,7 @@ fn transfer_add_and_remove_account() {
 			let balance = 10000;
 
 			assert_eq!(Balances::free_balance(caller), 0);
-			assert_ok!(Assets::mint_into(asset_id.into(), &beneficiary, balance));
+			assert_ok!(Assets::mint_into(&asset_id, &beneficiary, balance));
 			assert_eq!(Assets::balance(asset_id, caller), balance);
 
 			let call_weight = 100;
@@ -850,7 +850,7 @@ fn transfer_add_and_remove_account() {
 
 			// remove caller account.
 			assert_ok!(Assets::burn_from(
-				asset_id,
+				&asset_id,
 				&caller,
 				Assets::balance(asset_id, &caller),
 				Preservation::Expendable,
@@ -1027,10 +1027,10 @@ fn transaction_payment_rejects_reduced_to_zero_in_asset() {
 
 			// Set asset balance to cause ReducedToZero
 			let asset_balance = min_balance + fee_in_asset - 1;
-			assert_ok!(Assets::mint_into(asset_id.into(), &beneficiary, asset_balance));
+			assert_ok!(Assets::mint_into(&asset_id, &beneficiary, asset_balance));
 
 			// Verify that can_withdraw returns ReducedToZero
-			let consequence = Assets::can_withdraw(asset_id, &caller, fee_in_asset);
+			let consequence = Assets::can_withdraw(&asset_id, &caller, fee_in_asset);
 			assert!(
 				matches!(consequence, WithdrawConsequence::ReducedToZero(_)),
 				"can_withdraw should return ReducedToZero, got: {:?}",

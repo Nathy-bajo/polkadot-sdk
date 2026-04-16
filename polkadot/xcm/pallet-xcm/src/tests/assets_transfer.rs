@@ -1048,7 +1048,7 @@ fn remote_asset_reserve_and_destination_fee_reserve_call_disallowed<Call>(
 		);
 		let expected_usdc_issuance = usdc_initial_local_amount;
 		assert_eq!(AssetsPallet::total_issuance(&usdc_id_location.clone()), expected_usdc_issuance);
-		assert_eq!(AssetsPallet::active_issuance(usdc_id_location.clone()), expected_usdc_issuance);
+		assert_eq!(AssetsPallet::active_issuance(&usdc_id_location), expected_usdc_issuance);
 		let expected_bla_issuance = foreign_initial_amount;
 		assert_eq!(
 			AssetsPallet::total_issuance(&foreign_asset_id_location.clone()),
@@ -1291,7 +1291,7 @@ fn destination_asset_reserve_and_remote_fee_reserve_call_disallowed<Call>(
 		);
 		let expected_usdc_issuance = usdc_initial_local_amount;
 		assert_eq!(AssetsPallet::total_issuance(&usdc_id_location.clone()), expected_usdc_issuance);
-		assert_eq!(AssetsPallet::active_issuance(usdc_id_location.clone()), expected_usdc_issuance);
+		assert_eq!(AssetsPallet::active_issuance(&usdc_id_location), expected_usdc_issuance);
 		let expected_bla_issuance = foreign_initial_amount;
 		assert_eq!(
 			AssetsPallet::total_issuance(&foreign_asset_id_location.clone()),
@@ -1438,7 +1438,7 @@ fn remote_asset_reserve_and_remote_fee_reserve_call<Call>(
 		// Verify total and active issuance of USDC have decreased (burned on reserve-withdraw)
 		let expected_usdc_issuance = usdc_initial_local_amount - SEND_AMOUNT;
 		assert_eq!(AssetsPallet::total_issuance(&usdc_id_location.clone()), expected_usdc_issuance);
-		assert_eq!(AssetsPallet::active_issuance(usdc_id_location.clone()), expected_usdc_issuance);
+		assert_eq!(AssetsPallet::active_issuance(&usdc_id_location), expected_usdc_issuance);
 
 		// Verify sent XCM program
 		let expected_hash =
@@ -1771,7 +1771,7 @@ fn destination_asset_reserve_and_teleported_fee_call<Call>(
 		// Verify total and active issuance of USDT have decreased (teleported)
 		let expected_usdt_issuance = usdt_initial_local_amount - FEE_AMOUNT;
 		assert_eq!(AssetsPallet::total_issuance(&usdt_id_location.clone()), expected_usdt_issuance);
-		assert_eq!(AssetsPallet::active_issuance(usdt_id_location.clone()), expected_usdt_issuance);
+		assert_eq!(AssetsPallet::active_issuance(&usdt_id_location), expected_usdt_issuance);
 		// Verify total and active issuance of foreign BLA asset have decreased (burned on
 		// reserve-withdraw)
 		let expected_bla_issuance = foreign_initial_amount - SEND_AMOUNT;
@@ -1915,7 +1915,7 @@ fn remote_asset_reserve_and_teleported_fee_reserve_call_disallowed<Call>(
 		);
 		let expected_usdt_issuance = usdt_initial_local_amount;
 		assert_eq!(AssetsPallet::total_issuance(&usdt_id_location.clone()), expected_usdt_issuance);
-		assert_eq!(AssetsPallet::active_issuance(usdt_id_location.clone()), expected_usdt_issuance);
+		assert_eq!(AssetsPallet::active_issuance(&usdt_id_location), expected_usdt_issuance);
 		let expected_bla_issuance = foreign_initial_amount;
 		assert_eq!(
 			AssetsPallet::total_issuance(&foreign_asset_id_location.clone()),

@@ -192,7 +192,7 @@ fn transaction_payment_in_asset_possible() {
 			let caller = 1;
 			let beneficiary = <Runtime as system::Config>::Lookup::unlookup(caller);
 			let balance = 100;
-			assert_ok!(Assets::mint_into(asset_id.into(), &beneficiary, balance));
+			assert_ok!(Assets::mint_into(&asset_id, &beneficiary, balance));
 			assert_eq!(Assets::balance(asset_id, caller), balance);
 			let weight = 5;
 			let len = 10;
@@ -263,7 +263,7 @@ fn transaction_payment_without_fee() {
 			let caller = 1;
 			let beneficiary = <Runtime as system::Config>::Lookup::unlookup(caller);
 			let balance = 100;
-			assert_ok!(Assets::mint_into(asset_id.into(), &beneficiary, balance));
+			assert_ok!(Assets::mint_into(&asset_id, &beneficiary, balance));
 			assert_eq!(Assets::balance(asset_id, caller), balance);
 			let weight = 5;
 			let len = 10;
@@ -324,7 +324,7 @@ fn asset_transaction_payment_with_tip_and_refund() {
 			let caller = 2;
 			let beneficiary = <Runtime as system::Config>::Lookup::unlookup(caller);
 			let balance = 1000;
-			assert_ok!(Assets::mint_into(asset_id.into(), &beneficiary, balance));
+			assert_ok!(Assets::mint_into(&asset_id, &beneficiary, balance));
 			assert_eq!(Assets::balance(asset_id, caller), balance);
 			let weight = 100;
 			let tip = 5;
@@ -398,7 +398,7 @@ fn payment_from_account_with_only_assets() {
 			let caller = 333;
 			let beneficiary = <Runtime as system::Config>::Lookup::unlookup(caller);
 			let balance = 100;
-			assert_ok!(Assets::mint_into(asset_id.into(), &beneficiary, balance));
+			assert_ok!(Assets::mint_into(&asset_id, &beneficiary, balance));
 			assert_eq!(Assets::balance(asset_id, caller), balance);
 			// assert that native balance is not necessary
 			assert_eq!(Balances::free_balance(caller), 0);
@@ -500,7 +500,7 @@ fn converted_fee_is_never_zero_if_input_fee_is_not() {
 			let caller = 333;
 			let beneficiary = <Runtime as system::Config>::Lookup::unlookup(caller);
 			let balance = 100;
-			assert_ok!(Assets::mint_into(asset_id.into(), &beneficiary, balance));
+			assert_ok!(Assets::mint_into(&asset_id, &beneficiary, balance));
 			assert_eq!(Assets::balance(asset_id, caller), balance);
 			let weight = 1;
 			let len = 1;
@@ -577,7 +577,7 @@ fn post_dispatch_fee_is_zero_if_pre_dispatch_fee_is_zero() {
 			let caller = 333;
 			let beneficiary = <Runtime as system::Config>::Lookup::unlookup(caller);
 			let balance = 100;
-			assert_ok!(Assets::mint_into(asset_id.into(), &beneficiary, balance));
+			assert_ok!(Assets::mint_into(&asset_id, &beneficiary, balance));
 			assert_eq!(Assets::balance(asset_id, caller), balance);
 			let weight = 1;
 			let len = 1;

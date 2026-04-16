@@ -298,12 +298,12 @@ pub fn set_asset_status(asset_id: u32, status: crate::CircuitBreakerLevel) {
 
 pub fn fund_external_asset(asset_id: u32, account: u64, amount: u128) {
 	use frame_support::traits::fungibles::Mutate;
-	let _ = Assets::mint_into(asset_id, &account, amount);
+	let _ = Assets::mint_into(&asset_id, &account, amount);
 }
 
 pub fn fund_pusd(account: u64, amount: u128) {
 	use frame_support::traits::fungibles::Mutate;
-	let _ = Assets::mint_into(PUSD_ASSET_ID, &account, amount);
+	let _ = Assets::mint_into(&PUSD_ASSET_ID, &account, amount);
 }
 
 pub fn create_asset_with_metadata(asset_id: u32) {

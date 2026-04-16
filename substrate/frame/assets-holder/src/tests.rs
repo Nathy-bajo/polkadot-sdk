@@ -43,34 +43,34 @@ mod impl_balance_on_hold {
 	fn balance_on_hold_works() {
 		new_test_ext(|| {
 			assert_eq!(
-				<AssetsHolder as BalanceOnHold<_, _, _>>::balance_on_hold(&ASSET_ID, &WHO),
+				<AssetsHolder as BalanceOnHold<_, _, _>>::balance_on_hold(ASSET_ID, &WHO),
 				None
 			);
 			test_hold(DummyHoldReason::Governance, 1);
 			assert_eq!(
-				<AssetsHolder as BalanceOnHold<_, _, _>>::balance_on_hold(&ASSET_ID, &WHO),
+				<AssetsHolder as BalanceOnHold<_, _, _>>::balance_on_hold(ASSET_ID, &WHO),
 				Some(1u64)
 			);
 			test_hold(DummyHoldReason::Staking, 3);
 			assert_eq!(
-				<AssetsHolder as BalanceOnHold<_, _, _>>::balance_on_hold(&ASSET_ID, &WHO),
+				<AssetsHolder as BalanceOnHold<_, _, _>>::balance_on_hold(ASSET_ID, &WHO),
 				Some(4u64)
 			);
 			test_hold(DummyHoldReason::Governance, 2);
 			assert_eq!(
-				<AssetsHolder as BalanceOnHold<_, _, _>>::balance_on_hold(&ASSET_ID, &WHO),
+				<AssetsHolder as BalanceOnHold<_, _, _>>::balance_on_hold(ASSET_ID, &WHO),
 				Some(5u64)
 			);
 			// also test releasing works to reduce a balance, and finally releasing everything
 			// resets to None
 			test_release(DummyHoldReason::Governance);
 			assert_eq!(
-				<AssetsHolder as BalanceOnHold<_, _, _>>::balance_on_hold(&ASSET_ID, &WHO),
+				<AssetsHolder as BalanceOnHold<_, _, _>>::balance_on_hold(ASSET_ID, &WHO),
 				Some(3u64)
 			);
 			test_release(DummyHoldReason::Staking);
 			assert_eq!(
-				<AssetsHolder as BalanceOnHold<_, _, _>>::balance_on_hold(&ASSET_ID, &WHO),
+				<AssetsHolder as BalanceOnHold<_, _, _>>::balance_on_hold(ASSET_ID, &WHO),
 				None
 			);
 		});
@@ -294,7 +294,7 @@ mod impl_hold_mutate {
 			// Holding some `amount` would decrease the asset account balance and change the
 			// reducible balance, while total issuance is preserved.
 			assert_ok!(AssetsHolder::hold(&ASSET_ID, &DummyHoldReason::Governance, &WHO, 10));
-			assert_eq!(Assets::balance(&ASSET_ID, &WHO), 90);
+			assert_eq!(Assets::balance(ASSET_ID, &WHO), 90);
 			// Reducible balance is tested once to ensure token balance model is compliant.
 			assert_eq!(
 				Assets::reducible_balance(
@@ -324,7 +324,7 @@ mod impl_hold_mutate {
 			// Consideration: holding for an amount `x` will increase the already amount on hold by
 			// `x`.
 			assert_ok!(AssetsHolder::hold(&ASSET_ID, &DummyHoldReason::Governance, &WHO, 20));
-			assert_eq!(Assets::balance(&ASSET_ID, &WHO), 70);
+			assert_eq!(Assets::balance(ASSET_ID, &WHO), 70);
 			assert_eq!(
 				<AssetsHolder as InspectHold<_>>::balance_on_hold(
 					&ASSET_ID,
@@ -339,7 +339,7 @@ mod impl_hold_mutate {
 			// Holding some amount for a different reason has the same effect as described above in
 			// `set_balance_on_hold_works`, while total issuance is preserved.
 			assert_ok!(AssetsHolder::hold(&ASSET_ID, &DummyHoldReason::Staking, &WHO, 20));
-			assert_eq!(Assets::balance(&ASSET_ID, &WHO), 50);
+			assert_eq!(Assets::balance(ASSET_ID, &WHO), 50);
 			assert_eq!(
 				<AssetsHolder as InspectHold<_>>::balance_on_hold(
 					&ASSET_ID,
@@ -366,7 +366,7 @@ mod impl_hold_mutate {
 		// amount, while preserving total issuance.
 		new_test_ext().execute_with(|| {
 			assert_ok!(AssetsHolder::release(
-				ASSET_ID,
+				&ASSET_ID,
 				&DummyHoldReason::Governance,
 				&WHO,
 				20,
@@ -380,14 +380,14 @@ mod impl_hold_mutate {
 				),
 				10
 			);
-			assert_eq!(Assets::balance(&ASSET_ID, WHO), 70);
+			assert_eq!(Assets::balance(ASSET_ID, WHO), 70);
 		});
 
 		// Releasing over the max amount on hold with `BestEffort` will increase the
 		// balance by the previously amount on hold, while preserving total issuance.
 		new_test_ext().execute_with(|| {
 			assert_ok!(AssetsHolder::release(
-				ASSET_ID,
+				&ASSET_ID,
 				&DummyHoldReason::Governance,
 				&WHO,
 				31,
@@ -401,14 +401,14 @@ mod impl_hold_mutate {
 				),
 				0
 			);
-			assert_eq!(Assets::balance(&ASSET_ID, WHO), 80);
+			assert_eq!(Assets::balance(ASSET_ID, WHO), 80);
 		});
 
 		// Releasing over the max amount on hold with `Exact` will fail.
 		new_test_ext().execute_with(|| {
 			assert_noop!(
 				AssetsHolder::release(
-					ASSET_ID,
+					&ASSET_ID,
 					&DummyHoldReason::Governance,
 					&WHO,
 					31,
@@ -424,7 +424,7 @@ mod impl_hold_mutate {
 		// Burning works, reducing total issuance and `total_balance`.
 		new_test_ext().execute_with(|| {
 			assert_ok!(AssetsHolder::burn_held(
-				ASSET_ID,
+				&ASSET_ID,
 				&DummyHoldReason::Governance,
 				&WHO,
 				1,
@@ -439,7 +439,7 @@ mod impl_hold_mutate {
 		// hold up to the given amount.
 		new_test_ext().execute_with(|| {
 			assert_ok!(AssetsHolder::burn_held(
-				ASSET_ID,
+				&ASSET_ID,
 				&DummyHoldReason::Governance,
 				&WHO,
 				10,
@@ -447,14 +447,14 @@ mod impl_hold_mutate {
 				Fortitude::Polite
 			));
 			assert_eq!(AssetsHolder::total_balance_on_hold(&ASSET_ID, &WHO), 40);
-			assert_eq!(Assets::balance(&ASSET_ID, WHO), 50);
+			assert_eq!(Assets::balance(ASSET_ID, WHO), 50);
 		});
 
 		// Burning by an amount over the balance on hold with `BestEffort` works, reducing balance
 		// on hold up to the given amount.
 		new_test_ext().execute_with(|| {
 			assert_ok!(AssetsHolder::burn_held(
-				ASSET_ID,
+				&ASSET_ID,
 				&DummyHoldReason::Governance,
 				&WHO,
 				31,
@@ -462,14 +462,14 @@ mod impl_hold_mutate {
 				Fortitude::Polite
 			));
 			assert_eq!(AssetsHolder::total_balance_on_hold(&ASSET_ID, &WHO), 20);
-			assert_eq!(Assets::balance(&ASSET_ID, WHO), 50);
+			assert_eq!(Assets::balance(ASSET_ID, WHO), 50);
 		});
 
 		// Burning by an amount over the balance on hold with `Exact` fails.
 		new_test_ext().execute_with(|| {
 			assert_noop!(
 				AssetsHolder::burn_held(
-					ASSET_ID,
+					&ASSET_ID,
 					&DummyHoldReason::Governance,
 					&WHO,
 					31,
@@ -486,14 +486,14 @@ mod impl_hold_mutate {
 		new_test_ext().execute_with(|| {
 			// Burning all balance on hold works as burning passing it as amount with `BestEffort`
 			assert_ok!(AssetsHolder::burn_all_held(
-				ASSET_ID,
+				&ASSET_ID,
 				&DummyHoldReason::Governance,
 				&WHO,
 				Precision::BestEffort,
 				Fortitude::Polite,
 			));
 			assert_eq!(AssetsHolder::total_balance_on_hold(&ASSET_ID, &WHO), 20);
-			assert_eq!(Assets::balance(&ASSET_ID, WHO), 50);
+			assert_eq!(Assets::balance(ASSET_ID, WHO), 50);
 		});
 	}
 
@@ -516,7 +516,7 @@ mod impl_hold_mutate {
 	fn done_release_works() {
 		new_test_ext().execute_with(|| {
 			assert_ok!(AssetsHolder::release(
-				ASSET_ID,
+				&ASSET_ID,
 				&DummyHoldReason::Governance,
 				&WHO,
 				31,
@@ -538,7 +538,7 @@ mod impl_hold_mutate {
 	fn done_burn_held_works() {
 		new_test_ext().execute_with(|| {
 			assert_ok!(AssetsHolder::burn_all_held(
-				ASSET_ID,
+				&ASSET_ID,
 				&DummyHoldReason::Governance,
 				&WHO,
 				Precision::BestEffort,
