@@ -1454,10 +1454,7 @@ fn send_pens_and_wnds_from_penpal_westend_via_ahw_to_ahr() {
 	// account balances before
 	let sender_wnds_before = PenpalB::execute_with(|| {
 		type Assets = <PenpalB as PenpalBPallet>::Assets;
-		<Assets as Inspect<_>>::balance(
-			&wnd_at_westend_parachains,
-			&PenpalBSender::get(),
-		)
+		<Assets as Inspect<_>>::balance(&wnd_at_westend_parachains, &PenpalBSender::get())
 	});
 	let sender_pens_before = PenpalB::execute_with(|| {
 		type Balances = <PenpalB as PenpalBPallet>::Balances;
@@ -1475,17 +1472,11 @@ fn send_pens_and_wnds_from_penpal_westend_via_ahw_to_ahr() {
 	});
 	let receiver_wnds_before = AssetHubRococo::execute_with(|| {
 		type Assets = <AssetHubRococo as AssetHubRococoPallet>::ForeignAssets;
-		<Assets as Inspect<_>>::balance(
-			&wnd_at_rococo_parachains,
-			&AssetHubRococoReceiver::get(),
-		)
+		<Assets as Inspect<_>>::balance(&wnd_at_rococo_parachains, &AssetHubRococoReceiver::get())
 	});
 	let receiver_pens_before = AssetHubRococo::execute_with(|| {
 		type Assets = <AssetHubRococo as AssetHubRococoPallet>::ForeignAssets;
-		<Assets as Inspect<_>>::balance(
-			&pens_at_rococo_parachains,
-			&AssetHubRococoReceiver::get(),
-		)
+		<Assets as Inspect<_>>::balance(&pens_at_rococo_parachains, &AssetHubRococoReceiver::get())
 	});
 
 	// init topic ID tracker
@@ -1541,10 +1532,7 @@ fn send_pens_and_wnds_from_penpal_westend_via_ahw_to_ahr() {
 	});
 	let receiver_wnds_after = AssetHubRococo::execute_with(|| {
 		type Assets = <AssetHubRococo as AssetHubRococoPallet>::ForeignAssets;
-		<Assets as Inspect<_>>::balance(
-			&wnd_at_rococo_parachains,
-			&AssetHubRococoReceiver::get(),
-		)
+		<Assets as Inspect<_>>::balance(&wnd_at_rococo_parachains, &AssetHubRococoReceiver::get())
 	});
 	let receiver_pens_after = AssetHubRococo::execute_with(|| {
 		type Assets = <AssetHubRococo as AssetHubRococoPallet>::ForeignAssets;

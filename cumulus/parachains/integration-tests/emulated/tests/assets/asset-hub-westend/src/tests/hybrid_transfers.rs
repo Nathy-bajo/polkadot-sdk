@@ -243,10 +243,7 @@ fn transfer_foreign_assets_from_asset_hub_to_para() {
 	let sender_balance_before = test.sender.balance;
 	let sender_rocs_before = AssetHubWestend::execute_with(|| {
 		type ForeignAssets = <AssetHubWestend as AssetHubWestendPallet>::ForeignAssets;
-		<ForeignAssets as Inspect<_>>::balance(
-			&roc_at_westend_parachains,
-			&sender,
-		)
+		<ForeignAssets as Inspect<_>>::balance(&roc_at_westend_parachains, &sender)
 	});
 	let receiver_assets_before = PenpalA::execute_with(|| {
 		type Assets = <PenpalA as PenpalAPallet>::Assets;
@@ -270,10 +267,7 @@ fn transfer_foreign_assets_from_asset_hub_to_para() {
 	let sender_balance_after = test.sender.balance;
 	let sender_rocs_after = AssetHubWestend::execute_with(|| {
 		type ForeignAssets = <AssetHubWestend as AssetHubWestendPallet>::ForeignAssets;
-		<ForeignAssets as Inspect<_>>::balance(
-			&roc_at_westend_parachains,
-			&sender,
-		)
+		<ForeignAssets as Inspect<_>>::balance(&roc_at_westend_parachains, &sender)
 	});
 	let receiver_assets_after = PenpalA::execute_with(|| {
 		type Assets = <PenpalA as PenpalAPallet>::Assets;
@@ -416,10 +410,7 @@ fn transfer_foreign_assets_from_para_to_asset_hub() {
 	let receiver_native_before = test.receiver.balance;
 	let receiver_rocs_before = AssetHubWestend::execute_with(|| {
 		type ForeignAssets = <AssetHubWestend as AssetHubWestendPallet>::ForeignAssets;
-		<ForeignAssets as Inspect<_>>::balance(
-			&roc_at_westend_parachains,
-			&receiver,
-		)
+		<ForeignAssets as Inspect<_>>::balance(&roc_at_westend_parachains, &receiver)
 	});
 	let penpal_issuance_before = assets_issuance_on!(PenpalA, roc_at_westend_parachains.clone());
 	let ah_issuance_before =
@@ -443,10 +434,7 @@ fn transfer_foreign_assets_from_para_to_asset_hub() {
 	let receiver_relay_native_after = test.receiver.balance;
 	let receiver_rocs_after = AssetHubWestend::execute_with(|| {
 		type ForeignAssets = <AssetHubWestend as AssetHubWestendPallet>::ForeignAssets;
-		<ForeignAssets as Inspect<_>>::balance(
-			&roc_at_westend_parachains,
-			&receiver,
-		)
+		<ForeignAssets as Inspect<_>>::balance(&roc_at_westend_parachains, &receiver)
 	});
 	let penpal_issuance_after = assets_issuance_on!(PenpalA, roc_at_westend_parachains.clone());
 	let ah_issuance_after = foreign_issuance_on!(AssetHubWestend, roc_at_westend_parachains);
@@ -594,19 +582,13 @@ fn transfer_foreign_assets_from_para_to_para_through_asset_hub() {
 		<AssetHubWestend as Chain>::account_data_of(sov_of_sender_on_ah.clone()).free;
 	let rocs_in_sender_reserve_on_ah_before = AssetHubWestend::execute_with(|| {
 		type Assets = <AssetHubWestend as AssetHubWestendPallet>::ForeignAssets;
-		<Assets as Inspect<_>>::balance(
-			&roc_at_westend_parachains,
-			&sov_of_sender_on_ah,
-		)
+		<Assets as Inspect<_>>::balance(&roc_at_westend_parachains, &sov_of_sender_on_ah)
 	});
 	let wnds_in_receiver_reserve_on_ah_before =
 		<AssetHubWestend as Chain>::account_data_of(sov_of_receiver_on_ah.clone()).free;
 	let rocs_in_receiver_reserve_on_ah_before = AssetHubWestend::execute_with(|| {
 		type Assets = <AssetHubWestend as AssetHubWestendPallet>::ForeignAssets;
-		<Assets as Inspect<_>>::balance(
-			&roc_at_westend_parachains,
-			&sov_of_receiver_on_ah,
-		)
+		<Assets as Inspect<_>>::balance(&roc_at_westend_parachains, &sov_of_receiver_on_ah)
 	});
 	let receiver_wnds_before = PenpalB::execute_with(|| {
 		type Assets = <PenpalB as PenpalBPallet>::Assets;
@@ -642,19 +624,13 @@ fn transfer_foreign_assets_from_para_to_para_through_asset_hub() {
 	});
 	let rocs_in_sender_reserve_on_ah_after = AssetHubWestend::execute_with(|| {
 		type Assets = <AssetHubWestend as AssetHubWestendPallet>::ForeignAssets;
-		<Assets as Inspect<_>>::balance(
-			&roc_at_westend_parachains,
-			&sov_of_sender_on_ah,
-		)
+		<Assets as Inspect<_>>::balance(&roc_at_westend_parachains, &sov_of_sender_on_ah)
 	});
 	let wnds_in_sender_reserve_on_ah_after =
 		<AssetHubWestend as Chain>::account_data_of(sov_of_sender_on_ah).free;
 	let rocs_in_receiver_reserve_on_ah_after = AssetHubWestend::execute_with(|| {
 		type Assets = <AssetHubWestend as AssetHubWestendPallet>::ForeignAssets;
-		<Assets as Inspect<_>>::balance(
-			&roc_at_westend_parachains,
-			&sov_of_receiver_on_ah,
-		)
+		<Assets as Inspect<_>>::balance(&roc_at_westend_parachains, &sov_of_receiver_on_ah)
 	});
 	let wnds_in_receiver_reserve_on_ah_after =
 		<AssetHubWestend as Chain>::account_data_of(sov_of_receiver_on_ah).free;

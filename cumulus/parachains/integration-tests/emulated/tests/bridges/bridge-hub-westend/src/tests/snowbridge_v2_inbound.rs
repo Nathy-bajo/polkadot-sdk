@@ -539,9 +539,7 @@ fn send_token_to_penpal_v2() {
 			1000,
 		));
 
-		assert!(<PenpalB as PenpalBPallet>::Assets::asset_exists(
-			&token_location,
-		));
+		assert!(<PenpalB as PenpalBPallet>::Assets::asset_exists(&token_location,));
 
 		// Register eth on Penpal
 		assert_ok!(<PenpalB as PenpalBPallet>::Assets::force_create(
@@ -552,9 +550,7 @@ fn send_token_to_penpal_v2() {
 			1000,
 		));
 
-		assert!(<PenpalB as PenpalBPallet>::Assets::asset_exists(
-			&eth_location(),
-		));
+		assert!(<PenpalB as PenpalBPallet>::Assets::asset_exists(&eth_location(),));
 
 		assert_ok!(<PenpalB as Chain>::System::set_storage(
 			<PenpalB as Chain>::RuntimeOrigin::root(),

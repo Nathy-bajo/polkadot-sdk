@@ -1289,11 +1289,7 @@ impl
 		let lp_provider = account.clone();
 		use frame_support::traits::Currency;
 		let _ = Balances::deposit_creating(&lp_provider, u64::MAX.into());
-		assert_ok!(ForeignAssets::mint_into(
-			asset_id.clone().into(),
-			&lp_provider,
-			u64::MAX.into()
-		));
+		assert_ok!(ForeignAssets::mint_into(&asset_id.clone(), &lp_provider, u64::MAX.into()));
 
 		let token_native = alloc::boxed::Box::new(TokenLocation::get());
 		let token_second = alloc::boxed::Box::new(asset_id);
