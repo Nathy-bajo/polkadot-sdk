@@ -1533,8 +1533,9 @@ pub struct PsmBenchmarkHelper;
 impl pallet_psm::BenchmarkHelper<AssetIdForTrustBackedAssets, AccountId> for PsmBenchmarkHelper {
 	fn create_asset(asset_id: AssetIdForTrustBackedAssets, owner: &AccountId, decimals: u8) {
 		use frame_support::traits::fungibles::{metadata::Mutate as MetadataMutate, Create};
-		if !<Assets as frame_support::traits::fungibles::Inspect<AccountId>>::asset_exists(asset_id)
-		{
+		if !<Assets as frame_support::traits::fungibles::Inspect<AccountId>>::asset_exists(
+			&asset_id,
+		) {
 			let _ = <Assets as Create<AccountId>>::create(asset_id, owner.clone(), true, 1);
 		}
 		let _ = Balances::force_set_balance(
@@ -1543,7 +1544,7 @@ impl pallet_psm::BenchmarkHelper<AssetIdForTrustBackedAssets, AccountId> for Psm
 			10u128.pow(18),
 		);
 		let _ = <Assets as MetadataMutate<AccountId>>::set(
-			asset_id,
+			&asset_id,
 			owner,
 			b"Benchmark".to_vec(),
 			b"BNC".to_vec(),
@@ -1994,11 +1995,7 @@ impl
 		let lp_provider = account.clone();
 		use frame_support::traits::Currency;
 		let _ = Balances::deposit_creating(&lp_provider, u64::MAX.into());
-		assert_ok!(ForeignAssets::mint_into(
-			asset_id.clone().into(),
-			&lp_provider,
-			u64::MAX.into()
-		));
+		assert_ok!(ForeignAssets::mint_into((&asset_id).into(), &lp_provider, u64::MAX.into()));
 
 		let token_native = alloc::boxed::Box::new(cumulus_primitives_core::Location::new(
 			1,

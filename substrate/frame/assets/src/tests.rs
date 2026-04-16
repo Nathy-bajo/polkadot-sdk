@@ -2161,10 +2161,13 @@ fn increasing_or_decreasing_destroying_asset_should_not_work() {
 		assert_ok!(Assets::mint(RuntimeOrigin::signed(1), 0, 1, 100));
 		assert_eq!(Assets::balance(0, 1), 100);
 
-		assert_eq!(Assets::can_deposit(&0, &1, 10, Provenance::Extant), DepositConsequence::Success);
+		assert_eq!(
+			Assets::can_deposit(&0, &1, 10, Provenance::Extant),
+			DepositConsequence::Success
+		);
 		assert_eq!(Assets::can_withdraw(&0, &1, 10), WithdrawConsequence::<_>::Success);
-		assert_eq!(Assets::can_increase(&0, &1, 10, false), DepositConsequence::Success);
-		assert_eq!(Assets::can_decrease(&0, &1, 10, false), WithdrawConsequence::<_>::Success);
+		assert_eq!(Assets::can_increase(0, &1, 10, false), DepositConsequence::Success);
+		assert_eq!(Assets::can_decrease(0, &1, 10, false), WithdrawConsequence::<_>::Success);
 
 		assert_ok!(Assets::start_destroy(admin_origin, 0));
 
@@ -2173,8 +2176,8 @@ fn increasing_or_decreasing_destroying_asset_should_not_work() {
 			DepositConsequence::UnknownAsset
 		);
 		assert_eq!(Assets::can_withdraw(&0, &1, 10), WithdrawConsequence::<_>::UnknownAsset);
-		assert_eq!(Assets::can_increase(&0, &1, 10, false), DepositConsequence::UnknownAsset);
-		assert_eq!(Assets::can_decrease(&0, &1, 10, false), WithdrawConsequence::<_>::UnknownAsset);
+		assert_eq!(Assets::can_increase(0, &1, 10, false), DepositConsequence::UnknownAsset);
+		assert_eq!(Assets::can_decrease(0, &1, 10, false), WithdrawConsequence::<_>::UnknownAsset);
 	});
 }
 
