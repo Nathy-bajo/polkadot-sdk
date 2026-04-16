@@ -804,24 +804,24 @@ mod test_trader {
 			type AssetId = TestAssetId;
 			type Balance = TestBalance;
 
-			fn total_issuance(_: Self::AssetId) -> Self::Balance {
+			fn total_issuance(_: &Self::AssetId) -> Self::Balance {
 				0
 			}
 
-			fn minimum_balance(_: Self::AssetId) -> Self::Balance {
+			fn minimum_balance(_: &Self::AssetId) -> Self::Balance {
 				0
 			}
 
-			fn balance(_: Self::AssetId, _: &TestAccountId) -> Self::Balance {
+			fn balance(_: &Self::AssetId, _: &TestAccountId) -> Self::Balance {
 				0
 			}
 
-			fn total_balance(_: Self::AssetId, _: &TestAccountId) -> Self::Balance {
+			fn total_balance(_: &Self::AssetId, _: &TestAccountId) -> Self::Balance {
 				0
 			}
 
 			fn reducible_balance(
-				_: Self::AssetId,
+				_: &Self::AssetId,
 				_: &TestAccountId,
 				_: Preservation,
 				_: Fortitude,
@@ -830,7 +830,7 @@ mod test_trader {
 			}
 
 			fn can_deposit(
-				_: Self::AssetId,
+				_: &Self::AssetId,
 				_: &TestAccountId,
 				_: Self::Balance,
 				_: Provenance,
@@ -839,14 +839,14 @@ mod test_trader {
 			}
 
 			fn can_withdraw(
-				_: Self::AssetId,
+				_: &Self::AssetId,
 				_: &TestAccountId,
 				_: Self::Balance,
 			) -> WithdrawConsequence<Self::Balance> {
 				WithdrawConsequence::Success
 			}
 
-			fn asset_exists(_: Self::AssetId) -> bool {
+			fn asset_exists(_: &Self::AssetId) -> bool {
 				true
 			}
 		}
@@ -858,14 +858,14 @@ mod test_trader {
 		impl fungibles::Unbalanced<TestAccountId> for TestAssets {
 			fn handle_dust(_: fungibles::Dust<TestAccountId, Self>) {}
 			fn write_balance(
-				_: Self::AssetId,
+				_: &Self::AssetId,
 				_: &TestAccountId,
 				_: Self::Balance,
 			) -> Result<Option<Self::Balance>, DispatchError> {
 				Ok(None)
 			}
 
-			fn set_total_issuance(_: Self::AssetId, _: Self::Balance) {}
+			fn set_total_issuance(_: &Self::AssetId, _: Self::Balance) {}
 		}
 
 		struct FeeChargerAssetsHandleRefund;
@@ -941,24 +941,24 @@ mod test_trader {
 			type AssetId = TestAssetId;
 			type Balance = TestBalance;
 
-			fn total_issuance(_: Self::AssetId) -> Self::Balance {
+			fn total_issuance(_: &Self::AssetId) -> Self::Balance {
 				0
 			}
 
-			fn minimum_balance(_: Self::AssetId) -> Self::Balance {
+			fn minimum_balance(_: &Self::AssetId) -> Self::Balance {
 				0
 			}
 
-			fn balance(_: Self::AssetId, _: &TestAccountId) -> Self::Balance {
+			fn balance(_: &Self::AssetId, _: &TestAccountId) -> Self::Balance {
 				0
 			}
 
-			fn total_balance(_: Self::AssetId, _: &TestAccountId) -> Self::Balance {
+			fn total_balance(_: &Self::AssetId, _: &TestAccountId) -> Self::Balance {
 				0
 			}
 
 			fn reducible_balance(
-				_: Self::AssetId,
+				_: &Self::AssetId,
 				_: &TestAccountId,
 				_: Preservation,
 				_: Fortitude,
@@ -967,7 +967,7 @@ mod test_trader {
 			}
 
 			fn can_deposit(
-				_: Self::AssetId,
+				_: &Self::AssetId,
 				_: &TestAccountId,
 				_: Self::Balance,
 				_: Provenance,
@@ -976,14 +976,14 @@ mod test_trader {
 			}
 
 			fn can_withdraw(
-				_: Self::AssetId,
+				_: &Self::AssetId,
 				_: &TestAccountId,
 				_: Self::Balance,
 			) -> WithdrawConsequence<Self::Balance> {
 				WithdrawConsequence::Success
 			}
 
-			fn asset_exists(_: Self::AssetId) -> bool {
+			fn asset_exists(_: &Self::AssetId) -> bool {
 				true
 			}
 		}
@@ -995,14 +995,14 @@ mod test_trader {
 		impl fungibles::Unbalanced<TestAccountId> for TestAssets {
 			fn handle_dust(_: fungibles::Dust<TestAccountId, Self>) {}
 			fn write_balance(
-				_: Self::AssetId,
+				_: &Self::AssetId,
 				_: &TestAccountId,
 				_: Self::Balance,
 			) -> Result<Option<Self::Balance>, DispatchError> {
 				Ok(None)
 			}
 
-			fn set_total_issuance(_: Self::AssetId, _: Self::Balance) {}
+			fn set_total_issuance(_: &Self::AssetId, _: Self::Balance) {}
 		}
 
 		struct FeeChargerAssetsHandleRefund;

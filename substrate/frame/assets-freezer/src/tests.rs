@@ -103,34 +103,34 @@ mod impl_inspect_freeze {
 	fn balance_frozen_works() {
 		new_test_ext(|| {
 			assert_eq!(
-				AssetsFreezer::balance_frozen(ASSET_ID, &DummyFreezeReason::Governance, &WHO),
+				AssetsFreezer::balance_frozen(&ASSET_ID, &DummyFreezeReason::Governance, &WHO),
 				0u64
 			);
 			test_set_freeze(DummyFreezeReason::Governance, 1);
 			assert_eq!(
-				AssetsFreezer::balance_frozen(ASSET_ID, &DummyFreezeReason::Governance, &WHO),
+				AssetsFreezer::balance_frozen(&ASSET_ID, &DummyFreezeReason::Governance, &WHO),
 				1u64
 			);
 			test_set_freeze(DummyFreezeReason::Staking, 3);
 			assert_eq!(
-				AssetsFreezer::balance_frozen(ASSET_ID, &DummyFreezeReason::Staking, &WHO),
+				AssetsFreezer::balance_frozen(&ASSET_ID, &DummyFreezeReason::Staking, &WHO),
 				3u64
 			);
 			test_set_freeze(DummyFreezeReason::Staking, 2);
 			assert_eq!(
-				AssetsFreezer::balance_frozen(ASSET_ID, &DummyFreezeReason::Staking, &WHO),
+				AssetsFreezer::balance_frozen(&ASSET_ID, &DummyFreezeReason::Staking, &WHO),
 				2u64
 			);
 			// also test thawing works to reduce a balance, and finally thawing everything resets to
 			// 0
 			test_thaw(DummyFreezeReason::Governance);
 			assert_eq!(
-				AssetsFreezer::balance_frozen(ASSET_ID, &DummyFreezeReason::Governance, &WHO),
+				AssetsFreezer::balance_frozen(&ASSET_ID, &DummyFreezeReason::Governance, &WHO),
 				0u64
 			);
 			test_thaw(DummyFreezeReason::Staking);
 			assert_eq!(
-				AssetsFreezer::balance_frozen(ASSET_ID, &DummyFreezeReason::Staking, &WHO),
+				AssetsFreezer::balance_frozen(&ASSET_ID, &DummyFreezeReason::Staking, &WHO),
 				0u64
 			);
 		});
@@ -143,9 +143,9 @@ mod impl_inspect_freeze {
 	fn can_freeze_works() {
 		new_test_ext(|| {
 			test_set_freeze(DummyFreezeReason::Governance, 1);
-			assert!(AssetsFreezer::can_freeze(ASSET_ID, &DummyFreezeReason::Staking, &WHO));
+			assert!(AssetsFreezer::can_freeze(&ASSET_ID, &DummyFreezeReason::Staking, &WHO));
 			test_set_freeze(DummyFreezeReason::Staking, 1);
-			assert!(!AssetsFreezer::can_freeze(ASSET_ID, &DummyFreezeReason::Other, &WHO));
+			assert!(!AssetsFreezer::can_freeze(&ASSET_ID, &DummyFreezeReason::Other, &WHO));
 		});
 	}
 }
@@ -158,7 +158,7 @@ mod impl_mutate_freeze {
 		new_test_ext(|| {
 			assert_eq!(
 				Assets::reducible_balance(
-					ASSET_ID,
+					&ASSET_ID,
 					&WHO,
 					Preservation::Preserve,
 					Fortitude::Polite,
@@ -166,14 +166,14 @@ mod impl_mutate_freeze {
 				99
 			);
 			assert_ok!(AssetsFreezer::set_freeze(
-				ASSET_ID,
+				&ASSET_ID,
 				&DummyFreezeReason::Governance,
 				&WHO,
 				10
 			));
 			assert_eq!(
 				Assets::reducible_balance(
-					ASSET_ID,
+					&ASSET_ID,
 					&WHO,
 					Preservation::Preserve,
 					Fortitude::Polite,
@@ -184,14 +184,14 @@ mod impl_mutate_freeze {
 				Event::<Test>::Frozen { asset_id: ASSET_ID, who: WHO, amount: 10 }.into(),
 			);
 			assert_ok!(AssetsFreezer::set_freeze(
-				ASSET_ID,
+				&ASSET_ID,
 				&DummyFreezeReason::Governance,
 				&WHO,
 				8
 			));
 			assert_eq!(
 				Assets::reducible_balance(
-					ASSET_ID,
+					&ASSET_ID,
 					&WHO,
 					Preservation::Preserve,
 					Fortitude::Polite,
@@ -208,13 +208,13 @@ mod impl_mutate_freeze {
 	fn extend_freeze_works() {
 		new_test_ext(|| {
 			assert_ok!(AssetsFreezer::set_freeze(
-				ASSET_ID,
+				&ASSET_ID,
 				&DummyFreezeReason::Governance,
 				&WHO,
 				10
 			));
 			assert_storage_noop!(assert_ok!(AssetsFreezer::extend_freeze(
-				ASSET_ID,
+				&ASSET_ID,
 				&DummyFreezeReason::Governance,
 				&WHO,
 				8
@@ -224,7 +224,7 @@ mod impl_mutate_freeze {
 			);
 			assert_eq!(
 				Assets::reducible_balance(
-					ASSET_ID,
+					&ASSET_ID,
 					&WHO,
 					Preservation::Preserve,
 					Fortitude::Polite,
@@ -232,7 +232,7 @@ mod impl_mutate_freeze {
 				90
 			);
 			assert_ok!(AssetsFreezer::extend_freeze(
-				ASSET_ID,
+				&ASSET_ID,
 				&DummyFreezeReason::Governance,
 				&WHO,
 				11
@@ -242,7 +242,7 @@ mod impl_mutate_freeze {
 			);
 			assert_eq!(
 				Assets::reducible_balance(
-					ASSET_ID,
+					&ASSET_ID,
 					&WHO,
 					Preservation::Preserve,
 					Fortitude::Polite,
@@ -256,7 +256,7 @@ mod impl_mutate_freeze {
 	fn thaw_works() {
 		new_test_ext(|| {
 			assert_ok!(AssetsFreezer::set_freeze(
-				ASSET_ID,
+				&ASSET_ID,
 				&DummyFreezeReason::Governance,
 				&WHO,
 				10
@@ -266,20 +266,20 @@ mod impl_mutate_freeze {
 			);
 			assert_eq!(
 				Assets::reducible_balance(
-					ASSET_ID,
+					&ASSET_ID,
 					&WHO,
 					Preservation::Preserve,
 					Fortitude::Polite,
 				),
 				90
 			);
-			assert_ok!(AssetsFreezer::thaw(ASSET_ID, &DummyFreezeReason::Governance, &WHO));
+			assert_ok!(AssetsFreezer::thaw(&ASSET_ID, &DummyFreezeReason::Governance, &WHO));
 			System::assert_has_event(
 				Event::<Test>::Thawed { asset_id: ASSET_ID, who: WHO, amount: 10 }.into(),
 			);
 			assert_eq!(
 				Assets::reducible_balance(
-					ASSET_ID,
+					&ASSET_ID,
 					&WHO,
 					Preservation::Preserve,
 					Fortitude::Polite,
@@ -297,7 +297,7 @@ mod with_pallet_assets {
 	fn frozen_balance_affects_balance_transferring() {
 		new_test_ext(|| {
 			assert_ok!(AssetsFreezer::set_freeze(
-				ASSET_ID,
+				&ASSET_ID,
 				&DummyFreezeReason::Governance,
 				&WHO,
 				20

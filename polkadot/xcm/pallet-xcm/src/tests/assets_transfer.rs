@@ -469,10 +469,10 @@ fn destination_asset_reserve_and_local_fee_reserve_call<Call>(
 		// reserve-withdraw)
 		let expected_issuance = foreign_initial_amount - SEND_AMOUNT;
 		assert_eq!(
-			AssetsPallet::total_issuance(foreign_asset_id_location.clone()),
+			AssetsPallet::total_issuance(&foreign_asset_id_location.clone()),
 			expected_issuance
 		);
-		assert_eq!(AssetsPallet::active_issuance(foreign_asset_id_location), expected_issuance);
+		assert_eq!(AssetsPallet::active_issuance(&foreign_asset_id_location), expected_issuance);
 
 		// Verify sent XCM program
 		assert_eq!(
@@ -606,10 +606,10 @@ fn remote_asset_reserve_and_local_fee_reserve_call_disallowed<Call>(
 		// reserve-withdraw)
 		let expected_issuance = foreign_initial_amount;
 		assert_eq!(
-			AssetsPallet::total_issuance(foreign_asset_id_location.clone()),
+			AssetsPallet::total_issuance(&foreign_asset_id_location.clone()),
 			expected_issuance
 		);
-		assert_eq!(AssetsPallet::active_issuance(foreign_asset_id_location), expected_issuance);
+		assert_eq!(AssetsPallet::active_issuance(&foreign_asset_id_location), expected_issuance);
 	});
 }
 
@@ -754,8 +754,8 @@ fn local_asset_reserve_and_destination_fee_reserve_call<Call>(
 		);
 		// Verify total and active issuance of USDC have decreased (burned on reserve-withdraw)
 		let expected_issuance = usdc_initial_local_amount - FEE_AMOUNT;
-		assert_eq!(AssetsPallet::total_issuance(usdc_id_location.clone()), expected_issuance);
-		assert_eq!(AssetsPallet::active_issuance(usdc_id_location), expected_issuance);
+		assert_eq!(AssetsPallet::total_issuance(&usdc_id_location.clone()), expected_issuance);
+		assert_eq!(AssetsPallet::active_issuance(&usdc_id_location), expected_issuance);
 
 		// Verify sent XCM program
 		assert_eq!(
@@ -910,10 +910,10 @@ fn destination_asset_reserve_and_destination_fee_reserve_call<Call>(
 		// reserve-withdraw)
 		let expected_issuance = foreign_initial_amount - SEND_AMOUNT;
 		assert_eq!(
-			AssetsPallet::total_issuance(foreign_asset_id_location.clone()),
+			AssetsPallet::total_issuance(&foreign_asset_id_location.clone()),
 			expected_issuance
 		);
-		assert_eq!(AssetsPallet::active_issuance(foreign_asset_id_location), expected_issuance);
+		assert_eq!(AssetsPallet::active_issuance(&foreign_asset_id_location), expected_issuance);
 
 		// Verify sent XCM program
 		assert_eq!(
@@ -1047,14 +1047,17 @@ fn remote_asset_reserve_and_destination_fee_reserve_call_disallowed<Call>(
 			foreign_initial_amount
 		);
 		let expected_usdc_issuance = usdc_initial_local_amount;
-		assert_eq!(AssetsPallet::total_issuance(usdc_id_location.clone()), expected_usdc_issuance);
+		assert_eq!(AssetsPallet::total_issuance(&usdc_id_location.clone()), expected_usdc_issuance);
 		assert_eq!(AssetsPallet::active_issuance(usdc_id_location.clone()), expected_usdc_issuance);
 		let expected_bla_issuance = foreign_initial_amount;
 		assert_eq!(
-			AssetsPallet::total_issuance(foreign_asset_id_location.clone()),
+			AssetsPallet::total_issuance(&foreign_asset_id_location.clone()),
 			expected_bla_issuance
 		);
-		assert_eq!(AssetsPallet::active_issuance(foreign_asset_id_location), expected_bla_issuance);
+		assert_eq!(
+			AssetsPallet::active_issuance(&foreign_asset_id_location),
+			expected_bla_issuance
+		);
 	});
 }
 
@@ -1161,8 +1164,8 @@ fn local_asset_reserve_and_remote_fee_reserve_call_disallowed<Call>(
 		);
 		assert_eq!(Balances::free_balance(dest_sovereign_account), 0);
 		let expected_usdc_issuance = usdc_initial_local_amount;
-		assert_eq!(AssetsPallet::total_issuance(usdc_id_location.clone()), expected_usdc_issuance);
-		assert_eq!(AssetsPallet::active_issuance(usdc_id_location), expected_usdc_issuance);
+		assert_eq!(AssetsPallet::total_issuance(&usdc_id_location.clone()), expected_usdc_issuance);
+		assert_eq!(AssetsPallet::active_issuance(&usdc_id_location), expected_usdc_issuance);
 	});
 }
 
@@ -1287,14 +1290,17 @@ fn destination_asset_reserve_and_remote_fee_reserve_call_disallowed<Call>(
 			0
 		);
 		let expected_usdc_issuance = usdc_initial_local_amount;
-		assert_eq!(AssetsPallet::total_issuance(usdc_id_location.clone()), expected_usdc_issuance);
+		assert_eq!(AssetsPallet::total_issuance(&usdc_id_location.clone()), expected_usdc_issuance);
 		assert_eq!(AssetsPallet::active_issuance(usdc_id_location.clone()), expected_usdc_issuance);
 		let expected_bla_issuance = foreign_initial_amount;
 		assert_eq!(
-			AssetsPallet::total_issuance(foreign_asset_id_location.clone()),
+			AssetsPallet::total_issuance(&foreign_asset_id_location.clone()),
 			expected_bla_issuance
 		);
-		assert_eq!(AssetsPallet::active_issuance(foreign_asset_id_location), expected_bla_issuance);
+		assert_eq!(
+			AssetsPallet::active_issuance(&foreign_asset_id_location),
+			expected_bla_issuance
+		);
 	});
 }
 
@@ -1431,7 +1437,7 @@ fn remote_asset_reserve_and_remote_fee_reserve_call<Call>(
 		);
 		// Verify total and active issuance of USDC have decreased (burned on reserve-withdraw)
 		let expected_usdc_issuance = usdc_initial_local_amount - SEND_AMOUNT;
-		assert_eq!(AssetsPallet::total_issuance(usdc_id_location.clone()), expected_usdc_issuance);
+		assert_eq!(AssetsPallet::total_issuance(&usdc_id_location.clone()), expected_usdc_issuance);
 		assert_eq!(AssetsPallet::active_issuance(usdc_id_location.clone()), expected_usdc_issuance);
 
 		// Verify sent XCM program
@@ -1591,8 +1597,8 @@ fn local_asset_reserve_and_teleported_fee_call<Call>(
 		);
 		// Verify total and active issuance have decreased (teleported)
 		let expected_usdt_issuance = usdt_initial_local_amount - FEE_AMOUNT;
-		assert_eq!(AssetsPallet::total_issuance(usdt_id_location.clone()), expected_usdt_issuance);
-		assert_eq!(AssetsPallet::active_issuance(usdt_id_location), expected_usdt_issuance);
+		assert_eq!(AssetsPallet::total_issuance(&usdt_id_location.clone()), expected_usdt_issuance);
+		assert_eq!(AssetsPallet::active_issuance(&usdt_id_location), expected_usdt_issuance);
 
 		// Verify sent XCM program
 		assert_eq!(
@@ -1764,16 +1770,19 @@ fn destination_asset_reserve_and_teleported_fee_call<Call>(
 		);
 		// Verify total and active issuance of USDT have decreased (teleported)
 		let expected_usdt_issuance = usdt_initial_local_amount - FEE_AMOUNT;
-		assert_eq!(AssetsPallet::total_issuance(usdt_id_location.clone()), expected_usdt_issuance);
+		assert_eq!(AssetsPallet::total_issuance(&usdt_id_location.clone()), expected_usdt_issuance);
 		assert_eq!(AssetsPallet::active_issuance(usdt_id_location.clone()), expected_usdt_issuance);
 		// Verify total and active issuance of foreign BLA asset have decreased (burned on
 		// reserve-withdraw)
 		let expected_bla_issuance = foreign_initial_amount - SEND_AMOUNT;
 		assert_eq!(
-			AssetsPallet::total_issuance(foreign_asset_id_location.clone()),
+			AssetsPallet::total_issuance(&foreign_asset_id_location.clone()),
 			expected_bla_issuance
 		);
-		assert_eq!(AssetsPallet::active_issuance(foreign_asset_id_location), expected_bla_issuance);
+		assert_eq!(
+			AssetsPallet::active_issuance(&foreign_asset_id_location),
+			expected_bla_issuance
+		);
 
 		// Verify sent XCM program
 		assert_eq!(
@@ -1905,14 +1914,17 @@ fn remote_asset_reserve_and_teleported_fee_reserve_call_disallowed<Call>(
 			0
 		);
 		let expected_usdt_issuance = usdt_initial_local_amount;
-		assert_eq!(AssetsPallet::total_issuance(usdt_id_location.clone()), expected_usdt_issuance);
+		assert_eq!(AssetsPallet::total_issuance(&usdt_id_location.clone()), expected_usdt_issuance);
 		assert_eq!(AssetsPallet::active_issuance(usdt_id_location.clone()), expected_usdt_issuance);
 		let expected_bla_issuance = foreign_initial_amount;
 		assert_eq!(
-			AssetsPallet::total_issuance(foreign_asset_id_location.clone()),
+			AssetsPallet::total_issuance(&foreign_asset_id_location.clone()),
 			expected_bla_issuance
 		);
-		assert_eq!(AssetsPallet::active_issuance(foreign_asset_id_location), expected_bla_issuance);
+		assert_eq!(
+			AssetsPallet::active_issuance(&foreign_asset_id_location),
+			expected_bla_issuance
+		);
 	});
 }
 
@@ -1997,10 +2009,10 @@ fn reserve_transfer_assets_with_teleportable_asset_disallowed() {
 		);
 		// Verify total and active issuance of USDT are still the same
 		assert_eq!(
-			AssetsPallet::total_issuance(usdt_id_location.clone()),
+			AssetsPallet::total_issuance(&usdt_id_location.clone()),
 			usdt_initial_local_amount
 		);
-		assert_eq!(AssetsPallet::active_issuance(usdt_id_location), usdt_initial_local_amount);
+		assert_eq!(AssetsPallet::active_issuance(&usdt_id_location), usdt_initial_local_amount);
 	});
 }
 
@@ -2110,10 +2122,10 @@ fn intermediary_error_reverts_side_effects() {
 		);
 		// Verify total and active issuance of USDC has not changed
 		assert_eq!(
-			AssetsPallet::total_issuance(usdc_id_location.clone()),
+			AssetsPallet::total_issuance(&usdc_id_location.clone()),
 			usdc_initial_local_amount
 		);
-		assert_eq!(AssetsPallet::active_issuance(usdc_id_location), usdc_initial_local_amount);
+		assert_eq!(AssetsPallet::active_issuance(&usdc_id_location), usdc_initial_local_amount);
 		// Verify no XCM program sent
 		assert_eq!(sent_xcm(), vec![]);
 	});
@@ -2209,8 +2221,8 @@ fn teleport_asset_using_local_fee_reserve_call<Call>(
 		// Verify total and active issuance of foreign BLA have decreased (burned on
 		// reserve-withdraw)
 		let expected_issuance = usdt_initial_local_amount - SEND_AMOUNT;
-		assert_eq!(AssetsPallet::total_issuance(usdt_id_location.clone()), expected_issuance);
-		assert_eq!(AssetsPallet::active_issuance(usdt_id_location), expected_issuance);
+		assert_eq!(AssetsPallet::total_issuance(&usdt_id_location.clone()), expected_issuance);
+		assert_eq!(AssetsPallet::active_issuance(&usdt_id_location), expected_issuance);
 
 		// Verify sent XCM program
 		assert_eq!(
@@ -2391,16 +2403,19 @@ fn teleported_asset_using_destination_reserve_fee_call<Call>(
 		);
 		// Verify total and active issuance of USDT have decreased (teleported)
 		let expected_usdt_issuance = usdt_initial_local_amount - SEND_AMOUNT;
-		assert_eq!(AssetsPallet::total_issuance(usdt_id_location.clone()), expected_usdt_issuance);
-		assert_eq!(AssetsPallet::active_issuance(usdt_id_location), expected_usdt_issuance);
+		assert_eq!(AssetsPallet::total_issuance(&usdt_id_location.clone()), expected_usdt_issuance);
+		assert_eq!(AssetsPallet::active_issuance(&usdt_id_location), expected_usdt_issuance);
 		// Verify total and active issuance of foreign BLA asset have decreased (burned on
 		// reserve-withdraw)
 		let expected_bla_issuance = foreign_initial_amount - FEE_AMOUNT;
 		assert_eq!(
-			AssetsPallet::total_issuance(foreign_asset_id_location.clone()),
+			AssetsPallet::total_issuance(&foreign_asset_id_location.clone()),
 			expected_bla_issuance
 		);
-		assert_eq!(AssetsPallet::active_issuance(foreign_asset_id_location), expected_bla_issuance);
+		assert_eq!(
+			AssetsPallet::active_issuance(&foreign_asset_id_location),
+			expected_bla_issuance
+		);
 
 		// Verify sent XCM program
 		assert_eq!(
@@ -2596,10 +2611,10 @@ fn remote_asset_reserve_and_remote_fee_reserve_paid_call<Call>(
 		// reserve-withdraw)
 		let expected_issuance = foreign_initial_amount - SEND_AMOUNT;
 		assert_eq!(
-			AssetsPallet::total_issuance(foreign_asset_id_location.clone()),
+			AssetsPallet::total_issuance(&foreign_asset_id_location.clone()),
 			expected_issuance
 		);
-		assert_eq!(AssetsPallet::active_issuance(foreign_asset_id_location), expected_issuance);
+		assert_eq!(AssetsPallet::active_issuance(&foreign_asset_id_location), expected_issuance);
 
 		// Verify sent XCM program
 		assert_eq!(

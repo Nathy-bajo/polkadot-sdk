@@ -74,7 +74,7 @@ fn assert_hypothetically_earned(
 	hypothetically!({
 		// Get the pre-harvest balance.
 		let balance_before: <MockRuntime as Config>::Balance =
-			<<MockRuntime as Config>::Assets>::balance(reward_asset_id.clone(), &staker);
+			<<MockRuntime as Config>::Assets>::balance(&reward_asset_id.clone(), &staker);
 
 		// Harvest the rewards.
 		assert_ok!(StakingRewards::harvest_rewards(RuntimeOrigin::signed(staker), pool_id, None),);
@@ -88,7 +88,7 @@ fn assert_hypothetically_earned(
 
 		// Check that the staker has earned the expected amount.
 		let balance_after =
-			<<MockRuntime as Config>::Assets>::balance(reward_asset_id.clone(), &staker);
+			<<MockRuntime as Config>::Assets>::balance(&reward_asset_id.clone(), &staker);
 		assert_eq!(balance_after - balance_before, expected_earned);
 	});
 }
@@ -405,7 +405,7 @@ mod stake {
 			create_default_pool();
 			let pool_id = 0;
 			let initial_balance = <Assets as fungibles::Inspect<u128>>::reducible_balance(
-				1,
+				&1,
 				&user,
 				Preservation::Expendable,
 				Fortitude::Force,
@@ -429,7 +429,7 @@ mod stake {
 			// Check user's frozen balance is updated
 			assert_eq!(
 				<Assets as fungibles::Inspect<u128>>::reducible_balance(
-					1,
+					&1,
 					&user,
 					Preservation::Expendable,
 					Fortitude::Force,
@@ -454,7 +454,7 @@ mod stake {
 
 			assert_eq!(
 				<Assets as fungibles::Inspect<u128>>::reducible_balance(
-					1,
+					&1,
 					&user,
 					Preservation::Expendable,
 					Fortitude::Force,
@@ -485,7 +485,7 @@ mod stake {
 			create_default_pool();
 			let pool_id = 0;
 			let initial_balance = <Assets as fungibles::Inspect<u128>>::reducible_balance(
-				1,
+				&1,
 				&user,
 				Preservation::Expendable,
 				Fortitude::Force,
@@ -634,14 +634,14 @@ mod harvest_rewards {
 			// Harvest
 			System::set_block_number(20);
 			let balance_before: <MockRuntime as Config>::Balance =
-				<<MockRuntime as Config>::Assets>::balance(reward_asset_id.clone(), &staker);
+				<<MockRuntime as Config>::Assets>::balance(&reward_asset_id.clone(), &staker);
 			assert_ok!(StakingRewards::harvest_rewards(
 				RuntimeOrigin::signed(staker),
 				pool_id,
 				None
 			));
 			let balance_after =
-				<<MockRuntime as Config>::Assets>::balance(reward_asset_id.clone(), &staker);
+				<<MockRuntime as Config>::Assets>::balance(&reward_asset_id.clone(), &staker);
 
 			// Assert
 			assert_eq!(
@@ -1162,9 +1162,9 @@ mod deposit_reward_tokens {
 			let pool_account_id = StakingRewards::pool_account_id(&pool_id);
 
 			let depositor_balance_before =
-				<<MockRuntime as Config>::Assets>::balance(reward_asset_id.clone(), &depositor);
+				<<MockRuntime as Config>::Assets>::balance(&reward_asset_id.clone(), &depositor);
 			let pool_balance_before = <<MockRuntime as Config>::Assets>::balance(
-				reward_asset_id.clone(),
+				&reward_asset_id.clone(),
 				&pool_account_id,
 			);
 			assert_ok!(StakingRewards::deposit_reward_tokens(
@@ -1173,9 +1173,9 @@ mod deposit_reward_tokens {
 				amount
 			));
 			let depositor_balance_after =
-				<<MockRuntime as Config>::Assets>::balance(reward_asset_id.clone(), &depositor);
+				<<MockRuntime as Config>::Assets>::balance(&reward_asset_id.clone(), &depositor);
 			let pool_balance_after =
-				<<MockRuntime as Config>::Assets>::balance(reward_asset_id, &pool_account_id);
+				<<MockRuntime as Config>::Assets>::balance(&reward_asset_id, &pool_account_id);
 
 			assert_eq!(pool_balance_after - pool_balance_before, amount);
 			assert_eq!(depositor_balance_before - depositor_balance_after, amount);
@@ -1415,10 +1415,10 @@ fn integration() {
 		assert_hypothetically_earned(staker2, 1433, pool_id, reward_asset_id.clone());
 		// Get the pre-harvest balance.
 		let balance_before: <MockRuntime as Config>::Balance =
-			<<MockRuntime as Config>::Assets>::balance(reward_asset_id.clone(), &staker2);
+			<<MockRuntime as Config>::Assets>::balance(&reward_asset_id.clone(), &staker2);
 		assert_ok!(StakingRewards::harvest_rewards(RuntimeOrigin::signed(staker2), pool_id, None));
 		let balance_after =
-			<<MockRuntime as Config>::Assets>::balance(reward_asset_id.clone(), &staker2);
+			<<MockRuntime as Config>::Assets>::balance(&reward_asset_id.clone(), &staker2);
 		assert_eq!(balance_after - balance_before, 1433u128);
 
 		// Block 60: Check rewards were adjusted correctly.

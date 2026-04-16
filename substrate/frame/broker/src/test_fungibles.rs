@@ -139,7 +139,7 @@ where
 	fn handle_dust(_dust: Dust<AccountId, Self>) {}
 
 	fn write_balance(
-		asset: Self::AssetId,
+		asset: &Self::AssetId,
 		who: &AccountId,
 		amount: Self::Balance,
 	) -> Result<Option<Self::Balance>, DispatchError> {
@@ -159,7 +159,7 @@ where
 		Ok(maybe_dust)
 	}
 
-	fn set_total_issuance(asset: Self::AssetId, amount: Self::Balance) {
+	fn set_total_issuance(asset: &Self::AssetId, amount: Self::Balance) {
 		let mut ta = TestAssetOf::get();
 		ta.insert((Instance::get(), asset.encode()), amount.encode());
 		TestAssetOf::set(ta);

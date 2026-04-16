@@ -3148,8 +3148,9 @@ pub struct PsmBenchmarkHelper;
 impl pallet_psm::BenchmarkHelper<u32, AccountId> for PsmBenchmarkHelper {
 	fn create_asset(asset_id: u32, owner: &AccountId, decimals: u8) {
 		use frame_support::traits::fungibles::{metadata::Mutate as MetadataMutate, Create};
-		if !<Assets as frame_support::traits::fungibles::Inspect<AccountId>>::asset_exists(asset_id)
-		{
+		if !<Assets as frame_support::traits::fungibles::Inspect<AccountId>>::asset_exists(
+			&asset_id,
+		) {
 			let _ = <Assets as Create<AccountId>>::create(asset_id, owner.clone(), true, 1);
 		}
 		let _ = Balances::force_set_balance(
@@ -3158,7 +3159,7 @@ impl pallet_psm::BenchmarkHelper<u32, AccountId> for PsmBenchmarkHelper {
 			10u128.pow(18),
 		);
 		let _ = <Assets as MetadataMutate<AccountId>>::set(
-			asset_id,
+			&asset_id,
 			owner,
 			b"Benchmark".to_vec(),
 			b"BNC".to_vec(),
@@ -3222,7 +3223,7 @@ impl
 		let lp_provider = account.clone();
 		let _ = Balances::deposit_creating(&lp_provider, ((u64::MAX as u128) * 100).into());
 		assert_ok!(Assets::mint_into(
-			asset_idx.into(),
+			(&asset_idx).into(),
 			&lp_provider,
 			((u64::MAX as u128) * 100).into()
 		));

@@ -85,8 +85,8 @@ fn holding_asset_swap_for_target() {
 	let holding_asset = create_holding_asset(CLIENT_ASSET, client_asset_total);
 	let holding_change = create_holding_asset(CLIENT_ASSET, client_asset_total - fee);
 
-	let target_total = Fungibles::total_issuance(TARGET_ASSET);
-	let client_total = Fungibles::total_issuance(CLIENT_ASSET);
+	let target_total = Fungibles::total_issuance(&TARGET_ASSET);
+	let client_total = Fungibles::total_issuance(&CLIENT_ASSET);
 
 	let mut trader = Trader::new();
 	let change = trader.buy_weight(weight_worth_of(fee), holding_asset, &xcm_context()).unwrap();
@@ -95,8 +95,8 @@ fn holding_asset_swap_for_target() {
 	assert_eq!(trader.total_fee.peek(), fee);
 	assert_eq!(trader.last_fee_asset, Some(create_asset_id(CLIENT_ASSET)));
 
-	assert_eq!(Fungibles::total_issuance(TARGET_ASSET), target_total);
-	assert_eq!(Fungibles::total_issuance(CLIENT_ASSET), client_total);
+	assert_eq!(Fungibles::total_issuance(&TARGET_ASSET), target_total);
+	assert_eq!(Fungibles::total_issuance(&CLIENT_ASSET), client_total);
 }
 
 #[test]
@@ -111,8 +111,8 @@ fn holding_asset_swap_for_target_twice() {
 	let holding_change1 = create_holding_asset(CLIENT_ASSET, client_asset_total - fee1);
 	let holding_change2 = create_holding_asset(CLIENT_ASSET, client_asset_total - fee1 - fee2);
 
-	let target_total = Fungibles::total_issuance(TARGET_ASSET);
-	let client_total = Fungibles::total_issuance(CLIENT_ASSET);
+	let target_total = Fungibles::total_issuance(&TARGET_ASSET);
+	let client_total = Fungibles::total_issuance(&CLIENT_ASSET);
 
 	let mut trader = Trader::new();
 	let change1 = trader.buy_weight(weight_worth_of(fee1), holding_asset, &xcm_context()).unwrap();
@@ -125,8 +125,8 @@ fn holding_asset_swap_for_target_twice() {
 	assert_eq!(trader.total_fee.peek(), fee1 + fee2);
 	assert_eq!(trader.last_fee_asset, Some(create_asset_id(CLIENT_ASSET)));
 
-	assert_eq!(Fungibles::total_issuance(TARGET_ASSET), target_total);
-	assert_eq!(Fungibles::total_issuance(CLIENT_ASSET), client_total);
+	assert_eq!(Fungibles::total_issuance(&TARGET_ASSET), target_total);
+	assert_eq!(Fungibles::total_issuance(&CLIENT_ASSET), client_total);
 }
 
 #[test]
@@ -144,8 +144,8 @@ fn buy_and_refund_twice_for_target() {
 	let holding_change = create_holding_asset(CLIENT_ASSET, client_asset_total - fee);
 	let refund_asset = create_holding_asset(CLIENT_ASSET, refund1);
 
-	let target_total = Fungibles::total_issuance(TARGET_ASSET);
-	let client_total = Fungibles::total_issuance(CLIENT_ASSET);
+	let target_total = Fungibles::total_issuance(&TARGET_ASSET);
+	let client_total = Fungibles::total_issuance(&CLIENT_ASSET);
 
 	let mut trader = Trader::new();
 	let change = trader.buy_weight(weight_worth_of(fee), holding_asset, &xcm_context()).unwrap();
@@ -165,8 +165,8 @@ fn buy_and_refund_twice_for_target() {
 	assert_eq!(trader.total_fee.peek(), fee - refund1);
 	assert_eq!(trader.last_fee_asset, Some(create_asset_id(CLIENT_ASSET)));
 
-	assert_eq!(Fungibles::total_issuance(TARGET_ASSET), target_total);
-	assert_eq!(Fungibles::total_issuance(CLIENT_ASSET), client_total);
+	assert_eq!(Fungibles::total_issuance(&TARGET_ASSET), target_total);
+	assert_eq!(Fungibles::total_issuance(&CLIENT_ASSET), client_total);
 }
 
 #[test]
@@ -191,9 +191,9 @@ fn buy_with_various_assets_and_refund_for_target() {
 	let refund_asset = create_holding_asset(CLIENT_ASSET_2, refund1);
 	let refund_asset_2 = create_holding_asset(CLIENT_ASSET_2, refund2);
 
-	let target_total = Fungibles::total_issuance(TARGET_ASSET);
-	let client_total = Fungibles::total_issuance(CLIENT_ASSET);
-	let client_total_2 = Fungibles::total_issuance(CLIENT_ASSET_2);
+	let target_total = Fungibles::total_issuance(&TARGET_ASSET);
+	let client_total = Fungibles::total_issuance(&CLIENT_ASSET);
+	let client_total_2 = Fungibles::total_issuance(&CLIENT_ASSET_2);
 
 	let mut trader = Trader::new();
 
@@ -227,9 +227,9 @@ fn buy_with_various_assets_and_refund_for_target() {
 	assert_eq!(trader.total_fee.peek(), fee1 + fee2 - refund1 - refund2);
 	assert_eq!(trader.last_fee_asset, Some(create_asset_id(CLIENT_ASSET_2)));
 
-	assert_eq!(Fungibles::total_issuance(TARGET_ASSET), target_total);
-	assert_eq!(Fungibles::total_issuance(CLIENT_ASSET), client_total);
-	assert_eq!(Fungibles::total_issuance(CLIENT_ASSET_2), client_total_2);
+	assert_eq!(Fungibles::total_issuance(&TARGET_ASSET), target_total);
+	assert_eq!(Fungibles::total_issuance(&CLIENT_ASSET), client_total);
+	assert_eq!(Fungibles::total_issuance(&CLIENT_ASSET_2), client_total_2);
 }
 
 #[test]
@@ -243,8 +243,8 @@ fn not_enough_to_refund() {
 	let holding_asset = create_holding_asset(CLIENT_ASSET, client_asset_total);
 	let holding_change = create_holding_asset(CLIENT_ASSET, client_asset_total - fee);
 
-	let target_total = Fungibles::total_issuance(TARGET_ASSET);
-	let client_total = Fungibles::total_issuance(CLIENT_ASSET);
+	let target_total = Fungibles::total_issuance(&TARGET_ASSET);
+	let client_total = Fungibles::total_issuance(&CLIENT_ASSET);
 
 	let mut trader = Trader::new();
 	let refund_holding =
@@ -256,8 +256,8 @@ fn not_enough_to_refund() {
 
 	assert_eq!(trader.refund_weight(weight_worth_of(refund), &xcm_context()), None);
 
-	assert_eq!(Fungibles::total_issuance(TARGET_ASSET), target_total);
-	assert_eq!(Fungibles::total_issuance(CLIENT_ASSET), client_total);
+	assert_eq!(Fungibles::total_issuance(&TARGET_ASSET), target_total);
+	assert_eq!(Fungibles::total_issuance(&CLIENT_ASSET), client_total);
 }
 
 #[test]
@@ -271,8 +271,8 @@ fn not_exchangeable_to_refund() {
 	let holding_asset = create_holding_asset(CLIENT_ASSET, client_asset_total);
 	let expected_change = client_asset_total - fee;
 
-	let target_total = Fungibles::total_issuance(TARGET_ASSET);
-	let client_total = Fungibles::total_issuance(CLIENT_ASSET);
+	let target_total = Fungibles::total_issuance(&TARGET_ASSET);
+	let client_total = Fungibles::total_issuance(&CLIENT_ASSET);
 
 	let mut trader = Trader::new();
 	let holding_change =
@@ -289,8 +289,8 @@ fn not_exchangeable_to_refund() {
 	assert_eq!(trader.refund_weight(weight_worth_of(refund), &xcm_context()), None);
 
 	// swapping does not change total issuance
-	assert_eq!(Fungibles::total_issuance(TARGET_ASSET), target_total);
-	assert_eq!(Fungibles::total_issuance(CLIENT_ASSET), client_total);
+	assert_eq!(Fungibles::total_issuance(&TARGET_ASSET), target_total);
+	assert_eq!(Fungibles::total_issuance(&CLIENT_ASSET), client_total);
 }
 
 #[test]
@@ -305,8 +305,8 @@ fn nothing_to_refund() {
 fn holding_asset_not_exchangeable_for_target() {
 	let holding_asset = create_holding_asset(CLIENT_ASSET, 10);
 
-	let target_total = Fungibles::total_issuance(TARGET_ASSET);
-	let client_total = Fungibles::total_issuance(CLIENT_ASSET);
+	let target_total = Fungibles::total_issuance(&TARGET_ASSET);
+	let client_total = Fungibles::total_issuance(&CLIENT_ASSET);
 
 	let mut trader = Trader::new();
 	let (_, error) = trader
@@ -314,8 +314,8 @@ fn holding_asset_not_exchangeable_for_target() {
 		.unwrap_err();
 	assert_eq!(error, XcmError::FeesNotMet);
 
-	assert_eq!(Fungibles::total_issuance(TARGET_ASSET), target_total);
-	assert_eq!(Fungibles::total_issuance(CLIENT_ASSET), client_total);
+	assert_eq!(Fungibles::total_issuance(&TARGET_ASSET), target_total);
+	assert_eq!(Fungibles::total_issuance(&CLIENT_ASSET), client_total);
 }
 
 #[test]
@@ -438,7 +438,7 @@ pub mod mock {
 				None => return Err((credit_in, DispatchError::Unavailable)),
 			};
 			let credit_out = match Fungibles::withdraw(
-				path[1],
+				&path[1],
 				&pool_account,
 				credit_in.peek(),
 				Exact,
@@ -465,7 +465,7 @@ pub mod mock {
 				None => return Err((credit_in, DispatchError::Unavailable)),
 			};
 			let credit_out = match Fungibles::withdraw(
-				path[1],
+				&path[1],
 				&pool_account,
 				amount_out,
 				Exact,
@@ -489,8 +489,8 @@ pub mod mock {
 	pub fn setup_pool(asset1: AssetId, liquidity1: Balance, asset2: AssetId, liquidity2: Balance) {
 		let account = pool_account(asset1, asset2);
 		SWAP.with(|b| b.borrow_mut().insert((asset1, asset2), account));
-		let debt1 = Fungibles::deposit(asset1, &account, liquidity1, Exact);
-		let debt2 = Fungibles::deposit(asset2, &account, liquidity2, Exact);
+		let debt1 = Fungibles::deposit(&asset1, &account, liquidity1, Exact);
+		let debt2 = Fungibles::deposit(&asset2, &account, liquidity2, Exact);
 		drop(debt1);
 		drop(debt2);
 	}
@@ -507,28 +507,28 @@ pub mod mock {
 	impl Inspect<AccountId> for Fungibles {
 		type AssetId = AssetId;
 		type Balance = Balance;
-		fn total_issuance(asset: Self::AssetId) -> Self::Balance {
-			TOTAL_ISSUANCE.with(|b| b.borrow().get(&asset).map_or(Self::Balance::zero(), |b| *b))
+		fn total_issuance(asset: &Self::AssetId) -> Self::Balance {
+			TOTAL_ISSUANCE.with(|b| b.borrow().get(asset).map_or(Self::Balance::zero(), |b| *b))
 		}
-		fn minimum_balance(_: Self::AssetId) -> Self::Balance {
+		fn minimum_balance(_: &Self::AssetId) -> Self::Balance {
 			Self::Balance::one()
 		}
-		fn total_balance(asset: Self::AssetId, who: &AccountId) -> Self::Balance {
-			ACCOUNT.with(|b| b.borrow().get(&(asset, *who)).map_or(Self::Balance::zero(), |b| *b))
+		fn total_balance(asset: &Self::AssetId, who: &AccountId) -> Self::Balance {
+			ACCOUNT.with(|b| b.borrow().get(&(*asset, *who)).map_or(Self::Balance::zero(), |b| *b))
 		}
-		fn balance(asset: Self::AssetId, who: &AccountId) -> Self::Balance {
-			ACCOUNT.with(|b| b.borrow().get(&(asset, *who)).map_or(Self::Balance::zero(), |b| *b))
+		fn balance(asset: &Self::AssetId, who: &AccountId) -> Self::Balance {
+			ACCOUNT.with(|b| b.borrow().get(&(*asset, *who)).map_or(Self::Balance::zero(), |b| *b))
 		}
 		fn reducible_balance(
-			asset: Self::AssetId,
+			asset: &Self::AssetId,
 			who: &AccountId,
 			_: Preservation,
 			_: Fortitude,
 		) -> Self::Balance {
-			ACCOUNT.with(|b| b.borrow().get(&(asset, *who)).map_or(Self::Balance::zero(), |b| *b))
+			ACCOUNT.with(|b| b.borrow().get(&(*asset, *who)).map_or(Self::Balance::zero(), |b| *b))
 		}
 		fn can_deposit(
-			_: Self::AssetId,
+			_: &Self::AssetId,
 			_: &AccountId,
 			_: Self::Balance,
 			_: Provenance,
@@ -536,30 +536,30 @@ pub mod mock {
 			unimplemented!()
 		}
 		fn can_withdraw(
-			_: Self::AssetId,
+			_: &Self::AssetId,
 			_: &AccountId,
 			_: Self::Balance,
 		) -> WithdrawConsequence<Self::Balance> {
 			unimplemented!()
 		}
-		fn asset_exists(_: Self::AssetId) -> bool {
+		fn asset_exists(_: &Self::AssetId) -> bool {
 			unimplemented!()
 		}
 	}
 
 	impl Unbalanced<AccountId> for Fungibles {
-		fn set_total_issuance(asset: Self::AssetId, amount: Self::Balance) {
-			TOTAL_ISSUANCE.with(|b| b.borrow_mut().insert(asset, amount));
+		fn set_total_issuance(asset: &Self::AssetId, amount: Self::Balance) {
+			TOTAL_ISSUANCE.with(|b| b.borrow_mut().insert(*asset, amount));
 		}
 		fn handle_dust(_: Dust<AccountId, Self>) {
 			unimplemented!()
 		}
 		fn write_balance(
-			asset: Self::AssetId,
+			asset: &Self::AssetId,
 			who: &AccountId,
 			amount: Self::Balance,
 		) -> Result<Option<Self::Balance>, DispatchError> {
-			let _ = ACCOUNT.with(|b| b.borrow_mut().insert((asset, *who), amount));
+			let _ = ACCOUNT.with(|b| b.borrow_mut().insert((*asset, *who), amount));
 			Ok(None)
 		}
 	}
