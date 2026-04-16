@@ -297,7 +297,7 @@ where
 		env.charge(<Runtime as Config<Instance>>::WeightInfo::total_issuance())?;
 
 		let value =
-			Self::to_u256(pallet_assets::Pallet::<Runtime, Instance>::total_issuance(asset_id))?;
+			Self::to_u256(pallet_assets::Pallet::<Runtime, Instance>::total_issuance(&asset_id))?;
 		Ok(IERC20::totalSupplyCall::abi_encode_returns(&value))
 	}
 
@@ -329,7 +329,7 @@ where
 		let spender = call.spender.into_array().into();
 		let spender = <Runtime as pallet_revive::Config>::AddressMapper::to_account_id(&spender);
 		let value = Self::to_u256(pallet_assets::Pallet::<Runtime, Instance>::allowance(
-			asset_id, &owner, &spender,
+			&asset_id, &owner, &spender,
 		))?;
 
 		Ok(IERC20::allowanceCall::abi_encode_returns(&value))
@@ -362,7 +362,7 @@ where
 		let new_amount = Self::to_balance(call.value)?;
 
 		let current = pallet_assets::Pallet::<Runtime, Instance>::allowance(
-			asset_id.clone(),
+			&asset_id,
 			&owner_account,
 			&spender_account,
 		);
@@ -494,7 +494,7 @@ where
 				// Use the permit - this validates deadline, signature, and increments nonce
 				permit::Pallet::<Runtime>::use_permit(
 					&verifying_contract,
-					&pallet_assets::Pallet::<Runtime, Instance>::name(asset_id.clone()),
+					&pallet_assets::Pallet::<Runtime, Instance>::name(&asset_id),
 					&owner_h160,
 					&spender_h160,
 					&value_bytes,
@@ -529,7 +529,7 @@ where
 
 				let new_amount = Self::to_balance(call.value)?;
 				let current = pallet_assets::Pallet::<Runtime, Instance>::allowance(
-					asset_id.clone(),
+					&asset_id,
 					&owner_account,
 					&spender_account,
 				);
@@ -639,7 +639,7 @@ where
 		env.charge(<Runtime as permit::Config>::WeightInfo::domain_separator())?;
 
 		// Fetch token name for EIP-712 domain separator (per EIP-2612 spec)
-		let token_name = pallet_assets::Pallet::<Runtime, Instance>::name(asset_id);
+		let token_name = pallet_assets::Pallet::<Runtime, Instance>::name(&asset_id);
 
 		let separator =
 			permit::Pallet::<Runtime>::compute_domain_separator(&verifying_contract, &token_name);

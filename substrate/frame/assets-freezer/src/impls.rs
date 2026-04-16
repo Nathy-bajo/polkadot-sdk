@@ -62,24 +62,24 @@ impl<T: Config<I>, I: 'static> Inspect<T::AccountId> for Pallet<T, I> {
 	type AssetId = T::AssetId;
 	type Balance = T::Balance;
 
-	fn total_issuance(asset: Self::AssetId) -> Self::Balance {
+	fn total_issuance(asset: &Self::AssetId) -> Self::Balance {
 		pallet_assets::Pallet::<T, I>::total_issuance(asset)
 	}
 
-	fn minimum_balance(asset: Self::AssetId) -> Self::Balance {
+	fn minimum_balance(asset: &Self::AssetId) -> Self::Balance {
 		pallet_assets::Pallet::<T, I>::minimum_balance(asset)
 	}
 
-	fn total_balance(asset: Self::AssetId, who: &T::AccountId) -> Self::Balance {
+	fn total_balance(asset: &Self::AssetId, who: &T::AccountId) -> Self::Balance {
 		pallet_assets::Pallet::<T, I>::total_balance(asset, who)
 	}
 
-	fn balance(asset: Self::AssetId, who: &T::AccountId) -> Self::Balance {
-		pallet_assets::Pallet::<T, I>::balance(asset, who)
+	fn balance(asset: &Self::AssetId, who: &T::AccountId) -> Self::Balance {
+		<pallet_assets::Pallet<T, I> as Inspect<T::AccountId>>::balance(asset, who)
 	}
 
 	fn reducible_balance(
-		asset: Self::AssetId,
+		asset: &Self::AssetId,
 		who: &T::AccountId,
 		preservation: Preservation,
 		force: Fortitude,
@@ -88,7 +88,7 @@ impl<T: Config<I>, I: 'static> Inspect<T::AccountId> for Pallet<T, I> {
 	}
 
 	fn can_deposit(
-		asset: Self::AssetId,
+		asset: &Self::AssetId,
 		who: &T::AccountId,
 		amount: Self::Balance,
 		provenance: Provenance,
@@ -97,14 +97,14 @@ impl<T: Config<I>, I: 'static> Inspect<T::AccountId> for Pallet<T, I> {
 	}
 
 	fn can_withdraw(
-		asset: Self::AssetId,
+		asset: &Self::AssetId,
 		who: &T::AccountId,
 		amount: Self::Balance,
 	) -> WithdrawConsequence<Self::Balance> {
 		pallet_assets::Pallet::<T, I>::can_withdraw(asset, who, amount)
 	}
 
-	fn asset_exists(asset: Self::AssetId) -> bool {
+	fn asset_exists(asset: &Self::AssetId) -> bool {
 		pallet_assets::Pallet::<T, I>::asset_exists(asset)
 	}
 }
@@ -112,12 +112,12 @@ impl<T: Config<I>, I: 'static> Inspect<T::AccountId> for Pallet<T, I> {
 impl<T: Config<I>, I: 'static> InspectFreeze<T::AccountId> for Pallet<T, I> {
 	type Id = T::RuntimeFreezeReason;
 
-	fn balance_frozen(asset: Self::AssetId, id: &Self::Id, who: &T::AccountId) -> Self::Balance {
+	fn balance_frozen(asset: &Self::AssetId, id: &Self::Id, who: &T::AccountId) -> Self::Balance {
 		let freezes = Freezes::<T, I>::get(asset, who);
 		freezes.into_iter().find(|l| &l.id == id).map_or(Zero::zero(), |l| l.amount)
 	}
 
-	fn can_freeze(asset: Self::AssetId, id: &Self::Id, who: &T::AccountId) -> bool {
+	fn can_freeze(asset: &Self::AssetId, id: &Self::Id, who: &T::AccountId) -> bool {
 		let freezes = Freezes::<T, I>::get(asset, who);
 		!freezes.is_full() || freezes.into_iter().any(|i| i.id == *id)
 	}
@@ -125,7 +125,7 @@ impl<T: Config<I>, I: 'static> InspectFreeze<T::AccountId> for Pallet<T, I> {
 
 impl<T: Config<I>, I: 'static> MutateFreeze<T::AccountId> for Pallet<T, I> {
 	fn set_freeze(
-		asset: Self::AssetId,
+		asset: &Self::AssetId,
 		id: &Self::Id,
 		who: &T::AccountId,
 		amount: Self::Balance,
@@ -133,7 +133,7 @@ impl<T: Config<I>, I: 'static> MutateFreeze<T::AccountId> for Pallet<T, I> {
 		if amount.is_zero() {
 			return Self::thaw(asset, id, who);
 		}
-		let mut freezes = Freezes::<T, I>::get(asset.clone(), who);
+		let mut freezes = Freezes::<T, I>::get(asset, who);
 		if let Some(i) = freezes.iter_mut().find(|i| &i.id == id) {
 			i.amount = amount;
 		} else {
@@ -141,11 +141,11 @@ impl<T: Config<I>, I: 'static> MutateFreeze<T::AccountId> for Pallet<T, I> {
 				.try_push(IdAmount { id: *id, amount })
 				.map_err(|_| Error::<T, I>::TooManyFreezes)?;
 		}
-		Self::update_freezes(asset, who, freezes.as_bounded_slice())
+		Self::update_freezes(asset.clone(), who, freezes.as_bounded_slice())
 	}
 
 	fn extend_freeze(
-		asset: Self::AssetId,
+		asset: &Self::AssetId,
 		id: &Self::Id,
 		who: &T::AccountId,
 		amount: Self::Balance,
@@ -153,7 +153,7 @@ impl<T: Config<I>, I: 'static> MutateFreeze<T::AccountId> for Pallet<T, I> {
 		if amount.is_zero() {
 			return Ok(());
 		}
-		let mut freezes = Freezes::<T, I>::get(asset.clone(), who);
+		let mut freezes = Freezes::<T, I>::get(asset, who);
 		if let Some(i) = freezes.iter_mut().find(|x| &x.id == id) {
 			i.amount = i.amount.max(amount);
 		} else {
@@ -161,12 +161,12 @@ impl<T: Config<I>, I: 'static> MutateFreeze<T::AccountId> for Pallet<T, I> {
 				.try_push(IdAmount { id: *id, amount })
 				.map_err(|_| Error::<T, I>::TooManyFreezes)?;
 		}
-		Self::update_freezes(asset, who, freezes.as_bounded_slice())
+		Self::update_freezes(asset.clone(), who, freezes.as_bounded_slice())
 	}
 
-	fn thaw(asset: Self::AssetId, id: &Self::Id, who: &T::AccountId) -> DispatchResult {
-		let mut freezes = Freezes::<T, I>::get(asset.clone(), who);
+	fn thaw(asset: &Self::AssetId, id: &Self::Id, who: &T::AccountId) -> DispatchResult {
+		let mut freezes = Freezes::<T, I>::get(asset, who);
 		freezes.retain(|f| &f.id != id);
-		Self::update_freezes(asset, who, freezes.as_bounded_slice())
+		Self::update_freezes(asset.clone(), who, freezes.as_bounded_slice())
 	}
 }

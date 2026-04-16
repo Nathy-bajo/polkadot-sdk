@@ -124,7 +124,7 @@ where
 		if asset_id == A::get() {
 			// The `asset_id` is the target asset, we do not need to swap.
 			let fee_credit = F::withdraw(
-				asset_id.clone(),
+				&asset_id,
 				who,
 				fee,
 				Precision::Exact,
@@ -143,7 +143,7 @@ where
 
 		// Withdraw the `asset_id` credit for the swap.
 		let asset_fee_credit = F::withdraw(
-			asset_id.clone(),
+			&asset_id,
 			who,
 			asset_fee,
 			Precision::Exact,
@@ -183,7 +183,7 @@ where
 	) -> Result<(), TransactionValidityError> {
 		if asset_id == A::get() {
 			// The `asset_id` is the target asset, we do not need to swap.
-			match F::can_withdraw(asset_id.clone(), who, fee) {
+			match F::can_withdraw(&asset_id, who, fee) {
 				WithdrawConsequence::Success => return Ok(()),
 				_ => return Err(TransactionValidityError::from(InvalidTransaction::Payment)),
 			}
@@ -194,7 +194,7 @@ where
 				.ok_or(InvalidTransaction::Payment)?;
 
 		// Ensure we can withdraw enough `asset_id` for the swap.
-		match F::can_withdraw(asset_id.clone(), who, asset_fee) {
+		match F::can_withdraw(&asset_id, who, asset_fee) {
 			WithdrawConsequence::Success => {},
 			_ => return Err(TransactionValidityError::from(InvalidTransaction::Payment)),
 		};
@@ -214,7 +214,7 @@ where
 		let (fee_paid, initial_asset_consumed) = already_withdrawn;
 		let refund_amount = fee_paid.peek().saturating_sub(corrected_fee);
 		let (fee_in_asset, adjusted_paid) = if refund_amount.is_zero() ||
-			F::total_balance(asset_id.clone(), who).is_zero()
+			F::total_balance(&asset_id, who).is_zero()
 		{
 			// Nothing to refund or the account was removed be the dispatched function.
 			(initial_asset_consumed, fee_paid)
@@ -246,8 +246,7 @@ where
 				fungibles::Debt::<T::AccountId, F>::zero(asset_id.clone())
 			} else {
 				// Deposit the refund before the swap to ensure it can be processed.
-				match F::deposit(asset_id.clone(), &who, refund_asset_amount, Precision::BestEffort)
-				{
+				match F::deposit(&asset_id, &who, refund_asset_amount, Precision::BestEffort) {
 					Ok(debt) => debt,
 					// No refund given since it cannot be deposited.
 					Err(_) => fungibles::Debt::<T::AccountId, F>::zero(asset_id.clone()),

@@ -128,7 +128,7 @@ where
 	Assets: fungibles::Inspect<AccountId>,
 {
 	fn contains(id: &<Assets as fungibles::Inspect<AccountId>>::AssetId) -> bool {
-		!Assets::total_issuance(id.clone()).is_zero()
+		!Assets::total_issuance(id).is_zero()
 	}
 }
 
@@ -140,7 +140,7 @@ where
 	Assets: fungibles::Inspect<AccountId>,
 {
 	fn contains(id: &<Assets as fungibles::Inspect<AccountId>>::AssetId) -> bool {
-		Assets::asset_exists(id.clone())
+		Assets::asset_exists(id)
 	}
 }
 

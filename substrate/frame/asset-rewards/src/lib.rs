@@ -480,7 +480,7 @@ pub mod pallet {
 				Self::update_pool_and_staker_rewards(&pool_info, &staker_info)?;
 
 			T::AssetsFreezer::increase_frozen(
-				pool_info.staked_asset_id.clone(),
+				&pool_info.staked_asset_id,
 				&FreezeReason::Staked.into(),
 				&staker,
 				amount,
@@ -534,7 +534,7 @@ pub mod pallet {
 
 			// Unfreeze staker assets.
 			T::AssetsFreezer::decrease_frozen(
-				pool_info.staked_asset_id.clone(),
+				&pool_info.staked_asset_id,
 				&FreezeReason::Staked.into(),
 				&staker,
 				amount,
@@ -586,7 +586,7 @@ pub mod pallet {
 
 			// Transfer unclaimed rewards from the pool to the staker.
 			T::Assets::transfer(
-				pool_info.reward_asset_id,
+				&pool_info.reward_asset_id,
 				&pool_info.account,
 				&staker,
 				staker_info.rewards,
@@ -678,7 +678,7 @@ pub mod pallet {
 			let caller = ensure_signed(origin)?;
 			let pool_info = Pools::<T>::get(pool_id).ok_or(Error::<T>::NonExistentPool)?;
 			T::Assets::transfer(
-				pool_info.reward_asset_id,
+				&pool_info.reward_asset_id,
 				&caller,
 				&pool_info.account,
 				amount,
@@ -704,13 +704,13 @@ pub mod pallet {
 			ensure!(stakers.is_none(), Error::<T>::NonEmptyPool);
 
 			let pool_balance = T::Assets::reducible_balance(
-				pool_info.reward_asset_id.clone(),
+				&pool_info.reward_asset_id,
 				&pool_info.account,
 				Preservation::Expendable,
 				Fortitude::Polite,
 			);
 			T::Assets::transfer(
-				pool_info.reward_asset_id,
+				&pool_info.reward_asset_id,
 				&pool_info.account,
 				&pool_info.admin,
 				pool_balance,
@@ -849,8 +849,8 @@ impl<T: Config> RewardsPool<T::AccountId> for Pallet<T> {
 		admin: &T::AccountId,
 	) -> Result<PoolId, DispatchError> {
 		// Ensure the assets exist.
-		ensure!(T::Assets::asset_exists(staked_asset_id.clone()), Error::<T>::NonExistentAsset);
-		ensure!(T::Assets::asset_exists(reward_asset_id.clone()), Error::<T>::NonExistentAsset);
+		ensure!(T::Assets::asset_exists(&staked_asset_id), Error::<T>::NonExistentAsset);
+		ensure!(T::Assets::asset_exists(&reward_asset_id), Error::<T>::NonExistentAsset);
 
 		// Check the expiry block.
 		let now = T::BlockNumberProvider::current_block_number();

@@ -37,17 +37,17 @@ pub trait Inspect<AccountId>: super::Inspect<AccountId> {
 	type Id: codec::Encode + TypeInfo + 'static;
 
 	/// Amount of funds held in reserve by `who` for the given `id`.
-	fn balance_frozen(asset: Self::AssetId, id: &Self::Id, who: &AccountId) -> Self::Balance;
+	fn balance_frozen(asset: &Self::AssetId, id: &Self::Id, who: &AccountId) -> Self::Balance;
 
 	/// The amount of the balance which can become frozen. Defaults to `total_balance()`.
-	fn balance_freezable(asset: Self::AssetId, who: &AccountId) -> Self::Balance {
+	fn balance_freezable(asset: &Self::AssetId, who: &AccountId) -> Self::Balance {
 		Self::total_balance(asset, who)
 	}
 
 	/// Returns `true` if it's possible to introduce a freeze for the given `id` onto the
 	/// account of `who`. This will be true as long as the implementor supports as many
 	/// concurrent freeze locks as there are possible values of `id`.
-	fn can_freeze(asset: Self::AssetId, id: &Self::Id, who: &AccountId) -> bool;
+	fn can_freeze(asset: &Self::AssetId, id: &Self::Id, who: &AccountId) -> bool;
 }
 
 /// Trait for introducing, altering and removing locks to freeze an account's funds so they never
@@ -61,7 +61,7 @@ pub trait Mutate<AccountId>: Inspect<AccountId> {
 	///
 	/// Note that `amount` can be greater than the total balance, if desired.
 	fn set_freeze(
-		asset: Self::AssetId,
+		asset: &Self::AssetId,
 		id: &Self::Id,
 		who: &AccountId,
 		amount: Self::Balance,
@@ -74,21 +74,21 @@ pub trait Mutate<AccountId>: Inspect<AccountId> {
 	///
 	/// Note that more funds can be locked than the total balance, if desired.
 	fn extend_freeze(
-		asset: Self::AssetId,
+		asset: &Self::AssetId,
 		id: &Self::Id,
 		who: &AccountId,
 		amount: Self::Balance,
 	) -> DispatchResult;
 
 	/// Remove an existing lock.
-	fn thaw(asset: Self::AssetId, id: &Self::Id, who: &AccountId) -> DispatchResult;
+	fn thaw(asset: &Self::AssetId, id: &Self::Id, who: &AccountId) -> DispatchResult;
 
 	/// Attempt to alter the amount frozen under the given `id` to `amount`.
 	///
 	/// Fail if the account of `who` has fewer freezable funds than `amount`, unless `fortitude` is
 	/// `Fortitude::Force`.
 	fn set_frozen(
-		asset: Self::AssetId,
+		asset: &Self::AssetId,
 		id: &Self::Id,
 		who: &AccountId,
 		amount: Self::Balance,
@@ -96,7 +96,7 @@ pub trait Mutate<AccountId>: Inspect<AccountId> {
 	) -> DispatchResult {
 		let force = fortitude == Fortitude::Force;
 		ensure!(
-			force || Self::balance_freezable(asset.clone(), who) >= amount,
+			force || Self::balance_freezable(asset, who) >= amount,
 			TokenError::FundsUnavailable
 		);
 		Self::set_freeze(asset, id, who, amount)
@@ -108,7 +108,7 @@ pub trait Mutate<AccountId>: Inspect<AccountId> {
 	/// Fail if the account of `who` has fewer freezable funds than `amount`, unless `fortitude` is
 	/// `Fortitude::Force`.
 	fn ensure_frozen(
-		asset: Self::AssetId,
+		asset: &Self::AssetId,
 		id: &Self::Id,
 		who: &AccountId,
 		amount: Self::Balance,
@@ -116,7 +116,7 @@ pub trait Mutate<AccountId>: Inspect<AccountId> {
 	) -> DispatchResult {
 		let force = fortitude == Fortitude::Force;
 		ensure!(
-			force || Self::balance_freezable(asset.clone(), who) >= amount,
+			force || Self::balance_freezable(asset, who) >= amount,
 			TokenError::FundsUnavailable
 		);
 		Self::extend_freeze(asset, id, who, amount)
@@ -125,12 +125,12 @@ pub trait Mutate<AccountId>: Inspect<AccountId> {
 	/// Decrease the amount which is being frozen for a particular lock, failing in the case of
 	/// underflow.
 	fn decrease_frozen(
-		asset: Self::AssetId,
+		asset: &Self::AssetId,
 		id: &Self::Id,
 		who: &AccountId,
 		amount: Self::Balance,
 	) -> DispatchResult {
-		let a = Self::balance_frozen(asset.clone(), id, who)
+		let a = Self::balance_frozen(asset, id, who)
 			.checked_sub(&amount)
 			.ok_or(ArithmeticError::Underflow)?;
 		Self::set_frozen(asset, id, who, a, Fortitude::Polite)
@@ -139,12 +139,12 @@ pub trait Mutate<AccountId>: Inspect<AccountId> {
 	/// Increase the amount which is being frozen for a particular lock, failing in the case that
 	/// too little balance is available for being frozen.
 	fn increase_frozen(
-		asset: Self::AssetId,
+		asset: &Self::AssetId,
 		id: &Self::Id,
 		who: &AccountId,
 		amount: Self::Balance,
 	) -> DispatchResult {
-		let a = Self::balance_frozen(asset.clone(), id, who)
+		let a = Self::balance_frozen(asset, id, who)
 			.checked_add(&amount)
 			.ok_or(ArithmeticError::Overflow)?;
 		Self::set_frozen(asset, id, who, a, Fortitude::Polite)

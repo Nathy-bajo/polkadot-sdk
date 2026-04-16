@@ -107,7 +107,7 @@ where
 		let who = Self::match_location::<A::Type>(who).map_err(|_| DispatchError::Unavailable)?;
 		let asset = Self::match_asset(&asset).map_err(|_| DispatchError::Unavailable)?;
 		<F as fungibles::Mutate<_>>::transfer(
-			asset,
+			&asset,
 			&A::get(),
 			&who,
 			amount,
@@ -193,7 +193,7 @@ where
 		let who = Self::match_location::<A>(who).map_err(|_| DispatchError::Unavailable)?;
 		let asset = Self::match_asset(&asset).map_err(|_| DispatchError::Unavailable)?;
 		<F as fungibles::Mutate<_>>::transfer(
-			asset,
+			&asset,
 			&source,
 			&who,
 			amount,

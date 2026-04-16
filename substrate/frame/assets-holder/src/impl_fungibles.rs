@@ -67,24 +67,24 @@ impl<T: Config<I>, I: 'static> Inspect<T::AccountId> for Pallet<T, I> {
 	type AssetId = T::AssetId;
 	type Balance = T::Balance;
 
-	fn total_issuance(asset: Self::AssetId) -> Self::Balance {
+	fn total_issuance(asset: &Self::AssetId) -> Self::Balance {
 		pallet_assets::Pallet::<T, I>::total_issuance(asset)
 	}
 
-	fn minimum_balance(asset: Self::AssetId) -> Self::Balance {
+	fn minimum_balance(asset: &Self::AssetId) -> Self::Balance {
 		pallet_assets::Pallet::<T, I>::minimum_balance(asset)
 	}
 
-	fn total_balance(asset: Self::AssetId, who: &T::AccountId) -> Self::Balance {
+	fn total_balance(asset: &Self::AssetId, who: &T::AccountId) -> Self::Balance {
 		pallet_assets::Pallet::<T, I>::total_balance(asset, who)
 	}
 
-	fn balance(asset: Self::AssetId, who: &T::AccountId) -> Self::Balance {
-		pallet_assets::Pallet::<T, I>::balance(asset, who)
+	fn balance(asset: &Self::AssetId, who: &T::AccountId) -> Self::Balance {
+		<pallet_assets::Pallet::<T, I> as frame_support::traits::fungibles::Inspect<T::AccountId>>::balance(asset, who)
 	}
 
 	fn reducible_balance(
-		asset: Self::AssetId,
+		asset: &Self::AssetId,
 		who: &T::AccountId,
 		preservation: Preservation,
 		force: Fortitude,
@@ -93,7 +93,7 @@ impl<T: Config<I>, I: 'static> Inspect<T::AccountId> for Pallet<T, I> {
 	}
 
 	fn can_deposit(
-		asset: Self::AssetId,
+		asset: &Self::AssetId,
 		who: &T::AccountId,
 		amount: Self::Balance,
 		provenance: Provenance,
@@ -102,14 +102,14 @@ impl<T: Config<I>, I: 'static> Inspect<T::AccountId> for Pallet<T, I> {
 	}
 
 	fn can_withdraw(
-		asset: Self::AssetId,
+		asset: &Self::AssetId,
 		who: &T::AccountId,
 		amount: Self::Balance,
 	) -> WithdrawConsequence<Self::Balance> {
 		pallet_assets::Pallet::<T, I>::can_withdraw(asset, who, amount)
 	}
 
-	fn asset_exists(asset: Self::AssetId) -> bool {
+	fn asset_exists(asset: &Self::AssetId) -> bool {
 		pallet_assets::Pallet::<T, I>::asset_exists(asset)
 	}
 }
@@ -117,12 +117,12 @@ impl<T: Config<I>, I: 'static> Inspect<T::AccountId> for Pallet<T, I> {
 impl<T: Config<I>, I: 'static> InspectHold<T::AccountId> for Pallet<T, I> {
 	type Reason = T::RuntimeHoldReason;
 
-	fn total_balance_on_hold(asset: Self::AssetId, who: &T::AccountId) -> Self::Balance {
+	fn total_balance_on_hold(asset: &Self::AssetId, who: &T::AccountId) -> Self::Balance {
 		BalancesOnHold::<T, I>::get(asset, who).unwrap_or_else(Zero::zero)
 	}
 
 	fn balance_on_hold(
-		asset: Self::AssetId,
+		asset: &Self::AssetId,
 		reason: &Self::Reason,
 		who: &T::AccountId,
 	) -> Self::Balance {
@@ -141,19 +141,19 @@ impl<T: Config<I>, I: 'static> Unbalanced<T::AccountId> for Pallet<T, I> {
 	}
 
 	fn write_balance(
-		asset: Self::AssetId,
+		asset: &Self::AssetId,
 		who: &T::AccountId,
 		amount: Self::Balance,
 	) -> Result<Option<Self::Balance>, DispatchError> {
 		pallet_assets::Pallet::<T, I>::write_balance(asset, who, amount)
 	}
 
-	fn set_total_issuance(asset: Self::AssetId, amount: Self::Balance) {
+	fn set_total_issuance(asset: &Self::AssetId, amount: Self::Balance) {
 		pallet_assets::Pallet::<T, I>::set_total_issuance(asset, amount)
 	}
 
 	fn decrease_balance(
-		asset: Self::AssetId,
+		asset: &Self::AssetId,
 		who: &T::AccountId,
 		amount: Self::Balance,
 		precision: Precision,
@@ -171,7 +171,7 @@ impl<T: Config<I>, I: 'static> Unbalanced<T::AccountId> for Pallet<T, I> {
 	}
 
 	fn increase_balance(
-		asset: Self::AssetId,
+		asset: &Self::AssetId,
 		who: &T::AccountId,
 		amount: Self::Balance,
 		precision: Precision,
@@ -182,14 +182,13 @@ impl<T: Config<I>, I: 'static> Unbalanced<T::AccountId> for Pallet<T, I> {
 
 impl<T: Config<I>, I: 'static> UnbalancedHold<T::AccountId> for Pallet<T, I> {
 	fn set_balance_on_hold(
-		asset: Self::AssetId,
+		asset: &Self::AssetId,
 		reason: &Self::Reason,
 		who: &T::AccountId,
 		amount: Self::Balance,
 	) -> DispatchResult {
-		let mut holds = Holds::<T, I>::get(asset.clone(), who);
-		let amount_on_hold =
-			BalancesOnHold::<T, I>::get(asset.clone(), who).unwrap_or_else(Zero::zero);
+		let mut holds = Holds::<T, I>::get(asset, who);
+		let amount_on_hold = BalancesOnHold::<T, I>::get(asset, who).unwrap_or_else(Zero::zero);
 
 		let amount_on_hold = if amount.is_zero() {
 			if let Some(pos) = holds.iter().position(|x| &x.id == reason) {
@@ -230,15 +229,15 @@ impl<T: Config<I>, I: 'static> UnbalancedHold<T::AccountId> for Pallet<T, I> {
 		};
 
 		if !holds.is_empty() {
-			Holds::<T, I>::insert(asset.clone(), who, holds);
+			Holds::<T, I>::insert(asset, who, holds);
 		} else {
-			Holds::<T, I>::remove(asset.clone(), who);
+			Holds::<T, I>::remove(asset, who);
 		}
 
 		if amount_on_hold.is_zero() {
-			BalancesOnHold::<T, I>::remove(asset.clone(), who);
+			BalancesOnHold::<T, I>::remove(asset, who);
 		} else {
-			BalancesOnHold::<T, I>::insert(asset.clone(), who, amount_on_hold);
+			BalancesOnHold::<T, I>::insert(asset, who, amount_on_hold);
 		}
 
 		Ok(())
@@ -247,13 +246,13 @@ impl<T: Config<I>, I: 'static> UnbalancedHold<T::AccountId> for Pallet<T, I> {
 
 impl<T: Config<I>, I: 'static> MutateHold<T::AccountId> for Pallet<T, I> {
 	fn done_hold(
-		asset_id: Self::AssetId,
+		asset_id: &Self::AssetId,
 		reason: &Self::Reason,
 		who: &T::AccountId,
 		amount: Self::Balance,
 	) {
 		Self::deposit_event(Event::<T, I>::Held {
-			asset_id,
+			asset_id: asset_id.clone(),
 			who: who.clone(),
 			reason: *reason,
 			amount,
@@ -261,13 +260,13 @@ impl<T: Config<I>, I: 'static> MutateHold<T::AccountId> for Pallet<T, I> {
 	}
 
 	fn done_release(
-		asset_id: Self::AssetId,
+		asset_id: &Self::AssetId,
 		reason: &Self::Reason,
 		who: &T::AccountId,
 		amount: Self::Balance,
 	) {
 		Self::deposit_event(Event::<T, I>::Released {
-			asset_id,
+			asset_id: asset_id.clone(),
 			who: who.clone(),
 			reason: *reason,
 			amount,
@@ -275,13 +274,13 @@ impl<T: Config<I>, I: 'static> MutateHold<T::AccountId> for Pallet<T, I> {
 	}
 
 	fn done_burn_held(
-		asset_id: Self::AssetId,
+		asset_id: &Self::AssetId,
 		reason: &Self::Reason,
 		who: &T::AccountId,
 		amount: Self::Balance,
 	) {
 		Self::deposit_event(Event::<T, I>::Burned {
-			asset_id,
+			asset_id: asset_id.clone(),
 			who: who.clone(),
 			reason: *reason,
 			amount,

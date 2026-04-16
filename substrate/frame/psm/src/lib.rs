@@ -352,7 +352,7 @@ pub mod pallet {
 			let stable_decimals = T::StableAsset::decimals();
 			for (asset_id, (minting_fee, redemption_fee, ceiling_weight)) in &self.asset_configs {
 				assert!(
-					T::Fungibles::decimals(*asset_id) == stable_decimals,
+					T::Fungibles::decimals(asset_id) == stable_decimals,
 					"PSM genesis: asset {:?} decimals do not match stable asset decimals",
 					asset_id,
 				);
@@ -509,7 +509,7 @@ pub mod pallet {
 			let psm_account = Self::account_id();
 
 			T::Fungibles::transfer(
-				asset_id,
+				&asset_id,
 				&who,
 				&psm_account,
 				external_amount,
@@ -610,7 +610,7 @@ pub mod pallet {
 
 			let psm_account = Self::account_id();
 			T::Fungibles::transfer(
-				asset_id,
+				&asset_id,
 				&psm_account,
 				&who,
 				external_to_user,
@@ -824,7 +824,7 @@ pub mod pallet {
 			let count = ExternalAssets::<T>::count();
 			ensure!(count < T::MaxExternalAssets::get(), Error::<T>::TooManyAssets);
 			ensure!(
-				T::Fungibles::decimals(asset_id) == T::StableAsset::decimals(),
+				T::Fungibles::decimals(&asset_id) == T::StableAsset::decimals(),
 				Error::<T>::DecimalsMismatch
 			);
 			ExternalAssets::<T>::insert(asset_id, CircuitBreakerLevel::AllEnabled);
@@ -933,7 +933,7 @@ pub mod pallet {
 
 		/// Get the reserve (balance) of an external asset held by PSM.
 		pub(crate) fn get_reserve(asset_id: T::AssetId) -> BalanceOf<T> {
-			T::Fungibles::balance(asset_id, &Self::account_id())
+			T::Fungibles::balance(&asset_id, &Self::account_id())
 		}
 
 		/// Ensure an account exists by incrementing its provider count if needed.

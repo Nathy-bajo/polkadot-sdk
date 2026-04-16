@@ -122,7 +122,7 @@ impl<T: Config, I: InitialPsmConfig<T>> frame_support::traits::OnRuntimeUpgrade
 			}
 
 			assert!(
-				T::Fungibles::decimals(*asset_id) == stable_decimals,
+				T::Fungibles::decimals(asset_id) == stable_decimals,
 				"PSM migration: asset {:?} decimals do not match stable asset decimals",
 				asset_id,
 			);

@@ -1837,15 +1837,16 @@ pub mod pallet {
 		) -> DispatchResult {
 			let transactor = ensure_signed(origin)?;
 			let keep_alive = if keep_alive { Preserve } else { Expendable };
+			let asset_id = id.into();
 			let reducible_balance = <Self as fungibles::Inspect<_>>::reducible_balance(
-				id.clone().into(),
+				&asset_id,
 				&transactor,
 				keep_alive,
 				Fortitude::Polite,
 			);
 			let dest = T::Lookup::lookup(dest)?;
 			<Self as fungibles::Mutate<_>>::transfer(
-				id.into(),
+				&asset_id,
 				&transactor,
 				&dest,
 				reducible_balance,

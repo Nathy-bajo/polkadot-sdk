@@ -41,7 +41,9 @@ where
 			return Err(origin);
 		}
 		let asset_location: Location = asset_location.clone().into();
-		let owner = AssetInspect::owner(asset_location.into());
+		let asset_id: <AssetInspect as frame_support::traits::fungibles::Inspect<AccountId>>::AssetId =
+			asset_location.into();
+		let owner = AssetInspect::owner(&asset_id);
 		let location: Location = origin_location.clone().into();
 		let from = LocationToAccountId::convert_location(&location);
 		if from != owner {
@@ -85,7 +87,10 @@ where
 	) -> Result<Self::Success, RuntimeOrigin> {
 		let who = ensure_signed(origin.clone()).map_err(|_| origin.clone())?;
 		let asset_id = MatchAssetId::convert(asset_location).ok_or(origin.clone())?;
-		let owner = AssetInspect::owner(asset_id.into()).ok_or(origin.clone())?;
+		let inspect_asset_id: <AssetInspect as frame_support::traits::fungibles::Inspect<
+			AccountId,
+		>>::AssetId = asset_id.into();
+		let owner = AssetInspect::owner(&inspect_asset_id).ok_or(origin.clone())?;
 		if who != owner {
 			return Err(origin);
 		}

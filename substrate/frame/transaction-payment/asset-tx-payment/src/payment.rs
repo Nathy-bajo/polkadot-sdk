@@ -143,16 +143,13 @@ where
 		let converted_fee = CON::to_asset_balance(fee, asset_id.clone())
 			.map_err(|_| TransactionValidityError::from(InvalidTransaction::Payment))?
 			.max(min_converted_fee);
-		let can_withdraw = <T::Fungibles as Inspect<T::AccountId>>::can_withdraw(
-			asset_id.clone(),
-			who,
-			converted_fee,
-		);
+		let can_withdraw =
+			<T::Fungibles as Inspect<T::AccountId>>::can_withdraw(&asset_id, who, converted_fee);
 		if can_withdraw != WithdrawConsequence::Success {
 			return Err(InvalidTransaction::Payment.into());
 		}
 		<T::Fungibles as Balanced<T::AccountId>>::withdraw(
-			asset_id,
+			&asset_id,
 			who,
 			converted_fee,
 			Exact,
@@ -181,7 +178,7 @@ where
 			.map_err(|_| TransactionValidityError::from(InvalidTransaction::Payment))?
 			.max(min_converted_fee);
 		let can_withdraw =
-			<T::Fungibles as Inspect<T::AccountId>>::can_withdraw(asset_id, who, converted_fee);
+			<T::Fungibles as Inspect<T::AccountId>>::can_withdraw(&asset_id, who, converted_fee);
 		if can_withdraw != WithdrawConsequence::Success {
 			return Err(InvalidTransaction::Payment.into());
 		}

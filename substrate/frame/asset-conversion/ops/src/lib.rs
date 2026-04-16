@@ -166,9 +166,9 @@ pub mod pallet {
 			let (asset1, asset2) = pool_id.clone();
 
 			// Assets that must be transferred to the new account id.
-			let balance1 = T::Assets::total_balance(asset1.clone(), &prior_account);
-			let balance2 = T::Assets::total_balance(asset2.clone(), &prior_account);
-			let lp_balance = T::PoolAssets::total_balance(info.lp_token.clone(), &prior_account);
+			let balance1 = T::Assets::total_balance(&asset1, &prior_account);
+			let balance2 = T::Assets::total_balance(&asset2, &prior_account);
+			let lp_balance = T::PoolAssets::total_balance(&info.lp_token, &prior_account);
 
 			ensure!(!balance1.is_zero(), Error::<T>::ZeroBalance);
 			ensure!(!balance2.is_zero(), Error::<T>::ZeroBalance);
@@ -209,7 +209,7 @@ pub mod pallet {
 			ensure!(
 				balance1 ==
 					T::Assets::transfer(
-						asset1.clone(),
+						&asset1,
 						&prior_account,
 						&new_account,
 						balance1,
@@ -221,7 +221,7 @@ pub mod pallet {
 			ensure!(
 				balance2 ==
 					T::Assets::transfer(
-						asset2.clone(),
+						&asset2,
 						&prior_account,
 						&new_account,
 						balance2,
@@ -233,7 +233,7 @@ pub mod pallet {
 			ensure!(
 				lp_balance ==
 					T::PoolAssets::transfer(
-						info.lp_token.clone(),
+						&info.lp_token,
 						&prior_account,
 						&new_account,
 						lp_balance,

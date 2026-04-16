@@ -63,11 +63,11 @@ impl<T: Config> fungibles::Inspect<<T as frame_system::Config>::AccountId> for P
 	type Balance = u128;
 
 	// Need to call a view function here.
-	fn total_issuance(asset_id: Self::AssetId) -> Self::Balance {
+	fn total_issuance(asset_id: &Self::AssetId) -> Self::Balance {
 		let data = IERC20::totalSupplyCall {}.abi_encode();
 		let ContractResult { result, .. } = Self::bare_call(
 			OriginFor::<T>::signed(Self::checking_account()),
-			asset_id,
+			*asset_id,
 			U256::zero(),
 			TransactionLimits::WeightAndDeposit {
 				weight_limit: WEIGHT_LIMIT,
@@ -86,24 +86,24 @@ impl<T: Config> fungibles::Inspect<<T as frame_system::Config>::AccountId> for P
 		}
 	}
 
-	fn minimum_balance(_: Self::AssetId) -> Self::Balance {
+	fn minimum_balance(_: &Self::AssetId) -> Self::Balance {
 		// ERC20s don't have this concept.
 		1
 	}
 
-	fn total_balance(asset_id: Self::AssetId, account_id: &T::AccountId) -> Self::Balance {
+	fn total_balance(asset_id: &Self::AssetId, account_id: &T::AccountId) -> Self::Balance {
 		// Since ERC20s don't have the concept of freezes and locks,
 		// total balance is the same as balance.
 		Self::balance(asset_id, account_id)
 	}
 
-	fn balance(asset_id: Self::AssetId, account_id: &T::AccountId) -> Self::Balance {
+	fn balance(asset_id: &Self::AssetId, account_id: &T::AccountId) -> Self::Balance {
 		let eth_address = T::AddressMapper::to_address(account_id);
 		let address = Address::from(Into::<[u8; 20]>::into(eth_address));
 		let data = IERC20::balanceOfCall { account: address }.abi_encode();
 		let ContractResult { result, .. } = Self::bare_call(
 			OriginFor::<T>::signed(account_id.clone()),
-			asset_id,
+			*asset_id,
 			U256::zero(),
 			TransactionLimits::WeightAndDeposit {
 				weight_limit: WEIGHT_LIMIT,
@@ -123,7 +123,7 @@ impl<T: Config> fungibles::Inspect<<T as frame_system::Config>::AccountId> for P
 	}
 
 	fn reducible_balance(
-		asset_id: Self::AssetId,
+		asset_id: &Self::AssetId,
 		account_id: &T::AccountId,
 		_: Preservation,
 		_: Fortitude,
@@ -134,7 +134,7 @@ impl<T: Config> fungibles::Inspect<<T as frame_system::Config>::AccountId> for P
 	}
 
 	fn can_deposit(
-		_: Self::AssetId,
+		_: &Self::AssetId,
 		_: &T::AccountId,
 		_: Self::Balance,
 		_: Provenance,
@@ -143,14 +143,14 @@ impl<T: Config> fungibles::Inspect<<T as frame_system::Config>::AccountId> for P
 	}
 
 	fn can_withdraw(
-		_: Self::AssetId,
+		_: &Self::AssetId,
 		_: &T::AccountId,
 		_: Self::Balance,
 	) -> WithdrawConsequence<Self::Balance> {
 		WithdrawConsequence::Success
 	}
 
-	fn asset_exists(_: Self::AssetId) -> bool {
+	fn asset_exists(_: &Self::AssetId) -> bool {
 		false
 	}
 }
@@ -160,7 +160,7 @@ impl<T: Config> fungibles::Inspect<<T as frame_system::Config>::AccountId> for P
 // These functions are used in [`xcm_builder::FungiblesAdapter`].
 impl<T: Config> fungibles::Mutate<<T as frame_system::Config>::AccountId> for Pallet<T> {
 	fn burn_from(
-		asset_id: Self::AssetId,
+		asset_id: &Self::AssetId,
 		who: &T::AccountId,
 		amount: Self::Balance,
 		_: Preservation,
@@ -173,7 +173,7 @@ impl<T: Config> fungibles::Mutate<<T as frame_system::Config>::AccountId> for Pa
 			IERC20::transferCall { to: checking_address, value: EU256::from(amount) }.abi_encode();
 		let ContractResult { result, weight_consumed, .. } = Self::bare_call(
 			OriginFor::<T>::signed(who.clone()),
-			asset_id,
+			*asset_id,
 			U256::zero(),
 			TransactionLimits::WeightAndDeposit {
 				weight_limit: WEIGHT_LIMIT,
@@ -203,7 +203,7 @@ impl<T: Config> fungibles::Mutate<<T as frame_system::Config>::AccountId> for Pa
 	}
 
 	fn mint_into(
-		asset_id: Self::AssetId,
+		asset_id: &Self::AssetId,
 		who: &T::AccountId,
 		amount: Self::Balance,
 	) -> Result<Self::Balance, DispatchError> {
@@ -212,7 +212,7 @@ impl<T: Config> fungibles::Mutate<<T as frame_system::Config>::AccountId> for Pa
 		let data = IERC20::transferCall { to: address, value: EU256::from(amount) }.abi_encode();
 		let ContractResult { result, .. } = Self::bare_call(
 			OriginFor::<T>::signed(Self::checking_account()),
-			asset_id,
+			*asset_id,
 			U256::zero(),
 			TransactionLimits::WeightAndDeposit {
 				weight_limit: WEIGHT_LIMIT,
@@ -246,21 +246,21 @@ impl<T: Config> fungibles::Mutate<<T as frame_system::Config>::AccountId> for Pa
 // Withdraw and deposit happen via the custom `fungibles::Mutate` impl above.
 // Because of this, all functions here return an error, when possible.
 impl<T: Config> fungibles::Unbalanced<<T as frame_system::Config>::AccountId> for Pallet<T> {
-	fn handle_raw_dust(_: Self::AssetId, _: Self::Balance) {}
+	fn handle_raw_dust(_: &Self::AssetId, _: Self::Balance) {}
 	fn handle_dust(_: fungibles::Dust<T::AccountId, Self>) {}
 	fn write_balance(
-		_: Self::AssetId,
+		_: &Self::AssetId,
 		_: &T::AccountId,
 		_: Self::Balance,
 	) -> Result<Option<Self::Balance>, DispatchError> {
 		Err(DispatchError::Unavailable)
 	}
-	fn set_total_issuance(_id: Self::AssetId, _amount: Self::Balance) {
+	fn set_total_issuance(_id: &Self::AssetId, _amount: Self::Balance) {
 		// Empty.
 	}
 
 	fn decrease_balance(
-		_: Self::AssetId,
+		_: &Self::AssetId,
 		_: &T::AccountId,
 		_: Self::Balance,
 		_: Precision,
@@ -271,7 +271,7 @@ impl<T: Config> fungibles::Unbalanced<<T as frame_system::Config>::AccountId> fo
 	}
 
 	fn increase_balance(
-		_: Self::AssetId,
+		_: &Self::AssetId,
 		_: &T::AccountId,
 		_: Self::Balance,
 		_: Precision,
@@ -331,7 +331,7 @@ mod tests {
 			.data(constructor_data)
 			.build_and_unwrap_contract();
 
-			let total_issuance = <Contracts as fungibles::Inspect<_>>::total_issuance(addr);
+			let total_issuance = <Contracts as fungibles::Inspect<_>>::total_issuance(&addr);
 			assert_eq!(total_issuance, amount);
 		});
 	}
@@ -350,7 +350,7 @@ mod tests {
 			)
 			.data(constructor_data)
 			.build_and_unwrap_contract();
-			assert_eq!(<Contracts as fungibles::Inspect<_>>::balance(addr, &ALICE), amount);
+			assert_eq!(<Contracts as fungibles::Inspect<_>>::balance(&addr, &ALICE), amount);
 		});
 	}
 
@@ -370,18 +370,18 @@ mod tests {
 			.build_and_unwrap_contract();
 			let _ = BareCallBuilder::<Test>::bare_call(RuntimeOrigin::signed(ALICE), addr)
 				.build_and_unwrap_result();
-			assert_eq!(<Contracts as fungibles::Inspect<_>>::balance(addr, &ALICE), amount * 2);
+			assert_eq!(<Contracts as fungibles::Inspect<_>>::balance(&addr, &ALICE), amount * 2);
 
 			// Use `fungibles::Mutate<_>::burn_from`.
 			assert_ok!(<Contracts as fungibles::Mutate<_>>::burn_from(
-				addr,
+				&addr,
 				&ALICE,
 				amount,
 				Preservation::Expendable,
 				Precision::Exact,
 				Fortitude::Polite
 			));
-			assert_eq!(<Contracts as fungibles::Inspect<_>>::balance(addr, &ALICE), amount);
+			assert_eq!(<Contracts as fungibles::Inspect<_>>::balance(&addr, &ALICE), amount);
 		});
 	}
 
@@ -410,16 +410,16 @@ mod tests {
 			.data(constructor_data)
 			.build_and_unwrap_contract();
 			assert_eq!(
-				<Contracts as fungibles::Inspect<_>>::balance(addr, &checking_account),
+				<Contracts as fungibles::Inspect<_>>::balance(&addr, &checking_account),
 				amount
 			);
-			assert_eq!(<Contracts as fungibles::Inspect<_>>::balance(addr, &ALICE), 0);
+			assert_eq!(<Contracts as fungibles::Inspect<_>>::balance(&addr, &ALICE), 0);
 
 			// We use `mint_into` to transfer assets from the checking account to `ALICE`.
-			assert_ok!(<Contracts as fungibles::Mutate<_>>::mint_into(addr, &ALICE, amount));
+			assert_ok!(<Contracts as fungibles::Mutate<_>>::mint_into(&addr, &ALICE, amount));
 			// Balances changed accordingly.
-			assert_eq!(<Contracts as fungibles::Inspect<_>>::balance(addr, &checking_account), 0);
-			assert_eq!(<Contracts as fungibles::Inspect<_>>::balance(addr, &ALICE), amount);
+			assert_eq!(<Contracts as fungibles::Inspect<_>>::balance(&addr, &checking_account), 0);
+			assert_eq!(<Contracts as fungibles::Inspect<_>>::balance(&addr, &ALICE), amount);
 		});
 	}
 }

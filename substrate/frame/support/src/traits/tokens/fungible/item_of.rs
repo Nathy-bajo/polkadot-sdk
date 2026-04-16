@@ -51,36 +51,36 @@ impl<
 {
 	type Balance = <F as fungibles::Inspect<AccountId>>::Balance;
 	fn total_issuance() -> Self::Balance {
-		<F as fungibles::Inspect<AccountId>>::total_issuance(A::get())
+		<F as fungibles::Inspect<AccountId>>::total_issuance(&A::get())
 	}
 	fn active_issuance() -> Self::Balance {
-		<F as fungibles::Inspect<AccountId>>::active_issuance(A::get())
+		<F as fungibles::Inspect<AccountId>>::active_issuance(&A::get())
 	}
 	fn minimum_balance() -> Self::Balance {
-		<F as fungibles::Inspect<AccountId>>::minimum_balance(A::get())
+		<F as fungibles::Inspect<AccountId>>::minimum_balance(&A::get())
 	}
 	fn balance(who: &AccountId) -> Self::Balance {
-		<F as fungibles::Inspect<AccountId>>::balance(A::get(), who)
+		<F as fungibles::Inspect<AccountId>>::balance(&A::get(), who)
 	}
 	fn total_balance(who: &AccountId) -> Self::Balance {
-		<F as fungibles::Inspect<AccountId>>::total_balance(A::get(), who)
+		<F as fungibles::Inspect<AccountId>>::total_balance(&A::get(), who)
 	}
 	fn reducible_balance(
 		who: &AccountId,
 		preservation: Preservation,
 		force: Fortitude,
 	) -> Self::Balance {
-		<F as fungibles::Inspect<AccountId>>::reducible_balance(A::get(), who, preservation, force)
+		<F as fungibles::Inspect<AccountId>>::reducible_balance(&A::get(), who, preservation, force)
 	}
 	fn can_deposit(
 		who: &AccountId,
 		amount: Self::Balance,
 		provenance: Provenance,
 	) -> DepositConsequence {
-		<F as fungibles::Inspect<AccountId>>::can_deposit(A::get(), who, amount, provenance)
+		<F as fungibles::Inspect<AccountId>>::can_deposit(&A::get(), who, amount, provenance)
 	}
 	fn can_withdraw(who: &AccountId, amount: Self::Balance) -> WithdrawConsequence<Self::Balance> {
-		<F as fungibles::Inspect<AccountId>>::can_withdraw(A::get(), who, amount)
+		<F as fungibles::Inspect<AccountId>>::can_withdraw(&A::get(), who, amount)
 	}
 }
 
@@ -94,22 +94,22 @@ impl<
 
 	fn reducible_total_balance_on_hold(who: &AccountId, force: Fortitude) -> Self::Balance {
 		<F as fungibles::InspectHold<AccountId>>::reducible_total_balance_on_hold(
-			A::get(),
+			&A::get(),
 			who,
 			force,
 		)
 	}
 	fn hold_available(reason: &Self::Reason, who: &AccountId) -> bool {
-		<F as fungibles::InspectHold<AccountId>>::hold_available(A::get(), reason, who)
+		<F as fungibles::InspectHold<AccountId>>::hold_available(&A::get(), reason, who)
 	}
 	fn total_balance_on_hold(who: &AccountId) -> Self::Balance {
-		<F as fungibles::InspectHold<AccountId>>::total_balance_on_hold(A::get(), who)
+		<F as fungibles::InspectHold<AccountId>>::total_balance_on_hold(&A::get(), who)
 	}
 	fn balance_on_hold(reason: &Self::Reason, who: &AccountId) -> Self::Balance {
-		<F as fungibles::InspectHold<AccountId>>::balance_on_hold(A::get(), reason, who)
+		<F as fungibles::InspectHold<AccountId>>::balance_on_hold(&A::get(), reason, who)
 	}
 	fn can_hold(reason: &Self::Reason, who: &AccountId, amount: Self::Balance) -> bool {
-		<F as fungibles::InspectHold<AccountId>>::can_hold(A::get(), reason, who, amount)
+		<F as fungibles::InspectHold<AccountId>>::can_hold(&A::get(), reason, who, amount)
 	}
 }
 
@@ -121,13 +121,13 @@ impl<
 {
 	type Id = F::Id;
 	fn balance_frozen(id: &Self::Id, who: &AccountId) -> Self::Balance {
-		<F as fungibles::InspectFreeze<AccountId>>::balance_frozen(A::get(), id, who)
+		<F as fungibles::InspectFreeze<AccountId>>::balance_frozen(&A::get(), id, who)
 	}
 	fn balance_freezable(who: &AccountId) -> Self::Balance {
-		<F as fungibles::InspectFreeze<AccountId>>::balance_freezable(A::get(), who)
+		<F as fungibles::InspectFreeze<AccountId>>::balance_freezable(&A::get(), who)
 	}
 	fn can_freeze(id: &Self::Id, who: &AccountId) -> bool {
-		<F as fungibles::InspectFreeze<AccountId>>::can_freeze(A::get(), id, who)
+		<F as fungibles::InspectFreeze<AccountId>>::can_freeze(&A::get(), id, who)
 	}
 }
 
@@ -147,10 +147,10 @@ impl<
 		who: &AccountId,
 		amount: Self::Balance,
 	) -> Result<Option<Self::Balance>, DispatchError> {
-		<F as fungibles::Unbalanced<AccountId>>::write_balance(A::get(), who, amount)
+		<F as fungibles::Unbalanced<AccountId>>::write_balance(&A::get(), who, amount)
 	}
 	fn set_total_issuance(amount: Self::Balance) -> () {
-		<F as fungibles::Unbalanced<AccountId>>::set_total_issuance(A::get(), amount)
+		<F as fungibles::Unbalanced<AccountId>>::set_total_issuance(&A::get(), amount)
 	}
 	fn decrease_balance(
 		who: &AccountId,
@@ -160,7 +160,7 @@ impl<
 		force: Fortitude,
 	) -> Result<Self::Balance, DispatchError> {
 		<F as fungibles::Unbalanced<AccountId>>::decrease_balance(
-			A::get(),
+			&A::get(),
 			who,
 			amount,
 			precision,
@@ -173,7 +173,7 @@ impl<
 		amount: Self::Balance,
 		precision: Precision,
 	) -> Result<Self::Balance, DispatchError> {
-		<F as fungibles::Unbalanced<AccountId>>::increase_balance(A::get(), who, amount, precision)
+		<F as fungibles::Unbalanced<AccountId>>::increase_balance(&A::get(), who, amount, precision)
 	}
 }
 
@@ -189,7 +189,7 @@ impl<
 		amount: Self::Balance,
 	) -> DispatchResult {
 		<F as fungibles::UnbalancedHold<AccountId>>::set_balance_on_hold(
-			A::get(),
+			&A::get(),
 			reason,
 			who,
 			amount,
@@ -202,7 +202,7 @@ impl<
 		precision: Precision,
 	) -> Result<Self::Balance, DispatchError> {
 		<F as fungibles::UnbalancedHold<AccountId>>::decrease_balance_on_hold(
-			A::get(),
+			&A::get(),
 			reason,
 			who,
 			amount,
@@ -216,7 +216,7 @@ impl<
 		precision: Precision,
 	) -> Result<Self::Balance, DispatchError> {
 		<F as fungibles::UnbalancedHold<AccountId>>::increase_balance_on_hold(
-			A::get(),
+			&A::get(),
 			reason,
 			who,
 			amount,
@@ -232,7 +232,7 @@ impl<
 	> Mutate<AccountId> for ItemOf<F, A, AccountId>
 {
 	fn mint_into(who: &AccountId, amount: Self::Balance) -> Result<Self::Balance, DispatchError> {
-		<F as fungibles::Mutate<AccountId>>::mint_into(A::get(), who, amount)
+		<F as fungibles::Mutate<AccountId>>::mint_into(&A::get(), who, amount)
 	}
 	fn burn_from(
 		who: &AccountId,
@@ -242,7 +242,7 @@ impl<
 		force: Fortitude,
 	) -> Result<Self::Balance, DispatchError> {
 		<F as fungibles::Mutate<AccountId>>::burn_from(
-			A::get(),
+			&A::get(),
 			who,
 			amount,
 			preservation,
@@ -251,10 +251,10 @@ impl<
 		)
 	}
 	fn shelve(who: &AccountId, amount: Self::Balance) -> Result<Self::Balance, DispatchError> {
-		<F as fungibles::Mutate<AccountId>>::shelve(A::get(), who, amount)
+		<F as fungibles::Mutate<AccountId>>::shelve(&A::get(), who, amount)
 	}
 	fn restore(who: &AccountId, amount: Self::Balance) -> Result<Self::Balance, DispatchError> {
-		<F as fungibles::Mutate<AccountId>>::restore(A::get(), who, amount)
+		<F as fungibles::Mutate<AccountId>>::restore(&A::get(), who, amount)
 	}
 	fn transfer(
 		source: &AccountId,
@@ -262,11 +262,11 @@ impl<
 		amount: Self::Balance,
 		preservation: Preservation,
 	) -> Result<Self::Balance, DispatchError> {
-		<F as fungibles::Mutate<AccountId>>::transfer(A::get(), source, dest, amount, preservation)
+		<F as fungibles::Mutate<AccountId>>::transfer(&A::get(), source, dest, amount, preservation)
 	}
 
 	fn set_balance(who: &AccountId, amount: Self::Balance) -> Self::Balance {
-		<F as fungibles::Mutate<AccountId>>::set_balance(A::get(), who, amount)
+		<F as fungibles::Mutate<AccountId>>::set_balance(&A::get(), who, amount)
 	}
 }
 
@@ -277,7 +277,7 @@ impl<
 	> MutateHold<AccountId> for ItemOf<F, A, AccountId>
 {
 	fn hold(reason: &Self::Reason, who: &AccountId, amount: Self::Balance) -> DispatchResult {
-		<F as fungibles::MutateHold<AccountId>>::hold(A::get(), reason, who, amount)
+		<F as fungibles::MutateHold<AccountId>>::hold(&A::get(), reason, who, amount)
 	}
 	fn release(
 		reason: &Self::Reason,
@@ -285,7 +285,7 @@ impl<
 		amount: Self::Balance,
 		precision: Precision,
 	) -> Result<Self::Balance, DispatchError> {
-		<F as fungibles::MutateHold<AccountId>>::release(A::get(), reason, who, amount, precision)
+		<F as fungibles::MutateHold<AccountId>>::release(&A::get(), reason, who, amount, precision)
 	}
 	fn burn_held(
 		reason: &Self::Reason,
@@ -295,7 +295,7 @@ impl<
 		force: Fortitude,
 	) -> Result<Self::Balance, DispatchError> {
 		<F as fungibles::MutateHold<AccountId>>::burn_held(
-			A::get(),
+			&A::get(),
 			reason,
 			who,
 			amount,
@@ -313,7 +313,7 @@ impl<
 		force: Fortitude,
 	) -> Result<Self::Balance, DispatchError> {
 		<F as fungibles::MutateHold<AccountId>>::transfer_on_hold(
-			A::get(),
+			&A::get(),
 			reason,
 			source,
 			dest,
@@ -333,7 +333,7 @@ impl<
 		force: Fortitude,
 	) -> Result<Self::Balance, DispatchError> {
 		<F as fungibles::MutateHold<AccountId>>::transfer_and_hold(
-			A::get(),
+			&A::get(),
 			reason,
 			source,
 			dest,
@@ -352,13 +352,13 @@ impl<
 	> MutateFreeze<AccountId> for ItemOf<F, A, AccountId>
 {
 	fn set_freeze(id: &Self::Id, who: &AccountId, amount: Self::Balance) -> DispatchResult {
-		<F as fungibles::MutateFreeze<AccountId>>::set_freeze(A::get(), id, who, amount)
+		<F as fungibles::MutateFreeze<AccountId>>::set_freeze(&A::get(), id, who, amount)
 	}
 	fn extend_freeze(id: &Self::Id, who: &AccountId, amount: Self::Balance) -> DispatchResult {
-		<F as fungibles::MutateFreeze<AccountId>>::extend_freeze(A::get(), id, who, amount)
+		<F as fungibles::MutateFreeze<AccountId>>::extend_freeze(&A::get(), id, who, amount)
 	}
 	fn thaw(id: &Self::Id, who: &AccountId) -> DispatchResult {
-		<F as fungibles::MutateFreeze<AccountId>>::thaw(A::get(), id, who)
+		<F as fungibles::MutateFreeze<AccountId>>::thaw(&A::get(), id, who)
 	}
 }
 
@@ -397,21 +397,21 @@ impl<
 		value: Self::Balance,
 		precision: Precision,
 	) -> Result<Debt<AccountId, Self>, DispatchError> {
-		<F as fungibles::Balanced<AccountId>>::deposit(A::get(), who, value, precision)
+		<F as fungibles::Balanced<AccountId>>::deposit(&A::get(), who, value, precision)
 			.map(imbalance::from_fungibles)
 	}
 	fn issue(amount: Self::Balance) -> Credit<AccountId, Self> {
-		let credit = <F as fungibles::Balanced<AccountId>>::issue(A::get(), amount);
+		let credit = <F as fungibles::Balanced<AccountId>>::issue(&A::get(), amount);
 		imbalance::from_fungibles(credit)
 	}
 	fn pair(
 		amount: Self::Balance,
 	) -> Result<(Debt<AccountId, Self>, Credit<AccountId, Self>), DispatchError> {
-		let (a, b) = <F as fungibles::Balanced<AccountId>>::pair(A::get(), amount)?;
+		let (a, b) = <F as fungibles::Balanced<AccountId>>::pair(&A::get(), amount)?;
 		Ok((imbalance::from_fungibles(a), imbalance::from_fungibles(b)))
 	}
 	fn rescind(amount: Self::Balance) -> Debt<AccountId, Self> {
-		let debt = <F as fungibles::Balanced<AccountId>>::rescind(A::get(), amount);
+		let debt = <F as fungibles::Balanced<AccountId>>::rescind(&A::get(), amount);
 		imbalance::from_fungibles(debt)
 	}
 	fn resolve(
@@ -441,7 +441,7 @@ impl<
 		force: Fortitude,
 	) -> Result<Credit<AccountId, Self>, DispatchError> {
 		<F as fungibles::Balanced<AccountId>>::withdraw(
-			A::get(),
+			&A::get(),
 			who,
 			value,
 			precision,
@@ -464,7 +464,7 @@ impl<
 		amount: Self::Balance,
 	) -> (Credit<AccountId, Self>, Self::Balance) {
 		let (credit, amount) =
-			<F as fungibles::BalancedHold<AccountId>>::slash(A::get(), reason, who, amount);
+			<F as fungibles::BalancedHold<AccountId>>::slash(&A::get(), reason, who, amount);
 		(imbalance::from_fungibles(credit), amount)
 	}
 }
@@ -477,7 +477,7 @@ impl<
 {
 	fn done_slash(reason: &F::Reason, who: &AccountId, amount: F::Balance) {
 		<F as fungibles::hold::DoneSlash<F::AssetId, F::Reason, AccountId, F::Balance>>::done_slash(
-			A::get(),
+			&A::get(),
 			reason,
 			who,
 			amount,
@@ -496,15 +496,15 @@ impl<
 {
 	/// See [`fungibles::metadata::Inspect::name`].
 	fn name() -> Vec<u8> {
-		<F as fungibles::metadata::Inspect<AccountId>>::name(A::get())
+		<F as fungibles::metadata::Inspect<AccountId>>::name(&A::get())
 	}
 	/// See [`fungibles::metadata::Inspect::symbol`].
 	fn symbol() -> Vec<u8> {
-		<F as fungibles::metadata::Inspect<AccountId>>::symbol(A::get())
+		<F as fungibles::metadata::Inspect<AccountId>>::symbol(&A::get())
 	}
 	/// See [`fungibles::metadata::Inspect::decimals`].
 	fn decimals() -> u8 {
-		<F as fungibles::metadata::Inspect<AccountId>>::decimals(A::get())
+		<F as fungibles::metadata::Inspect<AccountId>>::decimals(&A::get())
 	}
 }
 
@@ -519,7 +519,7 @@ impl<
 {
 	/// See [`fungibles::metadata::Mutate::set`].
 	fn set(from: &AccountId, name: Vec<u8>, symbol: Vec<u8>, decimals: u8) -> DispatchResult {
-		<F as fungibles::metadata::Mutate<AccountId>>::set(A::get(), from, name, symbol, decimals)
+		<F as fungibles::metadata::Mutate<AccountId>>::set(&A::get(), from, name, symbol, decimals)
 	}
 }
 

@@ -245,18 +245,14 @@ where
 			RelevantAssets::get().into_iter().chain(RelevantAssets::get().into_iter());
 
 		for id in assets_twice {
-			let balance = Fungibles::reducible_balance(
-				id.clone(),
-				from,
-				Preservation::Expendable,
-				Fortitude::Force,
-			);
+			let balance =
+				Fungibles::reducible_balance(&id, from, Preservation::Expendable, Fortitude::Force);
 			if balance.is_zero() {
 				continue;
 			}
 
 			// Ignore errors since this can only fail if the receiver does not exist.
-			let _ = Fungibles::transfer(id, from, to, balance, Preservation::Expendable);
+			let _ = Fungibles::transfer(&id, from, to, balance, Preservation::Expendable);
 		}
 		Ok(())
 	}

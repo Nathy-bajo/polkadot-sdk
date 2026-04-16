@@ -359,7 +359,7 @@ pub mod pallet {
 			beneficiary: &T::AccountId,
 			amount: AssetBalanceOf<T>,
 		) -> DispatchResult {
-			T::Assets::mint_into(asset_id, beneficiary, amount)?;
+			T::Assets::mint_into(&asset_id, beneficiary, amount)?;
 			Ok(())
 		}
 
@@ -369,7 +369,7 @@ pub mod pallet {
 			account: &T::AccountId,
 			amount: AssetBalanceOf<T>,
 		) -> DispatchResult {
-			T::Assets::burn_from(asset_id.clone(), account, amount, Expendable, Exact, Polite)?;
+			T::Assets::burn_from(&asset_id, account, amount, Expendable, Exact, Polite)?;
 			T::Assets::start_destroy(asset_id, None)
 		}
 
@@ -396,7 +396,7 @@ pub mod pallet {
 			if !metadata_deposit.is_zero() {
 				T::Currency::transfer(&depositor, &pallet_account, metadata_deposit, Preserve)?;
 			}
-			T::Assets::set(asset_id, &pallet_account, name.into(), symbol.into(), 0)
+			T::Assets::set(&asset_id, &pallet_account, name.into(), symbol.into(), 0)
 		}
 	}
 }

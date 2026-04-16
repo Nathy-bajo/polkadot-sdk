@@ -47,7 +47,7 @@ pub trait Inspect<AccountId>: super::Inspect<AccountId> {
 	type Reason: codec::Encode + TypeInfo + 'static;
 
 	/// Amount of funds on hold (for all hold reasons) of `who`.
-	fn total_balance_on_hold(asset: Self::AssetId, who: &AccountId) -> Self::Balance;
+	fn total_balance_on_hold(asset: &Self::AssetId, who: &AccountId) -> Self::Balance;
 
 	/// Get the maximum amount that the `total_balance_on_hold` of `who` can be reduced successfully
 	/// based on whether we are willing to force the reduction and potentially go below user-level
@@ -56,7 +56,7 @@ pub trait Inspect<AccountId>: super::Inspect<AccountId> {
 	///
 	/// Never more than `total_balance_on_hold()`.
 	fn reducible_total_balance_on_hold(
-		asset: Self::AssetId,
+		asset: &Self::AssetId,
 		who: &AccountId,
 		_force: Fortitude,
 	) -> Self::Balance {
@@ -65,7 +65,7 @@ pub trait Inspect<AccountId>: super::Inspect<AccountId> {
 
 	/// Amount of funds on hold (for the given reason) of `who`.
 	fn balance_on_hold(
-		asset: Self::AssetId,
+		asset: &Self::AssetId,
 		reason: &Self::Reason,
 		who: &AccountId,
 	) -> Self::Balance;
@@ -77,7 +77,7 @@ pub trait Inspect<AccountId>: super::Inspect<AccountId> {
 	/// NOTE: This does not take into account changes which could be made to the account of `who`
 	/// (such as removing a provider reference) after this call is made. Any usage of this should
 	/// therefore ensure the account is already in the appropriate state prior to calling it.
-	fn hold_available(_asset: Self::AssetId, _reason: &Self::Reason, _who: &AccountId) -> bool {
+	fn hold_available(_asset: &Self::AssetId, _reason: &Self::Reason, _who: &AccountId) -> bool {
 		true
 	}
 
@@ -99,12 +99,12 @@ pub trait Inspect<AccountId>: super::Inspect<AccountId> {
 	/// (such as removing a provider reference) after this call is made. Any usage of this should
 	/// therefore ensure the account is already in the appropriate state prior to calling it.
 	fn ensure_can_hold(
-		asset: Self::AssetId,
+		asset: &Self::AssetId,
 		reason: &Self::Reason,
 		who: &AccountId,
 		amount: Self::Balance,
 	) -> DispatchResult {
-		ensure!(Self::hold_available(asset.clone(), reason, who), TokenError::CannotCreateHold);
+		ensure!(Self::hold_available(asset, reason, who), TokenError::CannotCreateHold);
 		ensure!(
 			amount <= Self::reducible_balance(asset, who, Protect, Force),
 			TokenError::FundsUnavailable
@@ -125,7 +125,7 @@ pub trait Inspect<AccountId>: super::Inspect<AccountId> {
 	/// (such as removing a provider reference) after this call is made. Any usage of this should
 	/// therefore ensure the account is already in the appropriate state prior to calling it.
 	fn can_hold(
-		asset: Self::AssetId,
+		asset: &Self::AssetId,
 		reason: &Self::Reason,
 		who: &AccountId,
 		amount: Self::Balance,
@@ -158,7 +158,7 @@ pub trait Unbalanced<AccountId>: Inspect<AccountId> {
 	// Since this was not done in the previous logic, this will need either a migration or a
 	// state item which tracks whether the account is on the old logic or new.
 	fn set_balance_on_hold(
-		asset: Self::AssetId,
+		asset: &Self::AssetId,
 		reason: &Self::Reason,
 		who: &AccountId,
 		amount: Self::Balance,
@@ -173,13 +173,13 @@ pub trait Unbalanced<AccountId>: Inspect<AccountId> {
 	///
 	/// In either case, if `Ok` is returned then the inner is the amount by which is was reduced.
 	fn decrease_balance_on_hold(
-		asset: Self::AssetId,
+		asset: &Self::AssetId,
 		reason: &Self::Reason,
 		who: &AccountId,
 		mut amount: Self::Balance,
 		precision: Precision,
 	) -> Result<Self::Balance, DispatchError> {
-		let old_balance = Self::balance_on_hold(asset.clone(), reason, who);
+		let old_balance = Self::balance_on_hold(asset, reason, who);
 		if let BestEffort = precision {
 			amount = amount.min(old_balance);
 		}
@@ -193,13 +193,13 @@ pub trait Unbalanced<AccountId>: Inspect<AccountId> {
 	/// If it cannot be increased by that amount for some reason, return `Err` and don't increase
 	/// it at all. If Ok, return the imbalance.
 	fn increase_balance_on_hold(
-		asset: Self::AssetId,
+		asset: &Self::AssetId,
 		reason: &Self::Reason,
 		who: &AccountId,
 		amount: Self::Balance,
 		precision: Precision,
 	) -> Result<Self::Balance, DispatchError> {
-		let old_balance = Self::balance_on_hold(asset.clone(), reason, who);
+		let old_balance = Self::balance_on_hold(asset, reason, who);
 		let new_balance = if let BestEffort = precision {
 			old_balance.saturating_add(amount)
 		} else {
@@ -226,14 +226,13 @@ pub trait Balanced<AccountId>:
 	/// As much funds that are on hold up to `amount` will be deducted as possible. If this is less
 	/// than `amount`, then a non-zero second item will be returned.
 	fn slash(
-		asset: Self::AssetId,
+		asset: &Self::AssetId,
 		reason: &Self::Reason,
 		who: &AccountId,
 		amount: Self::Balance,
 	) -> (Credit<AccountId, Self>, Self::Balance) {
-		let decrease =
-			Self::decrease_balance_on_hold(asset.clone(), reason, who, amount, BestEffort)
-				.unwrap_or(Default::default());
+		let decrease = Self::decrease_balance_on_hold(asset, reason, who, amount, BestEffort)
+			.unwrap_or(Default::default());
 		let credit =
 			Imbalance::<Self::AssetId, Self::Balance, Self::OnDropCredit, Self::OnDropDebt>::new(
 				asset.clone(),
@@ -246,14 +245,14 @@ pub trait Balanced<AccountId>:
 
 /// Trait for optional bookkeeping callbacks after a slash
 pub trait DoneSlash<AssetId, Reason, AccountId, Balance> {
-	fn done_slash(_asset: AssetId, _reason: &Reason, _who: &AccountId, _amount: Balance) {}
+	fn done_slash(_asset: &AssetId, _reason: &Reason, _who: &AccountId, _amount: Balance) {}
 }
 
 #[impl_trait_for_tuples::impl_for_tuples(30)]
-impl<AssetId: Copy, Reason, AccountId, Balance: Copy> DoneSlash<AssetId, Reason, AccountId, Balance>
-	for Tuple
+impl<AssetId: Clone, Reason, AccountId, Balance: Copy>
+	DoneSlash<AssetId, Reason, AccountId, Balance> for Tuple
 {
-	fn done_slash(asset_id: AssetId, reason: &Reason, who: &AccountId, amount: Balance) {
+	fn done_slash(asset_id: &AssetId, reason: &Reason, who: &AccountId, amount: Balance) {
 		for_tuples!( #( Tuple::done_slash(asset_id, reason, who, amount); )* );
 	}
 }
@@ -265,7 +264,7 @@ pub trait Mutate<AccountId>:
 	/// Hold some funds in an account. If a hold for `reason` is already in place, then this
 	/// will increase it.
 	fn hold(
-		asset: Self::AssetId,
+		asset: &Self::AssetId,
 		reason: &Self::Reason,
 		who: &AccountId,
 		amount: Self::Balance,
@@ -273,10 +272,10 @@ pub trait Mutate<AccountId>:
 		// NOTE: This doesn't change the total balance of the account so there's no need to
 		// check liquidity.
 
-		Self::ensure_can_hold(asset.clone(), reason, who, amount)?;
+		Self::ensure_can_hold(asset, reason, who, amount)?;
 		// Should be infallible now, but we proceed softly anyway.
-		Self::decrease_balance(asset.clone(), who, amount, Exact, Protect, Force)?;
-		Self::increase_balance_on_hold(asset.clone(), reason, who, amount, BestEffort)?;
+		Self::decrease_balance(asset, who, amount, Exact, Protect, Force)?;
+		Self::increase_balance_on_hold(asset, reason, who, amount, BestEffort)?;
 		Self::done_hold(asset, reason, who, amount);
 		Ok(())
 	}
@@ -288,7 +287,7 @@ pub trait Mutate<AccountId>:
 	/// If `precision` is `BestEffort`, then the amount actually unreserved and returned as the
 	/// inner value of `Ok` may be smaller than the `amount` passed.
 	fn release(
-		asset: Self::AssetId,
+		asset: &Self::AssetId,
 		reason: &Self::Reason,
 		who: &AccountId,
 		amount: Self::Balance,
@@ -299,16 +298,13 @@ pub trait Mutate<AccountId>:
 
 		// We want to make sure we can deposit the amount in advance. If we can't then something is
 		// very wrong.
-		ensure!(
-			Self::can_deposit(asset.clone(), who, amount, Extant) == Success,
-			TokenError::CannotCreate
-		);
+		ensure!(Self::can_deposit(asset, who, amount, Extant) == Success, TokenError::CannotCreate);
 		// Get the amount we can actually take from the hold. This might be less than what we want
 		// if we're only doing a best-effort.
-		let amount = Self::decrease_balance_on_hold(asset.clone(), reason, who, amount, precision)?;
+		let amount = Self::decrease_balance_on_hold(asset, reason, who, amount, precision)?;
 		// Increase the main balance by what we took. We always do a best-effort here because we
 		// already checked that we can deposit before.
-		let actual = Self::increase_balance(asset.clone(), who, amount, BestEffort)?;
+		let actual = Self::increase_balance(asset, who, amount, BestEffort)?;
 		Self::done_release(asset, reason, who, actual);
 		Ok(actual)
 	}
@@ -324,7 +320,7 @@ pub trait Mutate<AccountId>:
 	/// conducting slashing or other activity which materially disadvantages the account holder
 	/// since it could provide a means of circumventing freezes.
 	fn burn_held(
-		asset: Self::AssetId,
+		asset: &Self::AssetId,
 		reason: &Self::Reason,
 		who: &AccountId,
 		mut amount: Self::Balance,
@@ -332,17 +328,14 @@ pub trait Mutate<AccountId>:
 		force: Fortitude,
 	) -> Result<Self::Balance, DispatchError> {
 		// We must check total-balance requirements if `!force`.
-		let liquid = Self::reducible_total_balance_on_hold(asset.clone(), who, force);
+		let liquid = Self::reducible_total_balance_on_hold(asset, who, force);
 		if let BestEffort = precision {
 			amount = amount.min(liquid);
 		} else {
 			ensure!(amount <= liquid, TokenError::Frozen);
 		}
-		let amount = Self::decrease_balance_on_hold(asset.clone(), reason, who, amount, precision)?;
-		Self::set_total_issuance(
-			asset.clone(),
-			Self::total_issuance(asset.clone()).saturating_sub(amount),
-		);
+		let amount = Self::decrease_balance_on_hold(asset, reason, who, amount, precision)?;
+		Self::set_total_issuance(asset, Self::total_issuance(asset).saturating_sub(amount));
 		Self::done_burn_held(asset, reason, who, amount);
 		Ok(amount)
 	}
@@ -358,13 +351,13 @@ pub trait Mutate<AccountId>:
 	/// conducting slashing or other activity which materially disadvantages the account holder
 	/// since it could provide a means of circumventing freezes.
 	fn burn_all_held(
-		asset: Self::AssetId,
+		asset: &Self::AssetId,
 		reason: &Self::Reason,
 		who: &AccountId,
 		precision: Precision,
 		force: Fortitude,
 	) -> Result<Self::Balance, DispatchError> {
-		let amount = Self::balance_on_hold(asset.clone(), reason, who);
+		let amount = Self::balance_on_hold(asset, reason, who);
 		Self::burn_held(asset, reason, who, amount, precision, force)
 	}
 
@@ -384,7 +377,7 @@ pub trait Mutate<AccountId>:
 	/// The actual amount transferred is returned, or `Err` in the case of error and nothing is
 	/// changed.
 	fn transfer_on_hold(
-		asset: Self::AssetId,
+		asset: &Self::AssetId,
 		reason: &Self::Reason,
 		source: &AccountId,
 		dest: &AccountId,
@@ -394,8 +387,8 @@ pub trait Mutate<AccountId>:
 		force: Fortitude,
 	) -> Result<Self::Balance, DispatchError> {
 		// We must check total-balance requirements if `!force`.
-		let have = Self::balance_on_hold(asset.clone(), reason, source);
-		let liquid = Self::reducible_total_balance_on_hold(asset.clone(), source, force);
+		let have = Self::balance_on_hold(asset, reason, source);
+		let liquid = Self::reducible_total_balance_on_hold(asset, source, force);
 		if let BestEffort = precision {
 			amount = amount.min(liquid).min(have);
 		} else {
@@ -406,20 +399,19 @@ pub trait Mutate<AccountId>:
 		// We want to make sure we can deposit the amount in advance. If we can't then something is
 		// very wrong.
 		ensure!(
-			Self::can_deposit(asset.clone(), dest, amount, Extant) == Success,
+			Self::can_deposit(asset, dest, amount, Extant) == Success,
 			TokenError::CannotCreate
 		);
 		ensure!(
-			mode == Free || Self::hold_available(asset.clone(), reason, dest),
+			mode == Free || Self::hold_available(asset, reason, dest),
 			TokenError::CannotCreateHold
 		);
 
-		let amount =
-			Self::decrease_balance_on_hold(asset.clone(), reason, source, amount, precision)?;
+		let amount = Self::decrease_balance_on_hold(asset, reason, source, amount, precision)?;
 		let actual = if mode == OnHold {
-			Self::increase_balance_on_hold(asset.clone(), reason, dest, amount, precision)?
+			Self::increase_balance_on_hold(asset, reason, dest, amount, precision)?
 		} else {
-			Self::increase_balance(asset.clone(), dest, amount, precision)?
+			Self::increase_balance(asset, dest, amount, precision)?
 		};
 		Self::done_transfer_on_hold(asset, reason, source, dest, actual);
 		Ok(actual)
@@ -443,7 +435,7 @@ pub trait Mutate<AccountId>:
 	/// WARNING: This may return an error after a partial storage mutation. It should be used only
 	/// inside a transactional storage context and an `Err` result must imply a storage rollback.
 	fn transfer_and_hold(
-		asset: Self::AssetId,
+		asset: &Self::AssetId,
 		reason: &Self::Reason,
 		source: &AccountId,
 		dest: &AccountId,
@@ -452,41 +444,41 @@ pub trait Mutate<AccountId>:
 		expendability: Preservation,
 		force: Fortitude,
 	) -> Result<Self::Balance, DispatchError> {
-		ensure!(Self::hold_available(asset.clone(), reason, dest), TokenError::CannotCreateHold);
+		ensure!(Self::hold_available(asset, reason, dest), TokenError::CannotCreateHold);
 		ensure!(
-			Self::can_deposit(asset.clone(), dest, amount, Extant) == Success,
+			Self::can_deposit(asset, dest, amount, Extant) == Success,
 			TokenError::CannotCreate
 		);
 		let actual =
-			Self::decrease_balance(asset.clone(), source, amount, precision, expendability, force)?;
-		Self::increase_balance_on_hold(asset.clone(), reason, dest, actual, precision)?;
+			Self::decrease_balance(asset, source, amount, precision, expendability, force)?;
+		Self::increase_balance_on_hold(asset, reason, dest, actual, precision)?;
 		Self::done_transfer_on_hold(asset, reason, source, dest, actual);
 		Ok(actual)
 	}
 
 	fn done_hold(
-		_asset: Self::AssetId,
+		_asset: &Self::AssetId,
 		_reason: &Self::Reason,
 		_who: &AccountId,
 		_amount: Self::Balance,
 	) {
 	}
 	fn done_release(
-		_asset: Self::AssetId,
+		_asset: &Self::AssetId,
 		_reason: &Self::Reason,
 		_who: &AccountId,
 		_amount: Self::Balance,
 	) {
 	}
 	fn done_burn_held(
-		_asset: Self::AssetId,
+		_asset: &Self::AssetId,
 		_reason: &Self::Reason,
 		_who: &AccountId,
 		_amount: Self::Balance,
 	) {
 	}
 	fn done_transfer_on_hold(
-		_asset: Self::AssetId,
+		_asset: &Self::AssetId,
 		_reason: &Self::Reason,
 		_source: &AccountId,
 		_dest: &AccountId,
@@ -494,7 +486,7 @@ pub trait Mutate<AccountId>:
 	) {
 	}
 	fn done_transfer_and_hold(
-		_asset: Self::AssetId,
+		_asset: &Self::AssetId,
 		_reason: &Self::Reason,
 		_source: &AccountId,
 		_dest: &AccountId,

@@ -119,7 +119,7 @@ where
 		asset: Self::AssetKind,
 		amount: Self::Balance,
 	) -> Result<Self::Id, Self::Error> {
-		<F as fungibles::Mutate<_>>::transfer(asset, &A::get(), who, amount, Expendable)?;
+		<F as fungibles::Mutate<_>>::transfer(&asset, &A::get(), who, amount, Expendable)?;
 		Ok(())
 	}
 	fn check_payment(_: ()) -> PaymentStatus {
@@ -128,7 +128,7 @@ where
 	#[cfg(feature = "runtime-benchmarks")]
 	fn ensure_successful(_: &Self::Beneficiary, asset: Self::AssetKind, amount: Self::Balance) {
 		<F as fungibles::Create<_>>::create(asset.clone(), A::get(), true, amount).unwrap();
-		<F as fungibles::Mutate<_>>::mint_into(asset, &A::get(), amount).unwrap();
+		<F as fungibles::Mutate<_>>::mint_into(&asset, &A::get(), amount).unwrap();
 	}
 	#[cfg(feature = "runtime-benchmarks")]
 	fn ensure_concluded(_: Self::Id) {}
@@ -199,7 +199,7 @@ where
 		asset: Self::AssetKind,
 		amount: Self::Balance,
 	) -> Result<Self::Id, Self::Error> {
-		<F as fungibles::Mutate<_>>::transfer(asset, source, beneficiary, amount, Expendable)?;
+		<F as fungibles::Mutate<_>>::transfer(&asset, source, beneficiary, amount, Expendable)?;
 		Ok(())
 	}
 	fn check_payment(_: ()) -> PaymentStatus {
@@ -214,7 +214,7 @@ where
 	) {
 		use sp_runtime::traits::Zero;
 
-		if F::total_issuance(asset.clone()).is_zero() {
+		if F::total_issuance(&asset).is_zero() {
 			let _ = <F as fungibles::Create<_>>::create(
 				asset.clone(),
 				source.clone(),
@@ -222,7 +222,7 @@ where
 				1u32.into(),
 			);
 		}
-		<F as fungibles::Mutate<_>>::mint_into(asset, &source, amount).unwrap();
+		<F as fungibles::Mutate<_>>::mint_into(&asset, &source, amount).unwrap();
 	}
 	#[cfg(feature = "runtime-benchmarks")]
 	fn ensure_concluded(_: Self::Id) {}

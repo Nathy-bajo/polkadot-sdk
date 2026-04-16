@@ -197,7 +197,7 @@ impl<
 		// Necessary for fully collateral-backed assets
 		let required_amount: u128 =
 			match FeeCharger::charge_weight_in_fungibles(fungibles_asset_id.clone(), weight)
-				.map(|amount| amount.max(Fungibles::minimum_balance(fungibles_asset_id.clone())))
+				.map(|amount| amount.max(Fungibles::minimum_balance(&fungibles_asset_id)))
 			{
 				Ok(a) => a,
 				Err(_) => return Err((payment, XcmError::Overflow)),
@@ -247,7 +247,7 @@ impl<
 
 		// Get the local asset id in which we can refund fees.
 		let (fungibles_asset_id, _) = Matcher::matches_fungibles(&asset).ok()?;
-		let minimum_balance = Fungibles::minimum_balance(fungibles_asset_id.clone());
+		let minimum_balance = Fungibles::minimum_balance(&fungibles_asset_id);
 
 		// Calculate how much to refund based on unused weight.
 		// This read should have already been cached in buy_weight.
@@ -301,7 +301,7 @@ impl<
 		// Necessary for fully collateral-backed assets
 		let required_amount: u128 =
 			FeeCharger::charge_weight_in_fungibles(give_fungibles_id.clone(), weight)
-				.map(|amount| amount.max(Fungibles::minimum_balance(give_fungibles_id.clone())))
+				.map(|amount| amount.max(Fungibles::minimum_balance(&give_fungibles_id)))
 				.map_err(|_| XcmError::Overflow)?;
 
 		// Convert to the same kind of asset, with the required fungible balance
