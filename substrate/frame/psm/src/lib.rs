@@ -352,7 +352,7 @@ pub mod pallet {
 			let stable_decimals = T::StableAsset::decimals();
 			for (asset_id, (minting_fee, redemption_fee, ceiling_weight)) in &self.asset_configs {
 				assert!(
-					T::Fungibles::decimals(asset_id) == stable_decimals,
+					T::Fungibles::decimals(&asset_id) == stable_decimals,
 					"PSM genesis: asset {:?} decimals do not match stable asset decimals",
 					asset_id,
 				);
@@ -952,7 +952,7 @@ pub mod pallet {
 			// Check 1: All approved assets must have matching decimals.
 			for (asset_id, _) in ExternalAssets::<T>::iter() {
 				ensure!(
-					T::Fungibles::decimals(asset_id) == stable_decimals,
+					T::Fungibles::decimals(&asset_id) == stable_decimals,
 					"External asset decimals do not match stable asset decimals"
 				);
 			}

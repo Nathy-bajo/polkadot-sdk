@@ -84,7 +84,7 @@ fn create_asset<T: Config>(
 ) where
 	T::Assets: Create<T::AccountId> + Mutate<T::AccountId>,
 {
-	if !T::Assets::asset_exists(asset.clone()) {
+	if !T::Assets::asset_exists(asset) {
 		assert_ok!(T::Assets::create(
 			asset.clone(),
 			caller.clone(),
@@ -92,11 +92,7 @@ fn create_asset<T: Config>(
 			T::Balance::one()
 		));
 	}
-	assert_ok!(T::Assets::mint_into(
-		asset.clone(),
-		&caller,
-		amount + T::Assets::minimum_balance(asset.clone())
-	));
+	assert_ok!(T::Assets::mint_into(asset, &caller, amount + T::Assets::minimum_balance(asset)));
 }
 
 /// Create the designated fee asset for pool creation.
@@ -105,14 +101,10 @@ where
 	T::Assets: Create<T::AccountId> + Mutate<T::AccountId>,
 {
 	let fee_asset = T::PoolSetupFeeAsset::get();
-	if !T::Assets::asset_exists(fee_asset.clone()) {
+	if !T::Assets::asset_exists(&fee_asset) {
 		assert_ok!(T::Assets::create(fee_asset.clone(), caller.clone(), true, T::Balance::one()));
 	}
-	assert_ok!(T::Assets::mint_into(
-		fee_asset.clone(),
-		&caller,
-		T::Assets::minimum_balance(fee_asset)
-	));
+	assert_ok!(T::Assets::mint_into(&fee_asset, &caller, T::Assets::minimum_balance(&fee_asset)));
 }
 
 /// Mint the fee asset for the `caller` sufficient to cover the fee for creating a new pool.
@@ -125,7 +117,7 @@ fn mint_setup_fee_asset<T: Config>(
 	T::Assets: Create<T::AccountId> + Mutate<T::AccountId>,
 {
 	assert_ok!(T::Assets::mint_into(
-		T::PoolSetupFeeAsset::get(),
+		&T::PoolSetupFeeAsset::get(),
 		&caller,
 		T::PoolSetupFee::get() +
 			T::Assets::deposit_required(asset1.clone()) +
@@ -148,8 +140,8 @@ where
 	T::Assets: Create<T::AccountId> + Mutate<T::AccountId>,
 {
 	let (liquidity1, liquidity2) = valid_liquidity_amount::<T>(
-		T::Assets::minimum_balance(asset1.clone()),
-		T::Assets::minimum_balance(asset2.clone()),
+		T::Assets::minimum_balance(asset1),
+		T::Assets::minimum_balance(asset2),
 	);
 	create_asset::<T>(caller, asset1, liquidity1, true);
 	create_asset::<T>(caller, asset2, liquidity2, true);
@@ -182,8 +174,8 @@ mod benchmarks {
 	fn create_pool() {
 		let caller: T::AccountId = whitelisted_caller();
 		let (asset1, asset2) = T::BenchmarkHelper::create_pair(0, 1);
-		create_asset::<T>(&caller, &asset1, T::Assets::minimum_balance(asset1.clone()), true);
-		create_asset::<T>(&caller, &asset2, T::Assets::minimum_balance(asset2.clone()), true);
+		create_asset::<T>(&caller, &asset1, T::Assets::minimum_balance(&asset1), true);
+		create_asset::<T>(&caller, &asset2, T::Assets::minimum_balance(&asset2), true);
 
 		let lp_token = AssetConversion::<T>::get_next_pool_asset_id();
 		create_fee_asset::<T>(&caller);
@@ -223,9 +215,9 @@ mod benchmarks {
 		let pool_account = T::PoolLocator::pool_address(&asset1, &asset2).unwrap();
 		let lp_minted =
 			AssetConversion::<T>::calc_lp_amount_for_zero_supply(&liquidity1, &liquidity2).unwrap();
-		assert_eq!(T::PoolAssets::balance(lp_token, &caller), lp_minted);
-		assert_eq!(T::Assets::balance(asset1, &pool_account), liquidity1);
-		assert_eq!(T::Assets::balance(asset2, &pool_account), liquidity2);
+		assert_eq!(T::PoolAssets::balance(&lp_token, &caller), lp_minted);
+		assert_eq!(T::Assets::balance(&asset1, &pool_account), liquidity1);
+		assert_eq!(T::Assets::balance(&asset2, &pool_account), liquidity2);
 	}
 
 	#[benchmark]
@@ -250,7 +242,7 @@ mod benchmarks {
 			caller.clone(),
 		));
 		let total_supply =
-			<T::PoolAssets as Inspect<T::AccountId>>::total_issuance(lp_token.clone());
+			<T::PoolAssets as Inspect<T::AccountId>>::total_issuance(&lp_token.clone());
 
 		#[extrinsic_call]
 		_(
@@ -263,7 +255,7 @@ mod benchmarks {
 			caller.clone(),
 		);
 
-		let new_total_supply = <T::PoolAssets as Inspect<T::AccountId>>::total_issuance(lp_token);
+		let new_total_supply = <T::PoolAssets as Inspect<T::AccountId>>::total_issuance(&lp_token);
 		assert_eq!(new_total_supply, total_supply - remove_lp_amount);
 	}
 
@@ -298,12 +290,8 @@ mod benchmarks {
 		}
 
 		let asset_in = *path.first().unwrap().clone();
-		assert_ok!(T::Assets::mint_into(
-			asset_in.clone(),
-			&caller,
-			swap_amount + T::Balance::one()
-		));
-		let init_caller_balance = T::Assets::balance(asset_in.clone(), &caller);
+		assert_ok!(T::Assets::mint_into(&asset_in, &caller, swap_amount + T::Balance::one()));
+		let init_caller_balance = T::Assets::balance(&asset_in, &caller);
 
 		#[extrinsic_call]
 		_(
@@ -315,7 +303,7 @@ mod benchmarks {
 			true,
 		);
 
-		let actual_balance = T::Assets::balance(asset_in, &caller);
+		let actual_balance = T::Assets::balance(&asset_in, &caller);
 		assert_eq!(actual_balance, init_caller_balance - swap_amount);
 	}
 
@@ -351,8 +339,8 @@ mod benchmarks {
 
 		let asset_in = *path.first().unwrap().clone();
 		let asset_out = *path.last().unwrap().clone();
-		assert_ok!(T::Assets::mint_into(asset_in, &caller, max_swap_amount));
-		let init_caller_balance = T::Assets::balance(asset_out.clone(), &caller);
+		assert_ok!(T::Assets::mint_into(&asset_in, &caller, max_swap_amount));
+		let init_caller_balance = T::Assets::balance(&asset_out, &caller);
 
 		#[extrinsic_call]
 		_(
@@ -364,7 +352,7 @@ mod benchmarks {
 			true,
 		);
 
-		let actual_balance = T::Assets::balance(asset_out, &caller);
+		let actual_balance = T::Assets::balance(&asset_out, &caller);
 		assert_eq!(actual_balance, init_caller_balance + T::Balance::one());
 	}
 

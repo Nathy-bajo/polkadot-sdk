@@ -280,7 +280,7 @@ fn approval_works(asset_index: u16) {
 			&ExecConfig::new_substrate_tx(),
 		);
 		assert_eq!(Assets::balance(asset_id, owner), 90);
-		assert_eq!(Assets::allowance(asset_id, &owner, &spender), 15);
+		assert_eq!(Assets::allowance(&asset_id, &owner, &spender), 15);
 		assert_eq!(Assets::balance(asset_id, other), 10);
 
 		assert_contract_event(
@@ -345,17 +345,17 @@ fn approve_set_and_revoke(asset_index: u16) {
 
 		// First approve: set allowance to 100 (from zero — allowed).
 		call_approve(owner, asset_addr, spender_addr, U256::from(100));
-		assert_eq!(Assets::allowance(asset_id, &owner, &spender), 100);
+		assert_eq!(Assets::allowance(&asset_id, &owner, &spender), 100);
 		assert_eq!(Balances::reserved_balance(&owner), deposit);
 
 		// Approve to 0: must revoke the allowance entirely and unreserve the deposit.
 		call_approve(owner, asset_addr, spender_addr, U256::from(0));
-		assert_eq!(Assets::allowance(asset_id, &owner, &spender), 0);
+		assert_eq!(Assets::allowance(&asset_id, &owner, &spender), 0);
 		assert_eq!(Balances::reserved_balance(&owner), 0);
 
 		// Re-approve to 50 after zeroing — allowed, deposit reserved again.
 		call_approve(owner, asset_addr, spender_addr, U256::from(50));
-		assert_eq!(Assets::allowance(asset_id, &owner, &spender), 50);
+		assert_eq!(Assets::allowance(&asset_id, &owner, &spender), 50);
 		assert_eq!(Balances::reserved_balance(&owner), deposit);
 	});
 }
@@ -392,7 +392,7 @@ fn approve_revoke_after_partial_transfer(asset_index: u16) {
 
 		// Approve 100.
 		call_approve(owner, asset_addr, spender_addr, U256::from(100));
-		assert_eq!(Assets::allowance(asset_id, &owner, &spender), 100);
+		assert_eq!(Assets::allowance(&asset_id, &owner, &spender), 100);
 		assert_eq!(Balances::reserved_balance(&owner), deposit);
 
 		// Spender uses 60 via transfer_approved, leaving 40 remaining.
@@ -403,13 +403,13 @@ fn approve_revoke_after_partial_transfer(asset_index: u16) {
 			dest,
 			60
 		));
-		assert_eq!(Assets::allowance(asset_id, &owner, &spender), 40);
+		assert_eq!(Assets::allowance(&asset_id, &owner, &spender), 40);
 		// Deposit is still held — the approval entry still exists.
 		assert_eq!(Balances::reserved_balance(&owner), deposit);
 
 		// Revoke the remaining allowance via approve(0).
 		call_approve(owner, asset_addr, spender_addr, U256::from(0));
-		assert_eq!(Assets::allowance(asset_id, &owner, &spender), 0);
+		assert_eq!(Assets::allowance(&asset_id, &owner, &spender), 0);
 		// Deposit must be unreserved and entry removed.
 		assert_eq!(Balances::reserved_balance(&owner), 0);
 	});
@@ -440,7 +440,7 @@ fn approve_revoke_rejected_on_frozen_asset(asset_index: u16) {
 
 		// Approve 100 while the asset is live.
 		call_approve(owner, asset_addr, spender_addr, U256::from(100));
-		assert_eq!(Assets::allowance(asset_id, &owner, &spender), 100);
+		assert_eq!(Assets::allowance(&asset_id, &owner, &spender), 100);
 		assert_eq!(Balances::reserved_balance(&owner), deposit);
 
 		// Freeze the asset.
@@ -452,7 +452,7 @@ fn approve_revoke_rejected_on_frozen_asset(asset_index: u16) {
 		assert!(reverted, "revoke on frozen asset should be rejected");
 
 		// Allowance and deposit must remain unchanged.
-		assert_eq!(Assets::allowance(asset_id, &owner, &spender), 100);
+		assert_eq!(Assets::allowance(&asset_id, &owner, &spender), 100);
 		assert_eq!(Balances::reserved_balance(&owner), deposit);
 	});
 }
@@ -485,18 +485,18 @@ fn approve_nonzero_to_nonzero(asset_index: u16) {
 
 		// Approve 100 (0 → 100).
 		call_approve(owner, asset_addr, spender_addr, U256::from(100));
-		assert_eq!(Assets::allowance(asset_id, &owner, &spender), 100);
+		assert_eq!(Assets::allowance(&asset_id, &owner, &spender), 100);
 		assert_eq!(Balances::reserved_balance(&owner), deposit);
 
 		// Overwrite with 50 directly (100 → 50), no zeroing in between.
 		call_approve(owner, asset_addr, spender_addr, U256::from(50));
-		assert_eq!(Assets::allowance(asset_id, &owner, &spender), 50);
+		assert_eq!(Assets::allowance(&asset_id, &owner, &spender), 50);
 		// Deposit reserved exactly once — cancel unreserved the old one, approve re-reserved.
 		assert_eq!(Balances::reserved_balance(&owner), deposit);
 
 		// Overwrite upward (50 → 200) to confirm it works in both directions.
 		call_approve(owner, asset_addr, spender_addr, U256::from(200));
-		assert_eq!(Assets::allowance(asset_id, &owner, &spender), 200);
+		assert_eq!(Assets::allowance(&asset_id, &owner, &spender), 200);
 		assert_eq!(Balances::reserved_balance(&owner), deposit);
 	});
 }
@@ -524,7 +524,7 @@ fn approve_zero_on_nonexistent_is_noop(asset_index: u16) {
 
 		// Setting zero when no approval exists should succeed silently.
 		call_approve(owner, asset_addr, spender_addr, U256::from(0));
-		assert_eq!(Assets::allowance(asset_id, &owner, &spender), 0);
+		assert_eq!(Assets::allowance(&asset_id, &owner, &spender), 0);
 		assert_eq!(Balances::reserved_balance(&owner), 0);
 	});
 }

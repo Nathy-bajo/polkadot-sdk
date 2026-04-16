@@ -111,9 +111,9 @@ fn swap_exact_tokens_for_tokens_works() {
 		assert_ok!(Assets::mint(RuntimeOrigin::signed(provider), 1, swapper, 1_000));
 
 		let swapper_asset1_before =
-			<NativeAndAssets as Inspect<u64>>::balance(NativeOrWithId::WithId(1), &swapper);
+			<NativeAndAssets as Inspect<u64>>::balance(&NativeOrWithId::WithId(1), &swapper);
 		let recipient_native_before =
-			<NativeAndAssets as Inspect<u64>>::balance(NativeOrWithId::Native, &recipient);
+			<NativeAndAssets as Inspect<u64>>::balance(&NativeOrWithId::Native, &recipient);
 
 		let data = IAssetConversion::swapExactTokensForTokensCall {
 			path: vec![encode_asset(1).into(), encode_native().into()],
@@ -134,11 +134,11 @@ fn swap_exact_tokens_for_tokens_works() {
 		assert!(amount_out > U256::ZERO, "must receive some tokens");
 
 		let swapper_asset1_after =
-			<NativeAndAssets as Inspect<u64>>::balance(NativeOrWithId::WithId(1), &swapper);
+			<NativeAndAssets as Inspect<u64>>::balance(&NativeOrWithId::WithId(1), &swapper);
 		assert_eq!(swapper_asset1_before - swapper_asset1_after, 100);
 
 		let recipient_native_after =
-			<NativeAndAssets as Inspect<u64>>::balance(NativeOrWithId::Native, &recipient);
+			<NativeAndAssets as Inspect<u64>>::balance(&NativeOrWithId::Native, &recipient);
 		assert_eq!(
 			U256::from(recipient_native_after - recipient_native_before),
 			amount_out,
@@ -157,7 +157,7 @@ fn swap_tokens_for_exact_tokens_works() {
 		assert_ok!(Assets::mint(RuntimeOrigin::signed(provider), 1, swapper, 1_000));
 
 		let swapper_native_before =
-			<NativeAndAssets as Inspect<u64>>::balance(NativeOrWithId::Native, &swapper);
+			<NativeAndAssets as Inspect<u64>>::balance(&NativeOrWithId::Native, &swapper);
 
 		// Swap native -> asset1, requesting exactly 50 asset1 output.
 		let data = IAssetConversion::swapTokensForExactTokensCall {
@@ -180,11 +180,11 @@ fn swap_tokens_for_exact_tokens_works() {
 
 		// Verify recipient got exactly 50 asset1.
 		let swapper_asset1_after =
-			<NativeAndAssets as Inspect<u64>>::balance(NativeOrWithId::WithId(1), &swapper);
+			<NativeAndAssets as Inspect<u64>>::balance(&NativeOrWithId::WithId(1), &swapper);
 		assert_eq!(swapper_asset1_after, 1_050, "swapper must receive exactly 50 asset1");
 
 		let swapper_native_after =
-			<NativeAndAssets as Inspect<u64>>::balance(NativeOrWithId::Native, &swapper);
+			<NativeAndAssets as Inspect<u64>>::balance(&NativeOrWithId::Native, &swapper);
 		assert_eq!(
 			U256::from(swapper_native_before - swapper_native_after),
 			amount_in,
@@ -401,9 +401,9 @@ fn add_and_remove_liquidity_works() {
 
 		// Record balances before adding liquidity.
 		let native_before =
-			<NativeAndAssets as Inspect<u64>>::balance(NativeOrWithId::Native, &provider);
+			<NativeAndAssets as Inspect<u64>>::balance(&NativeOrWithId::Native, &provider);
 		let asset1_before =
-			<NativeAndAssets as Inspect<u64>>::balance(NativeOrWithId::WithId(1), &provider);
+			<NativeAndAssets as Inspect<u64>>::balance(&NativeOrWithId::WithId(1), &provider);
 
 		// Add liquidity via precompile.
 		let add_data = IAssetConversion::addLiquidityCall {
@@ -428,9 +428,9 @@ fn add_and_remove_liquidity_works() {
 
 		// Verify provider was debited.
 		let native_after =
-			<NativeAndAssets as Inspect<u64>>::balance(NativeOrWithId::Native, &provider);
+			<NativeAndAssets as Inspect<u64>>::balance(&NativeOrWithId::Native, &provider);
 		let asset1_after =
-			<NativeAndAssets as Inspect<u64>>::balance(NativeOrWithId::WithId(1), &provider);
+			<NativeAndAssets as Inspect<u64>>::balance(&NativeOrWithId::WithId(1), &provider);
 		// First liquidity provision to an empty pool debits exactly the desired amounts.
 		assert_eq!(native_before - native_after, 10_000, "native must be debited exactly");
 		assert_eq!(asset1_before - asset1_after, 10_000, "asset1 must be debited exactly");
@@ -451,9 +451,9 @@ fn add_and_remove_liquidity_works() {
 
 		// Record balances before removal.
 		let native_before =
-			<NativeAndAssets as Inspect<u64>>::balance(NativeOrWithId::Native, &provider);
+			<NativeAndAssets as Inspect<u64>>::balance(&NativeOrWithId::Native, &provider);
 		let asset1_before =
-			<NativeAndAssets as Inspect<u64>>::balance(NativeOrWithId::WithId(1), &provider);
+			<NativeAndAssets as Inspect<u64>>::balance(&NativeOrWithId::WithId(1), &provider);
 
 		// Remove liquidity via precompile.
 		let remove_data = IAssetConversion::removeLiquidityCall {
@@ -477,9 +477,9 @@ fn add_and_remove_liquidity_works() {
 
 		// Verify actual balance changes match return values.
 		let native_after =
-			<NativeAndAssets as Inspect<u64>>::balance(NativeOrWithId::Native, &provider);
+			<NativeAndAssets as Inspect<u64>>::balance(&NativeOrWithId::Native, &provider);
 		let asset1_after =
-			<NativeAndAssets as Inspect<u64>>::balance(NativeOrWithId::WithId(1), &provider);
+			<NativeAndAssets as Inspect<u64>>::balance(&NativeOrWithId::WithId(1), &provider);
 		assert_eq!(
 			U256::from(native_after - native_before),
 			ret.amount1,
