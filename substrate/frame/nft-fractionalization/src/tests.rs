@@ -93,12 +93,12 @@ fn fractionalize_should_work() {
 		assert_eq!(Balances::total_balance_on_hold(&account(1)), 2);
 		assert_eq!(
 			String::from_utf8(
-				<Assets as Inspect<<Test as frame_system::Config>::AccountId>>::name(0)
+				<Assets as Inspect<<Test as frame_system::Config>::AccountId>>::name(&0)
 			)
 			.unwrap(),
 			"Frac 0-0"
 		);
-		assert_eq!(String::from_utf8(Assets::symbol(0)).unwrap(), "FRAC");
+		assert_eq!(String::from_utf8(Assets::symbol(&0)).unwrap(), "FRAC");
 		assert_eq!(Nfts::owner(nft_collection_id, nft_id), Some(account(1)));
 		assert_noop!(
 			Nfts::transfer(

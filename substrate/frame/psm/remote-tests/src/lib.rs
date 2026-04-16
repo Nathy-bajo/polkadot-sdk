@@ -95,13 +95,13 @@ where
 
 	// Check that the external asset actually exists on-chain.
 	assert!(
-		<Runtime::Fungibles as FungiblesInspect<Runtime::AccountId>>::asset_exists(asset_id),
+		<Runtime::Fungibles as FungiblesInspect<Runtime::AccountId>>::asset_exists(&asset_id),
 		"External asset does not exist on the live chain. \
 		 Make sure the asset ID is correct."
 	);
 
 	let decimals =
-		<Runtime::Fungibles as FungiblesMetadataInspect<Runtime::AccountId>>::decimals(asset_id);
+		<Runtime::Fungibles as FungiblesMetadataInspect<Runtime::AccountId>>::decimals(&asset_id);
 	log::info!(
 		target: LOG_TARGET,
 		"External asset found with {} decimals",
@@ -109,7 +109,7 @@ where
 	);
 
 	// Create the pUSD stable asset if it doesn't exist yet.
-	if !<Runtime::Fungibles as FungiblesInspect<Runtime::AccountId>>::asset_exists(stable_asset_id)
+	if !<Runtime::Fungibles as FungiblesInspect<Runtime::AccountId>>::asset_exists(&stable_asset_id)
 	{
 		// Run pre-create hook (e.g., set NextAssetId for AutoIncAssetId chains).
 		if let Some(hook) = &config.pre_create_hook {
@@ -127,7 +127,7 @@ where
 
 		// Set pUSD metadata using the configured decimals.
 		assert_ok!(<Runtime::Fungibles as FungiblesMetadataMutate<Runtime::AccountId>>::set(
-			stable_asset_id,
+			&stable_asset_id,
 			&psm_account,
 			b"pUSD".to_vec(),
 			b"pUSD".to_vec(),
@@ -146,7 +146,7 @@ where
 	let stable_decimals =
 		<Runtime::StableAsset as FungibleMetadataInspect<Runtime::AccountId>>::decimals();
 	let external_decimals =
-		<Runtime::Fungibles as FungiblesMetadataInspect<Runtime::AccountId>>::decimals(asset_id);
+		<Runtime::Fungibles as FungiblesMetadataInspect<Runtime::AccountId>>::decimals(&asset_id);
 	assert_eq!(
 		stable_decimals, external_decimals,
 		"Decimals mismatch: stable={} vs external={}",
@@ -168,7 +168,7 @@ where
 		.try_into()
 		.unwrap_or_else(|_| panic!("balance conversion failed"));
 	assert_ok!(<Runtime::Fungibles as FungiblesMutate<Runtime::AccountId>>::mint_into(
-		asset_id,
+		&asset_id,
 		&caller,
 		fund_amount,
 	));
@@ -241,7 +241,7 @@ pub fn mint_and_redeem<Runtime, Block, InitialPsmConfig>(
 			setup::<Runtime, InitialPsmConfig>(config);
 
 		let balance_before = <Runtime::Fungibles as FungiblesInspect<Runtime::AccountId>>::balance(
-			asset_id, &caller,
+			&asset_id, &caller,
 		);
 
 		log::info!(
@@ -259,7 +259,7 @@ pub fn mint_and_redeem<Runtime, Block, InitialPsmConfig>(
 
 		let balance_after_mint =
 			<Runtime::Fungibles as FungiblesInspect<Runtime::AccountId>>::balance(
-				asset_id, &caller,
+				&asset_id, &caller,
 			);
 		assert_eq!(
 			balance_after_mint,
@@ -273,7 +273,7 @@ pub fn mint_and_redeem<Runtime, Block, InitialPsmConfig>(
 
 		// The PSM account should hold the external stablecoin.
 		let psm_external = <Runtime::Fungibles as FungiblesInspect<Runtime::AccountId>>::balance(
-			asset_id,
+			&asset_id,
 			&psm_account,
 		);
 		assert_eq!(psm_external, swap_amount, "PSM should hold the external stablecoin");

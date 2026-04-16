@@ -44,13 +44,13 @@ fn create_asset<T: Config>(caller: &T::AccountId, asset: &T::AssetKind, amount: 
 where
 	T::Assets: Create<T::AccountId> + Mutate<T::AccountId>,
 {
-	if !T::Assets::asset_exists(asset.clone()) {
+	if !T::Assets::asset_exists(&asset.clone()) {
 		assert_ok!(T::Assets::create(asset.clone(), caller.clone(), true, T::Balance::one()));
 	}
 	assert_ok!(T::Assets::mint_into(
-		asset.clone(),
+		&asset.clone(),
 		&caller,
-		amount + T::Assets::minimum_balance(asset.clone())
+		amount + T::Assets::minimum_balance(&asset.clone())
 	));
 }
 
@@ -60,13 +60,13 @@ where
 	T::Assets: Create<T::AccountId> + Mutate<T::AccountId>,
 {
 	let fee_asset = T::PoolSetupFeeAsset::get();
-	if !T::Assets::asset_exists(fee_asset.clone()) {
+	if !T::Assets::asset_exists(&fee_asset.clone()) {
 		assert_ok!(T::Assets::create(fee_asset.clone(), caller.clone(), true, T::Balance::one()));
 	}
 	assert_ok!(T::Assets::mint_into(
-		fee_asset.clone(),
+		&fee_asset.clone(),
 		&caller,
-		T::Assets::minimum_balance(fee_asset)
+		T::Assets::minimum_balance(&fee_asset)
 	));
 }
 
@@ -80,7 +80,7 @@ fn mint_setup_fee_asset<T: Config>(
 	T::Assets: Create<T::AccountId> + Mutate<T::AccountId>,
 {
 	assert_ok!(T::Assets::mint_into(
-		T::PoolSetupFeeAsset::get(),
+		&T::PoolSetupFeeAsset::get(),
 		&caller,
 		T::PoolSetupFee::get() +
 			T::Assets::deposit_required(asset1.clone()) +
@@ -103,8 +103,8 @@ where
 	T::Assets: Create<T::AccountId> + Mutate<T::AccountId>,
 {
 	let (liquidity1, liquidity2) = valid_liquidity_amount::<T>(
-		T::Assets::minimum_balance(asset1.clone()),
-		T::Assets::minimum_balance(asset2.clone()),
+		T::Assets::minimum_balance(&asset1.clone()),
+		T::Assets::minimum_balance(&asset2.clone()),
 	);
 	create_asset::<T>(caller, asset1, liquidity1);
 	create_asset::<T>(caller, asset2, liquidity2);

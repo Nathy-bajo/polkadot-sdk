@@ -126,7 +126,7 @@ where
 	fn ensure_successful(_: &Self::Beneficiary, asset: Self::AssetKind, amount: Self::Balance) {
 		let asset = Self::match_asset(&asset).expect("invalid asset");
 		<F as fungibles::Create<_>>::create(asset.clone(), A::get(), true, amount).unwrap();
-		<F as fungibles::Mutate<_>>::mint_into(asset, &A::get(), amount).unwrap();
+		<F as fungibles::Mutate<_>>::mint_into(&asset, &A::get(), amount).unwrap();
 	}
 	#[cfg(feature = "runtime-benchmarks")]
 	fn ensure_concluded(_: Self::Id) {}
@@ -218,11 +218,11 @@ where
 
 		let source = Self::match_location::<A>(source).expect("invalid source");
 		let asset = Self::match_asset(&asset).expect("invalid asset");
-		if F::total_issuance(asset.clone()).is_zero() {
+		if F::total_issuance(&asset.clone()).is_zero() {
 			<F as fungibles::Create<_>>::create(asset.clone(), source.clone(), true, 1u32.into())
 				.unwrap();
 		}
-		<F as fungibles::Mutate<_>>::mint_into(asset, &source, amount).unwrap();
+		<F as fungibles::Mutate<_>>::mint_into(&asset, &source, amount).unwrap();
 	}
 	#[cfg(feature = "runtime-benchmarks")]
 	fn ensure_concluded(_: Self::Id) {}

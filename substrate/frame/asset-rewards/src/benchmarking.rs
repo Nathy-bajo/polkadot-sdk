@@ -61,9 +61,8 @@ where
 	let staked_asset = T::BenchmarkHelper::staked_asset();
 	let reward_asset = T::BenchmarkHelper::reward_asset();
 
-	let min_staked_balance =
-		T::Assets::minimum_balance(staked_asset.clone()).max(T::Balance::one());
-	if !T::Assets::asset_exists(staked_asset.clone()) {
+	let min_staked_balance = T::Assets::minimum_balance(&staked_asset).max(T::Balance::one());
+	if !T::Assets::asset_exists(&staked_asset) {
 		assert_ok!(T::Assets::create(
 			staked_asset.clone(),
 			caller.clone(),
@@ -71,9 +70,8 @@ where
 			min_staked_balance
 		));
 	}
-	let min_reward_balance =
-		T::Assets::minimum_balance(reward_asset.clone()).max(T::Balance::one());
-	if !T::Assets::asset_exists(reward_asset.clone()) {
+	let min_reward_balance = T::Assets::minimum_balance(&reward_asset).max(T::Balance::one());
+	if !T::Assets::asset_exists(&reward_asset) {
 		assert_ok!(T::Assets::create(
 			reward_asset.clone(),
 			caller.clone(),
@@ -99,12 +97,8 @@ fn mint_into<T: Config>(caller: &T::AccountId, asset: &T::AssetId) -> T::Balance
 where
 	T::Assets: Mutate<T::AccountId>,
 {
-	let min_balance = T::Assets::minimum_balance(asset.clone());
-	assert_ok!(T::Assets::mint_into(
-		asset.clone(),
-		&caller,
-		min_balance.saturating_mul(10u32.into())
-	));
+	let min_balance = T::Assets::minimum_balance(asset);
+	assert_ok!(T::Assets::mint_into(asset, &caller, min_balance.saturating_mul(10u32.into())));
 	min_balance
 }
 
@@ -128,12 +122,12 @@ mod benchmarks {
 		let staked_asset = T::BenchmarkHelper::staked_asset();
 		let reward_asset = T::BenchmarkHelper::reward_asset();
 
-		let min_balance = T::Assets::minimum_balance(staked_asset.clone()).max(T::Balance::one());
-		if !T::Assets::asset_exists(staked_asset.clone()) {
+		let min_balance = T::Assets::minimum_balance(&staked_asset).max(T::Balance::one());
+		if !T::Assets::asset_exists(&staked_asset) {
 			assert_ok!(T::Assets::create(staked_asset.clone(), caller.clone(), true, min_balance));
 		}
-		let min_balance = T::Assets::minimum_balance(reward_asset.clone()).max(T::Balance::one());
-		if !T::Assets::asset_exists(reward_asset.clone()) {
+		let min_balance = T::Assets::minimum_balance(&reward_asset).max(T::Balance::one());
+		if !T::Assets::asset_exists(&reward_asset) {
 			assert_ok!(T::Assets::create(reward_asset.clone(), caller.clone(), true, min_balance));
 		}
 
@@ -257,9 +251,11 @@ mod benchmarks {
 			assert_ok!(AssetRewards::<T>::stake(RawOrigin::Signed(staker).into(), 0, min_balance));
 		}
 
-		let new_reward_rate_per_block =
-			T::Assets::minimum_balance(T::BenchmarkHelper::reward_asset()).max(T::Balance::one()) +
-				T::Balance::one();
+		let new_reward_rate_per_block = T::Assets::minimum_balance(
+			&T::BenchmarkHelper::reward_asset(),
+		)
+		.max(T::Balance::one()) +
+			T::Balance::one();
 
 		#[extrinsic_call]
 		_(caller_origin as T::RuntimeOrigin, 0, new_reward_rate_per_block);
@@ -318,12 +314,12 @@ mod benchmarks {
 		let pool_acc = AssetRewards::<T>::pool_account_id(&0u32);
 		let min_balance = mint_into::<T>(&caller, &reward_asset);
 
-		let balance_before = T::Assets::balance(reward_asset.clone(), &pool_acc);
+		let balance_before = T::Assets::balance(&reward_asset, &pool_acc);
 
 		#[extrinsic_call]
 		_(RawOrigin::Signed(caller), 0, min_balance);
 
-		let balance_after = T::Assets::balance(reward_asset, &pool_acc);
+		let balance_after = T::Assets::balance(&reward_asset, &pool_acc);
 
 		assert_eq!(balance_after, balance_before + min_balance);
 

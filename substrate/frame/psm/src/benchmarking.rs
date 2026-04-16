@@ -56,7 +56,7 @@ where
 	let admin: T::AccountId = whitelisted_caller();
 	let _ = frame_system::Pallet::<T>::inc_providers(&admin);
 	let target_id: T::AssetId = ASSET_ID_OFFSET.into();
-	if !T::Fungibles::asset_exists(target_id) {
+	if !T::Fungibles::asset_exists(&target_id) {
 		assert_ok!(T::Fungibles::create(target_id, admin.clone(), true, 1u32.into()));
 	}
 	if T::StableAsset::minimum_balance().is_zero() {
@@ -89,16 +89,16 @@ mod benchmarks {
 		let asset_id = setup_assets::<T>(n);
 		let mint_amount = T::MinSwapAmount::get().saturating_mul(10u32.into());
 
-		T::Fungibles::mint_into(asset_id, &caller, mint_amount.saturating_mul(2u32.into()))
+		T::Fungibles::mint_into(&asset_id, &caller, mint_amount.saturating_mul(2u32.into()))
 			.map_err(|_| BenchmarkError::Stop("Failed to fund caller"))?;
 
 		let psm_account = Psm::<T>::account_id();
-		let reserve_before = T::Fungibles::balance(asset_id, &psm_account);
+		let reserve_before = T::Fungibles::balance(&asset_id, &psm_account);
 
 		#[extrinsic_call]
 		_(RawOrigin::Signed(caller.clone()), asset_id, mint_amount);
 
-		assert!(T::Fungibles::balance(asset_id, &psm_account) > reserve_before);
+		assert!(T::Fungibles::balance(&asset_id, &psm_account) > reserve_before);
 		Ok(())
 	}
 
@@ -109,18 +109,18 @@ mod benchmarks {
 		let setup_amount = T::MinSwapAmount::get().saturating_mul(10u32.into());
 		let redeem_amount = T::MinSwapAmount::get();
 
-		T::Fungibles::mint_into(asset_id, &caller, setup_amount.saturating_mul(2u32.into()))
+		T::Fungibles::mint_into(&asset_id, &caller, setup_amount.saturating_mul(2u32.into()))
 			.map_err(|_| BenchmarkError::Stop("Failed to fund caller"))?;
 		Psm::<T>::mint(RawOrigin::Signed(caller.clone()).into(), asset_id, setup_amount)
 			.map_err(|_| BenchmarkError::Stop("Failed to setup reserve via mint"))?;
 
 		let psm_account = Psm::<T>::account_id();
-		let reserve_before = T::Fungibles::balance(asset_id, &psm_account);
+		let reserve_before = T::Fungibles::balance(&asset_id, &psm_account);
 
 		#[extrinsic_call]
 		_(RawOrigin::Signed(caller.clone()), asset_id, redeem_amount);
 
-		assert!(T::Fungibles::balance(asset_id, &psm_account) < reserve_before);
+		assert!(T::Fungibles::balance(&asset_id, &psm_account) < reserve_before);
 		Ok(())
 	}
 
