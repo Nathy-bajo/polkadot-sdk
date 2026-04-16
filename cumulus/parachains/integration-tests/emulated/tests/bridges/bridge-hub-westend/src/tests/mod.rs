@@ -142,13 +142,13 @@ pub(crate) fn create_foreign_on_ah_westend(
 pub(crate) fn foreign_balance_on_ah_rococo(id: v5::Location, who: &AccountId) -> u128 {
 	AssetHubRococo::execute_with(|| {
 		type Assets = <AssetHubRococo as AssetHubRococoPallet>::ForeignAssets;
-		<Assets as Inspect<_>>::balance(id, who)
+		<Assets as Inspect<_>>::balance(&id, who)
 	})
 }
 pub(crate) fn foreign_balance_on_ah_westend(id: v5::Location, who: &AccountId) -> u128 {
 	AssetHubWestend::execute_with(|| {
 		type Assets = <AssetHubWestend as AssetHubWestendPallet>::ForeignAssets;
-		<Assets as Inspect<_>>::balance(id, who)
+		<Assets as Inspect<_>>::balance(&id, who)
 	})
 }
 

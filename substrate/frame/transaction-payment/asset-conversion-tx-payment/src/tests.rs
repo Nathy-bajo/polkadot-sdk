@@ -236,7 +236,7 @@ fn transaction_payment_in_asset_possible() {
 			let balance = 1000;
 
 			assert_ok!(Assets::mint_into(&asset_id, &beneficiary, balance));
-			assert_eq!(Assets::balance(asset_id, caller), balance);
+			assert_eq!(Assets::balance(&asset_id, &caller), balance);
 
 			let len = 10;
 			let tx_weight = 5;
@@ -253,7 +253,7 @@ fn transaction_payment_in_asset_possible() {
 			assert_eq!(input_quote, Some(201));
 
 			let fee_in_asset = input_quote.unwrap();
-			assert_eq!(Assets::balance(asset_id, caller), balance);
+			assert_eq!(Assets::balance(&asset_id, &caller), balance);
 
 			let (pre, _) = ChargeAssetTxPayment::<Runtime>::from(0, Some(asset_id.into()))
 				.validate_and_prepare(
@@ -268,7 +268,7 @@ fn transaction_payment_in_asset_possible() {
 			assert_eq!(Balances::free_balance(caller), 10 * balance_factor);
 
 			// check that fee was charged in the given asset
-			assert_eq!(Assets::balance(asset_id, caller), balance - fee_in_asset);
+			assert_eq!(Assets::balance(&asset_id, &caller), balance - fee_in_asset);
 
 			System::assert_has_event(RuntimeEvent::Assets(pallet_assets::Event::Withdrawn {
 				asset_id,
@@ -284,7 +284,7 @@ fn transaction_payment_in_asset_possible() {
 				&Ok(()),
 			));
 
-			assert_eq!(Assets::balance(asset_id, caller), balance - fee_in_asset);
+			assert_eq!(Assets::balance(&asset_id, &caller), balance - fee_in_asset);
 			assert_eq!(TipUnbalancedAmount::get(), 0);
 			assert_eq!(FeeUnbalancedAmount::get(), fee_in_native);
 		});
@@ -316,7 +316,7 @@ fn transaction_payment_in_asset_fails_if_no_pool_for_that_asset() {
 			let balance = 1000;
 
 			assert_ok!(Assets::mint_into(&asset_id, &beneficiary, balance));
-			assert_eq!(Assets::balance(asset_id, caller), balance);
+			assert_eq!(Assets::balance(&asset_id, &caller), balance);
 
 			let len = 10;
 			let pre = ChargeAssetTxPayment::<Runtime>::from(0, Some(asset_id.into()))
@@ -362,7 +362,7 @@ fn transaction_payment_without_fee() {
 			// mint into the caller account
 			let beneficiary = <Runtime as system::Config>::Lookup::unlookup(caller);
 			assert_ok!(Assets::mint_into(&asset_id, &beneficiary, balance));
-			assert_eq!(Assets::balance(asset_id, caller), balance);
+			assert_eq!(Assets::balance(&asset_id, &caller), balance);
 
 			let weight = 5;
 			let len = 10;
@@ -389,7 +389,7 @@ fn transaction_payment_without_fee() {
 			// assert that native balance is not used
 			assert_eq!(Balances::free_balance(caller), 10 * balance_factor);
 			// check that fee was charged in the given asset
-			assert_eq!(Assets::balance(asset_id, caller), balance - fee_in_asset);
+			assert_eq!(Assets::balance(&asset_id, &caller), balance - fee_in_asset);
 
 			let refund = AssetConversion::quote_price_exact_tokens_for_tokens(
 				NativeOrWithId::Native,
@@ -409,7 +409,7 @@ fn transaction_payment_without_fee() {
 			));
 
 			// caller should get refunded
-			assert_eq!(Assets::balance(asset_id, caller), balance - fee_in_asset + refund);
+			assert_eq!(Assets::balance(&asset_id, &caller), balance - fee_in_asset + refund);
 			assert_eq!(Balances::free_balance(caller), 10 * balance_factor);
 		});
 }
@@ -444,7 +444,7 @@ fn asset_transaction_payment_with_tip_and_refund() {
 			let balance = 10000;
 
 			assert_ok!(Assets::mint_into(&asset_id, &beneficiary, balance));
-			assert_eq!(Assets::balance(asset_id, caller), balance);
+			assert_eq!(Assets::balance(&asset_id, &caller), balance);
 
 			let weight = 100;
 			let tip = 5;
@@ -466,7 +466,7 @@ fn asset_transaction_payment_with_tip_and_refund() {
 			info.extension_weight = ext.weight(CALL);
 			let (pre, _) =
 				ext.validate_and_prepare(Some(caller).into(), CALL, &info, len, 0).unwrap();
-			assert_eq!(Assets::balance(asset_id, caller), balance - fee_in_asset);
+			assert_eq!(Assets::balance(&asset_id, &caller), balance - fee_in_asset);
 
 			let final_weight = 50;
 			let weight_refund = weight - final_weight;
@@ -500,7 +500,7 @@ fn asset_transaction_payment_with_tip_and_refund() {
 
 			// caller should get refunded
 			assert_eq!(
-				Assets::balance(asset_id, caller),
+				Assets::balance(&asset_id, &caller),
 				balance - fee_in_asset + expected_token_refund
 			);
 			assert_eq!(Balances::free_balance(caller), 20 * balance_factor);
@@ -541,7 +541,7 @@ fn payment_from_account_with_only_assets() {
 			let balance = 1000;
 
 			assert_ok!(Assets::mint_into(&asset_id, &beneficiary, balance));
-			assert_eq!(Assets::balance(asset_id, caller), balance);
+			assert_eq!(Assets::balance(&asset_id, &caller), balance);
 
 			// assert that native balance is not necessary
 			assert_eq!(Balances::free_balance(caller), 0);
@@ -568,7 +568,7 @@ fn payment_from_account_with_only_assets() {
 				)
 				.unwrap();
 			// check that fee was charged in the given asset
-			assert_eq!(Assets::balance(asset_id, caller), balance - fee_in_asset);
+			assert_eq!(Assets::balance(&asset_id, &caller), balance - fee_in_asset);
 
 			assert_ok!(ChargeAssetTxPayment::<Runtime>::post_dispatch_details(
 				pre,
@@ -577,7 +577,7 @@ fn payment_from_account_with_only_assets() {
 				len,
 				&Ok(()),
 			));
-			assert_eq!(Assets::balance(asset_id, caller), balance - fee_in_asset);
+			assert_eq!(Assets::balance(&asset_id, &caller), balance - fee_in_asset);
 			assert_eq!(Balances::free_balance(caller), 0);
 
 			assert_eq!(TipUnbalancedAmount::get(), 0);
@@ -613,7 +613,7 @@ fn converted_fee_is_never_zero_if_input_fee_is_not() {
 			let balance = 1000;
 
 			assert_ok!(Assets::mint_into(&asset_id, &beneficiary, balance));
-			assert_eq!(Assets::balance(asset_id, caller), balance);
+			assert_eq!(Assets::balance(&asset_id, &caller), balance);
 
 			let weight = 1;
 			let len = 1;
@@ -630,7 +630,7 @@ fn converted_fee_is_never_zero_if_input_fee_is_not() {
 					)
 					.unwrap();
 				// `Pays::No` implies there are no fees
-				assert_eq!(Assets::balance(asset_id, caller), balance);
+				assert_eq!(Assets::balance(&asset_id, &caller), balance);
 
 				assert_ok!(ChargeAssetTxPayment::<Runtime>::post_dispatch_details(
 					pre,
@@ -639,7 +639,7 @@ fn converted_fee_is_never_zero_if_input_fee_is_not() {
 					len,
 					&Ok(()),
 				));
-				assert_eq!(Assets::balance(asset_id, caller), balance);
+				assert_eq!(Assets::balance(&asset_id, &caller), balance);
 			}
 
 			// validate even a small fee gets converted to asset.
@@ -661,7 +661,7 @@ fn converted_fee_is_never_zero_if_input_fee_is_not() {
 					0,
 				)
 				.unwrap();
-			assert_eq!(Assets::balance(asset_id, caller), balance - fee_in_asset);
+			assert_eq!(Assets::balance(&asset_id, &caller), balance - fee_in_asset);
 
 			assert_ok!(ChargeAssetTxPayment::<Runtime>::post_dispatch_details(
 				pre,
@@ -670,7 +670,7 @@ fn converted_fee_is_never_zero_if_input_fee_is_not() {
 				len,
 				&Ok(()),
 			));
-			assert_eq!(Assets::balance(asset_id, caller), balance - fee_in_asset);
+			assert_eq!(Assets::balance(&asset_id, &caller), balance - fee_in_asset);
 		});
 }
 
@@ -699,7 +699,7 @@ fn post_dispatch_fee_is_zero_if_pre_dispatch_fee_is_zero() {
 			let balance = 1000;
 
 			assert_ok!(Assets::mint_into(&asset_id, &beneficiary, balance));
-			assert_eq!(Assets::balance(asset_id, caller), balance);
+			assert_eq!(Assets::balance(&asset_id, &caller), balance);
 
 			let weight = 1;
 			let len = 1;
@@ -713,7 +713,7 @@ fn post_dispatch_fee_is_zero_if_pre_dispatch_fee_is_zero() {
 				.unwrap();
 			// `Pays::No` implies no pre-dispatch fees
 
-			assert_eq!(Assets::balance(asset_id, caller), balance);
+			assert_eq!(Assets::balance(&asset_id, &caller), balance);
 
 			let Pre::Charge { initial_payment, .. } = &pre else {
 				panic!("Expected Charge");
@@ -733,7 +733,7 @@ fn post_dispatch_fee_is_zero_if_pre_dispatch_fee_is_zero() {
 				len,
 				&Ok(()),
 			));
-			assert_eq!(Assets::balance(asset_id, caller), balance);
+			assert_eq!(Assets::balance(&asset_id, &caller), balance);
 		});
 }
 
@@ -822,7 +822,7 @@ fn transfer_add_and_remove_account() {
 
 			assert_eq!(Balances::free_balance(caller), 0);
 			assert_ok!(Assets::mint_into(&asset_id, &beneficiary, balance));
-			assert_eq!(Assets::balance(asset_id, caller), balance);
+			assert_eq!(Assets::balance(&asset_id, &caller), balance);
 
 			let call_weight = 100;
 			let tip = 5;
@@ -846,13 +846,13 @@ fn transfer_add_and_remove_account() {
 				.validate_and_prepare(Some(caller).into(), CALL, &info, len, 0)
 				.unwrap();
 
-			assert_eq!(Assets::balance(asset_id, &caller), balance - fee_in_asset);
+			assert_eq!(Assets::balance(&asset_id, &caller), balance - fee_in_asset);
 
 			// remove caller account.
 			assert_ok!(Assets::burn_from(
 				&asset_id,
 				&caller,
-				Assets::balance(asset_id, &caller),
+				Assets::balance(&asset_id, &caller),
 				Preservation::Expendable,
 				Precision::Exact,
 				Fortitude::Force
@@ -885,7 +885,7 @@ fn transfer_add_and_remove_account() {
 			assert_eq!(FeeUnbalancedAmount::get(), fee_in_native - tip);
 
 			// caller account removed.
-			assert_eq!(Assets::balance(asset_id, caller), 0);
+			assert_eq!(Assets::balance(&asset_id, &caller), 0);
 		});
 }
 

@@ -143,7 +143,7 @@ pub struct PsmBenchmarkHelper;
 impl crate::BenchmarkHelper<u32, u64> for PsmBenchmarkHelper {
 	fn create_asset(asset_id: u32, owner: &u64, decimals: u8) {
 		use frame_support::traits::fungibles::{metadata::Mutate as MetadataMutate, Create};
-		if !<Assets as frame_support::traits::fungibles::Inspect<u64>>::asset_exists(asset_id) {
+		if !<Assets as frame_support::traits::fungibles::Inspect<u64>>::asset_exists(&asset_id) {
 			let _ = <Assets as Create<u64>>::create(asset_id, *owner, true, 1);
 		}
 		// Fund the owner's native balance so they can pay the metadata deposit.

@@ -99,6 +99,6 @@ fn register_rococo_asset_on_wah_from_rah() {
 			]
 		);
 		type ForeignAssets = <AssetHubWestend as AssetHubWestendPallet>::ForeignAssets;
-		assert!(ForeignAssets::asset_exists(bridged_asset_at_wah));
+		assert!(ForeignAssets::asset_exists(&bridged_asset_at_wah));
 	});
 }

@@ -361,7 +361,7 @@ pub fn new_test_ext() -> sp_io::TestExternalities {
 	ext.execute_with(|| {
 		System::set_block_number(1);
 		assert_ok!(AssetsPallet::force_create(RuntimeOrigin::root(), 1, owner, false, 1,));
-		assert_ok!(AssetsPallet::mint_into(1, &owner, INITIAL_BALANCE,));
+		assert_ok!(AssetsPallet::mint_into(&1, &owner, INITIAL_BALANCE,));
 		assert_ok!(AssetConversion::create_pool(
 			RuntimeOrigin::signed(owner),
 			Box::new(NativeOrWithId::Native),

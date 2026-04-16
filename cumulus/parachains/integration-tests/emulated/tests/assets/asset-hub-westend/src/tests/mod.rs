@@ -37,7 +37,7 @@ macro_rules! foreign_balance_on {
 		emulated_integration_tests_common::impls::paste::paste! {
 			<$chain>::execute_with(|| {
 				type ForeignAssets = <$chain as [<$chain Pallet>]>::ForeignAssets;
-				<ForeignAssets as frame_support::traits::fungibles::Inspect<_>>::balance($id, $who)
+				<ForeignAssets as frame_support::traits::fungibles::Inspect<_>>::balance(&$id, $who)
 			})
 		}
 	};
@@ -49,7 +49,7 @@ macro_rules! assets_balance_on {
 		emulated_integration_tests_common::impls::paste::paste! {
 			<$chain>::execute_with(|| {
 				type Assets = <$chain as [<$chain Pallet>]>::Assets;
-				<Assets as frame_support::traits::fungibles::Inspect<_>>::balance($id, $who)
+				<Assets as frame_support::traits::fungibles::Inspect<_>>::balance(&$id, $who)
 			})
 		}
 	};
@@ -61,7 +61,7 @@ macro_rules! foreign_issuance_on {
 		emulated_integration_tests_common::impls::paste::paste! {
 			<$chain>::execute_with(|| {
 				type ForeignAssets = <$chain as [<$chain Pallet>]>::ForeignAssets;
-				<ForeignAssets as frame_support::traits::fungibles::Inspect<_>>::total_issuance($id)
+				<ForeignAssets as frame_support::traits::fungibles::Inspect<_>>::total_issuance(&$id)
 			})
 		}
 	};
@@ -73,7 +73,7 @@ macro_rules! assets_issuance_on {
 		emulated_integration_tests_common::impls::paste::paste! {
 			<$chain>::execute_with(|| {
 				type Assets = <$chain as [<$chain Pallet>]>::Assets;
-				<Assets as frame_support::traits::fungibles::Inspect<_>>::total_issuance($id)
+				<Assets as frame_support::traits::fungibles::Inspect<_>>::total_issuance(&$id)
 			})
 		}
 	};
@@ -174,7 +174,7 @@ macro_rules! asset_exists_on {
 		emulated_integration_tests_common::impls::paste::paste! {
 			<$chain>::execute_with(|| {
 				type Assets = <$chain as [<$chain Pallet>]>::Assets;
-				<Assets as frame_support::traits::fungibles::Inspect<_>>::asset_exists($id)
+				<Assets as frame_support::traits::fungibles::Inspect<_>>::asset_exists(&$id)
 			})
 		}
 	};

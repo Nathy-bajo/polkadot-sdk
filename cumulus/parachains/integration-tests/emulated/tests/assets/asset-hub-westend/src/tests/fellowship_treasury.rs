@@ -46,11 +46,11 @@ fn create_and_claim_treasury_spend() {
 		type Assets = <AssetHubWestend as AssetHubWestendPallet>::Assets;
 
 		// USDT created at genesis, mint some assets to the fellowship treasury account.
-		assert_ok!(<Assets as Mutate<_>>::mint_into(USDT_ID, &treasury_account, SPEND_AMOUNT * 4));
+		assert_ok!(<Assets as Mutate<_>>::mint_into(&USDT_ID, &treasury_account, SPEND_AMOUNT * 4));
 		// beneficiary has zero balance.
-		assert_eq!(<Assets as Inspect<_>>::balance(USDT_ID, &alice), 0u128);
+		assert_eq!(<Assets as Inspect<_>>::balance(&USDT_ID, &alice), 0u128);
 
-		<Assets as Inspect<_>>::total_issuance(USDT_ID)
+		<Assets as Inspect<_>>::total_issuance(&USDT_ID)
 	});
 
 	CollectivesWestend::execute_with(|| {
@@ -103,9 +103,9 @@ fn create_and_claim_treasury_spend() {
 			]
 		);
 		// beneficiary received the assets from the treasury.
-		assert_eq!(<Assets as Inspect<_>>::balance(USDT_ID, &alice), SPEND_AMOUNT);
+		assert_eq!(<Assets as Inspect<_>>::balance(&USDT_ID, &alice), SPEND_AMOUNT);
 
-		<Assets as Inspect<_>>::total_issuance(USDT_ID)
+		<Assets as Inspect<_>>::total_issuance(&USDT_ID)
 	});
 
 	assert_eq!(

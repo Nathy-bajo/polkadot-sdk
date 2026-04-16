@@ -1103,7 +1103,7 @@ fn reserve_transfer_multiple_assets_from_asset_hub_to_para() {
 	let sender_balance_before = test.sender.balance;
 	let sender_assets_before = AssetHubWestend::execute_with(|| {
 		type Assets = <AssetHubWestend as AssetHubWestendPallet>::Assets;
-		<Assets as Inspect<_>>::balance(RESERVABLE_ASSET_ID, &sender)
+		<Assets as Inspect<_>>::balance(&RESERVABLE_ASSET_ID, &sender)
 	});
 	let receiver_system_native_assets_before =
 		assets_balance_on!(PenpalA, system_para_native_asset_location.clone(), &receiver);
@@ -1120,7 +1120,7 @@ fn reserve_transfer_multiple_assets_from_asset_hub_to_para() {
 	let sender_balance_after = test.sender.balance;
 	let sender_assets_after = AssetHubWestend::execute_with(|| {
 		type Assets = <AssetHubWestend as AssetHubWestendPallet>::Assets;
-		<Assets as Inspect<_>>::balance(RESERVABLE_ASSET_ID, &sender)
+		<Assets as Inspect<_>>::balance(&RESERVABLE_ASSET_ID, &sender)
 	});
 	let receiver_system_native_assets_after =
 		assets_balance_on!(PenpalA, system_para_native_asset_location, &receiver);
@@ -1233,7 +1233,7 @@ fn reserve_transfer_multiple_assets_from_para_to_asset_hub() {
 	let receiver_balance_before = test.receiver.balance;
 	let receiver_assets_before = AssetHubWestend::execute_with(|| {
 		type Assets = <AssetHubWestend as AssetHubWestendPallet>::Assets;
-		<Assets as Inspect<_>>::balance(RESERVABLE_ASSET_ID, &receiver)
+		<Assets as Inspect<_>>::balance(&RESERVABLE_ASSET_ID, &receiver)
 	});
 
 	// Set assertions and dispatchables
@@ -1250,7 +1250,7 @@ fn reserve_transfer_multiple_assets_from_para_to_asset_hub() {
 	let receiver_balance_after = test.receiver.balance;
 	let receiver_assets_after = AssetHubWestend::execute_with(|| {
 		type Assets = <AssetHubWestend as AssetHubWestendPallet>::Assets;
-		<Assets as Inspect<_>>::balance(RESERVABLE_ASSET_ID, &receiver)
+		<Assets as Inspect<_>>::balance(&RESERVABLE_ASSET_ID, &receiver)
 	});
 	// Sender's system asset balance is reduced
 	assert!(sender_system_assets_after < sender_system_assets_before);
@@ -1391,7 +1391,7 @@ fn reserve_transfer_usdt_from_asset_hub_to_para() {
 
 	let sender_initial_balance = AssetHubWestend::execute_with(|| {
 		type Assets = <AssetHubWestend as AssetHubWestendPallet>::Assets;
-		<Assets as Inspect<_>>::balance(usdt_id, &sender)
+		<Assets as Inspect<_>>::balance(&usdt_id, &sender)
 	});
 	let sender_initial_native_balance = AssetHubWestend::execute_with(|| {
 		type Balances = <AssetHubWestend as AssetHubWestendPallet>::Balances;
@@ -1409,7 +1409,7 @@ fn reserve_transfer_usdt_from_asset_hub_to_para() {
 
 	let sender_after_balance = AssetHubWestend::execute_with(|| {
 		type Assets = <AssetHubWestend as AssetHubWestendPallet>::Assets;
-		<Assets as Inspect<_>>::balance(usdt_id, &sender)
+		<Assets as Inspect<_>>::balance(&usdt_id, &sender)
 	});
 	let sender_after_native_balance = AssetHubWestend::execute_with(|| {
 		type Balances = <AssetHubWestend as AssetHubWestendPallet>::Balances;

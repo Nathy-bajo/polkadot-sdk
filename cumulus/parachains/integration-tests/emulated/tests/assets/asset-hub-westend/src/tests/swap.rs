@@ -37,7 +37,7 @@ fn swap_locally_on_chain_using_local_assets() {
 			AssetHubWestendSender::get().into(),
 			1000,
 		));
-		assert!(<AssetHubWestend as AssetHubWestendPallet>::Assets::asset_exists(ASSET_ID));
+		assert!(<AssetHubWestend as AssetHubWestendPallet>::Assets::asset_exists(&ASSET_ID));
 
 		assert_ok!(<AssetHubWestend as AssetHubWestendPallet>::Assets::mint(
 			<AssetHubWestend as Chain>::RuntimeOrigin::signed(AssetHubWestendSender::get()),
@@ -235,7 +235,7 @@ fn cannot_create_pool_from_pool_assets() {
 			pool_owner_account_id.clone().into(),
 			1000,
 		));
-		assert!(<AssetHubWestend as AssetHubWestendPallet>::PoolAssets::asset_exists(ASSET_ID));
+		assert!(<AssetHubWestend as AssetHubWestendPallet>::PoolAssets::asset_exists(&ASSET_ID));
 
 		assert_ok!(<AssetHubWestend as AssetHubWestendPallet>::PoolAssets::mint(
 			<AssetHubWestend as Chain>::RuntimeOrigin::signed(pool_owner_account_id),
@@ -280,7 +280,7 @@ fn pay_xcm_fee_with_some_asset_swapped_for_native() {
 			AssetHubWestendSender::get().into(),
 			ASSET_MIN_BALANCE,
 		));
-		assert!(<AssetHubWestend as AssetHubWestendPallet>::Assets::asset_exists(ASSET_ID));
+		assert!(<AssetHubWestend as AssetHubWestendPallet>::Assets::asset_exists(&ASSET_ID));
 
 		assert_ok!(<AssetHubWestend as AssetHubWestendPallet>::Assets::mint(
 			<AssetHubWestend as Chain>::RuntimeOrigin::signed(AssetHubWestendSender::get()),

@@ -217,7 +217,7 @@ fn send_weth_from_ethereum_to_penpal() {
 			1000,
 		));
 
-		assert!(<PenpalB as PenpalBPallet>::Assets::asset_exists(weth_asset_location));
+		assert!(<PenpalB as PenpalBPallet>::Assets::asset_exists(&weth_asset_location));
 	});
 
 	// Send the token
@@ -739,7 +739,7 @@ fn send_token_from_ethereum_to_penpal() {
 			1000,
 		));
 
-		assert!(<PenpalB as PenpalBPallet>::Assets::asset_exists(weth_asset_location.clone()));
+		assert!(<PenpalB as PenpalBPallet>::Assets::asset_exists(&weth_asset_location.clone()));
 	});
 
 	BridgeHubWestend::execute_with(|| {

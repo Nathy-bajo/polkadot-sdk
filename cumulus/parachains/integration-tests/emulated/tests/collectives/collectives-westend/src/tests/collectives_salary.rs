@@ -41,7 +41,7 @@ fn pay_salary_technical_fellowship() {
 
 	AssetHubWestend::execute_with(|| {
 		type AssetHubAssets = <AssetHubWestend as AssetHubWestendPallet>::Assets;
-		assert_ok!(<AssetHubAssets as Mutate<_>>::mint_into(asset_id, &pay_from, pay_amount * 2));
+		assert_ok!(<AssetHubAssets as Mutate<_>>::mint_into(&asset_id, &pay_from, pay_amount * 2));
 	});
 
 	CollectivesWestend::execute_with(|| {
@@ -83,7 +83,7 @@ fn pay_salary_secretary() {
 	AssetHubWestend::execute_with(|| {
 		type AssetHubAssets = <AssetHubWestend as AssetHubWestendPallet>::Assets;
 		// USDT registered in genesis, now mint some into the payer's account
-		assert_ok!(<AssetHubAssets as Mutate<_>>::mint_into(USDT_ID, &pay_from, pay_amount * 2));
+		assert_ok!(<AssetHubAssets as Mutate<_>>::mint_into(&USDT_ID, &pay_from, pay_amount * 2));
 	});
 
 	CollectivesWestend::execute_with(|| {

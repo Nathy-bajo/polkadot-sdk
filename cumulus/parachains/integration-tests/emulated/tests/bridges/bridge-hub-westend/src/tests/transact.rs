@@ -160,7 +160,7 @@ fn transact_from_ethereum_to_penpalb_through_asset_hub() {
 	// Query initial balances
 	let receiver_assets_before = PenpalB::execute_with(|| {
 		type Assets = <PenpalB as PenpalBPallet>::Assets;
-		<Assets as Inspect<_>>::balance(bridged_weth.clone(), &receiver)
+		<Assets as Inspect<_>>::balance(&bridged_weth.clone(), &receiver)
 	});
 
 	// Now register a new asset on PenpalB from Ethereum/Bob account while paying fees using WETH
@@ -202,7 +202,7 @@ fn transact_from_ethereum_to_penpalb_through_asset_hub() {
 	// Query final balances
 	let receiver_assets_after = PenpalB::execute_with(|| {
 		type Assets = <PenpalB as PenpalBPallet>::Assets;
-		<Assets as Inspect<_>>::balance(bridged_weth, &receiver)
+		<Assets as Inspect<_>>::balance(&bridged_weth, &receiver)
 	});
 	// Receiver's balance is increased
 	assert!(receiver_assets_after > receiver_assets_before);

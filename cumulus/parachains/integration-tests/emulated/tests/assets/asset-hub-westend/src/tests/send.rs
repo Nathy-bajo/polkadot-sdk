@@ -94,7 +94,7 @@ pub fn penpal_register_foreign_asset_on_asset_hub(asset_location_on_penpal: Loca
 		);
 
 		type ForeignAssets = <AssetHubWestend as AssetHubWestendPallet>::ForeignAssets;
-		assert!(ForeignAssets::asset_exists(foreign_asset_at_asset_hub));
+		assert!(ForeignAssets::asset_exists(&foreign_asset_at_asset_hub));
 	});
 }
 

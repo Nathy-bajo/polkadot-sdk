@@ -78,14 +78,14 @@ fn transfer_over_xcm_works() {
 
 	new_test_ext().execute_with(|| {
 		// The parachain's native token
-		mock::Assets::set_balance(0, &SenderAccountOnTarget::get(), INITIAL_BALANCE);
+		mock::Assets::set_balance(&0, &SenderAccountOnTarget::get(), INITIAL_BALANCE);
 		// The relaychain's native token
-		mock::Assets::set_balance(1, &SenderAccountOnTarget::get(), INITIAL_BALANCE);
+		mock::Assets::set_balance(&1, &SenderAccountOnTarget::get(), INITIAL_BALANCE);
 		mock::Balances::set_balance(&SenderAccountOnTarget::get(), INITIAL_BALANCE);
 
 		// Check starting balance
-		assert_eq!(mock::Assets::balance(0, &recipient), 0);
-		assert_eq!(mock::Assets::balance(1, &recipient), 0);
+		assert_eq!(mock::Assets::balance(&0, &recipient), 0);
+		assert_eq!(mock::Assets::balance(&1, &recipient), 0);
 
 		let fee_asset =
 			Asset { id: AssetId(RelayLocation::get()), fun: Fungible(1_000_000_000_000_u128) };
@@ -105,12 +105,12 @@ fn transfer_over_xcm_works() {
 		);
 		assert_send_and_execute_msg(expected_message);
 
-		assert_eq!(mock::Assets::balance(1, &recipient), transfer_amount);
+		assert_eq!(mock::Assets::balance(&1, &recipient), transfer_amount);
 
 		// The mock trader does not refund any weight. Hence, the balance is exactly the
 		// initial amount minus what we withdrew for transferring and paying the remote fees.
 		assert_eq!(
-			mock::Assets::balance(1, &SenderAccountOnTarget::get()),
+			mock::Assets::balance(&1, &SenderAccountOnTarget::get()),
 			INITIAL_BALANCE - transfer_amount - fungible_amount(fee_asset.into())
 		);
 	});

@@ -228,7 +228,7 @@ fn send_token_to_rococo_v2() {
 
 		// Beneficiary received the token transfer value
 		assert_eq!(
-			ForeignAssets::balance(token_location, AccountId::from(beneficiary_acc_bytes)),
+			ForeignAssets::balance(&token_location, &AccountId::from(beneficiary_acc_bytes)),
 			token_transfer_value
 		);
 

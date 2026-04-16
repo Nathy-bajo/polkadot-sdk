@@ -1882,7 +1882,7 @@ fn withdraw_and_deposit_erc20s() {
 
 		// Beneficiary receives the ERC20.
 		let beneficiary_amount =
-			<Revive as fungibles::Inspect<_>>::balance(erc20_address, &beneficiary);
+			<Revive as fungibles::Inspect<_>>::balance(&erc20_address, &beneficiary);
 		assert_eq!(beneficiary_amount, erc20_transfer_amount);
 	});
 }

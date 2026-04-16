@@ -339,7 +339,7 @@ impl BenchmarkHelperTrait<u64, NativeOrWithId<u32>, NativeOrWithId<u32>> for Hel
 		let lp_provider = 12;
 		assert_ok!(Balances::force_set_balance(RuntimeOrigin::root(), lp_provider, u64::MAX / 2));
 		let lp_provider_account = <Runtime as system::Config>::Lookup::unlookup(lp_provider);
-		assert_ok!(Assets::mint_into(asset_idx, &lp_provider_account, u64::MAX / 2));
+		assert_ok!(Assets::mint_into(&asset_idx, &lp_provider_account, u64::MAX / 2));
 
 		let token_1 = Box::new(NativeOrWithId::Native);
 		let token_2 = Box::new(asset_id);
@@ -366,7 +366,7 @@ impl BenchmarkHelperTrait<u64, NativeOrWithId<u32>, NativeOrWithId<u32>> for Hel
 		let beneficiary = <Runtime as system::Config>::Lookup::unlookup(account);
 		let balance = 1000;
 
-		assert_ok!(Assets::mint_into(asset_idx, &beneficiary, balance));
-		assert_eq!(Assets::balance(asset_idx, account), balance);
+		assert_ok!(Assets::mint_into(&asset_idx, &beneficiary, balance));
+		assert_eq!(Assets::balance(&asset_idx, &account), balance);
 	}
 }

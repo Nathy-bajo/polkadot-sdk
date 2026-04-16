@@ -85,7 +85,7 @@ fn balance(owner: u128, token_id: NativeOrWithId<u32>) -> u128 {
 }
 
 fn pool_balance(owner: u128, token_id: u32) -> u128 {
-	<<Test as Config>::PoolAssets>::balance(token_id, owner)
+	<<Test as Config>::PoolAssets>::balance(&token_id, &owner)
 }
 
 fn get_native_ed() -> u128 {

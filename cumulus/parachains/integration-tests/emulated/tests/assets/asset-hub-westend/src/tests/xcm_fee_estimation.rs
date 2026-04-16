@@ -307,7 +307,7 @@ fn multi_hop_works() {
 	// Actually run the extrinsic.
 	let sender_assets_before = PenpalA::execute_with(|| {
 		type Assets = <PenpalA as PenpalAPallet>::Assets;
-		<Assets as Inspect<_>>::balance(relay_native_asset_location.clone(), &sender)
+		<Assets as Inspect<_>>::balance(&relay_native_asset_location.clone(), &sender)
 	});
 	let sender_balance_before = PenpalA::execute_with(|| {
 		type Balances = <PenpalA as PenpalAPallet>::Balances;
@@ -315,7 +315,7 @@ fn multi_hop_works() {
 	});
 	let receiver_assets_before = PenpalB::execute_with(|| {
 		type Assets = <PenpalB as PenpalBPallet>::Assets;
-		<Assets as Inspect<_>>::balance(relay_native_asset_location.clone(), &beneficiary_id)
+		<Assets as Inspect<_>>::balance(&relay_native_asset_location.clone(), &beneficiary_id)
 	});
 	let receiver_balance_before = PenpalB::execute_with(|| {
 		type Balances = <PenpalB as PenpalBPallet>::Balances;
@@ -331,7 +331,7 @@ fn multi_hop_works() {
 
 	let sender_assets_after = PenpalA::execute_with(|| {
 		type Assets = <PenpalA as PenpalAPallet>::Assets;
-		<Assets as Inspect<_>>::balance(relay_native_asset_location.clone(), &sender)
+		<Assets as Inspect<_>>::balance(&relay_native_asset_location.clone(), &sender)
 	});
 	let sender_balance_after = PenpalA::execute_with(|| {
 		type Balances = <PenpalA as PenpalAPallet>::Balances;
@@ -339,7 +339,7 @@ fn multi_hop_works() {
 	});
 	let receiver_assets_after = PenpalB::execute_with(|| {
 		type Assets = <PenpalB as PenpalBPallet>::Assets;
-		<Assets as Inspect<_>>::balance(relay_native_asset_location, &beneficiary_id)
+		<Assets as Inspect<_>>::balance(&relay_native_asset_location, &beneficiary_id)
 	});
 	let receiver_balance_after = PenpalB::execute_with(|| {
 		type Balances = <PenpalB as PenpalBPallet>::Balances;

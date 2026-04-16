@@ -118,6 +118,6 @@ fn register_asset_on_rah_from_wah(bridged_asset_at_rah: Location) {
 			]
 		);
 		type ForeignAssets = <AssetHubRococo as AssetHubRococoPallet>::ForeignAssets;
-		assert!(ForeignAssets::asset_exists(bridged_asset_at_rah));
+		assert!(ForeignAssets::asset_exists(&bridged_asset_at_rah));
 	});
 }
