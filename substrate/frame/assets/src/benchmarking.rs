@@ -600,7 +600,7 @@ benchmarks_instance_pallet! {
 		let (asset_id, _, _) = create_default_minted_asset::<T, I>(true, 100u32.into());
 		let amount;
 	}: {
-		amount = Pallet::<T, I>::total_issuance(asset_id.into());
+		amount = Pallet::<T, I>::total_issuance(&asset_id.into());
 	} verify {
 		assert_eq!(amount, 100u32.into());
 	}
@@ -609,7 +609,7 @@ benchmarks_instance_pallet! {
 		let (asset_id, caller, _) = create_default_minted_asset::<T, I>(true, 100u32.into());
 		let amount;
 	}: {
-		amount = Pallet::<T, I>::balance(asset_id.into(), caller);
+		amount = Pallet::<T, I>::balance(&asset_id.into(), caller);
 	} verify {
 		assert_eq!(amount, 100u32.into());
 	}
@@ -621,7 +621,7 @@ benchmarks_instance_pallet! {
 		let delegate: T::AccountId = account("approval", 0, SEED);
 		let amount;
 	}: {
-		amount = Pallet::<T, I>::allowance(asset_id.into(), &caller, &delegate);
+		amount = Pallet::<T, I>::allowance(&asset_id.into(), &caller, &delegate);
 	} verify {
 		assert_eq!(amount, 100u32.into());
 	}
