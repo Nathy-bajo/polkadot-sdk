@@ -1,0 +1,62 @@
+title: 'fungibles: take `AssetId` by reference in all trait methods'
+doc:
+- audience: Runtime Dev
+  description: |-
+    fixes https://github.com/paritytech/polkadot-sdk/issues/3968
+
+    This PR changes all fungibles trait methods to accept `&Self::AssetId` instead of `Self::AssetId` to avoid unnecessary clones when using large types such as XCM `Location` as asset identifiers.
+crates:
+- name: snowbridge-runtime-common
+  bump: major
+- name: parachains-common
+  bump: major
+- name: cumulus-primitives-utility
+  bump: major
+- name: staging-xcm-builder
+  bump: major
+- name: pallet-asset-conversion-ops
+  bump: major
+- name: pallet-asset-conversion
+  bump: major
+- name: pallet-asset-rewards
+  bump: major
+- name: pallet-assets-freezer
+  bump: major
+- name: pallet-assets-holder
+  bump: major
+- name: pallet-assets-precompiles
+  bump: major
+- name: pallet-assets
+  bump: major
+- name: pallet-bounties
+  bump: major
+- name: pallet-nft-fractionalization
+  bump: major
+- name: pallet-psm
+  bump: major
+- name: pallet-revive
+  bump: major
+- name: frame-support
+  bump: major
+- name: pallet-asset-conversion-tx-payment
+  bump: major
+- name: pallet-asset-tx-payment
+  bump: major
+- name: pallet-asset-conversion-precompiles
+  bump: major
+- name: parachains-runtimes-test-utils
+  bump: major
+- name: asset-test-utils
+  bump: major
+- name: pallet-broker
+  bump: major
+- name: emulated-integration-tests-common
+  bump: major
+- name: pallet-xcm
+  bump: major
+- name: asset-hub-westend-runtime
+  bump: major
+- name: pallet-contracts-mock-network
+  bump: major
+- name: asset-hub-rococo-runtime
+  bump: major
