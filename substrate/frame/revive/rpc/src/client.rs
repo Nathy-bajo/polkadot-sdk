@@ -31,9 +31,10 @@ use jsonrpsee::types::{ErrorObjectOwned, error::CALL_EXECUTION_FAILED_CODE};
 use pallet_revive::{
 	EthTransactError,
 	evm::{
-		Block, BlockNumberOrTagOrHash, FeeHistoryResult, Filter, GenericTransaction, H256,
-		HashesOrTransactionInfos, Log, ReceiptInfo, StateOverrideSet, SyncingProgress,
-		SyncingStatus, Trace, TransactionSigned, TransactionTrace, decode_revert_reason,
+		Block, BlockNumberOrTag, BlockNumberOrTagOrHash, FeeHistoryResult, Filter,
+		GenericTransaction, H256, HashesOrTransactionInfos, Log, ReceiptInfo, StateOverrideSet,
+		SyncingProgress, SyncingStatus, Trace, TransactionSigned, TransactionTrace, U256,
+		decode_revert_reason,
 	},
 };
 use sp_core::U256;
@@ -985,9 +986,69 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 		transaction: GenericTransaction,
 		block: BlockNumberOrTagOrHash,
 		config: TracerType,
+		state_overrides: Option<StateOverrideSet>,
 	) -> Result<Trace, ClientError> {
 		let block_hash = self.block_hash_for_tag(block).await?;
+<<<<<<< pallet_revive_refactor
 		self.backend.trace_call(block_hash, transaction, config).await
+=======
+		let runtime_api = self.runtime_api(block_hash);
+		runtime_api.trace_call(transaction, config, state_overrides).await
+	}
+
+	/// Get the EVM block for the given Substrate block.
+	pub async fn evm_block(
+		&self,
+		block: Arc<SubstrateBlock>,
+		hydrated_transactions: bool,
+	) -> Option<Block> {
+		log::trace!(target: LOG_TARGET, "Get Ethereum block for hash {:?}", block.hash());
+
+		if self
+			.receipt_provider
+			.is_before_earliest_block(&BlockNumberOrTag::U256(U256::from(block.number())))
+		{
+			log::trace!(target: LOG_TARGET,
+				"Block #{} is before receipt floor, skipping", block.number());
+			return None;
+		}
+
+		// This could potentially fail under below circumstances:
+		//  - state has been pruned
+		//  - the block author cannot be obtained from the digest logs (highly unlikely)
+		//  - the node we are targeting has an outdated revive pallet (or ETH block functionality is
+		//    disabled)
+		match self.runtime_api(block.hash()).eth_block().await {
+			Ok(mut eth_block) => {
+				log::trace!(target: LOG_TARGET, "Ethereum block from runtime API hash {:?}", eth_block.hash);
+
+				if hydrated_transactions {
+					// Hydrate the block.
+					let tx_infos = self
+						.receipt_provider
+						.receipts_from_block(&block)
+						.await
+						.inspect_err(|err| {
+							log::trace!(target: LOG_TARGET,
+								"Failed to extract receipts for block #{}: {err:?}",
+								block.number());
+						})
+						.unwrap_or_default()
+						.into_iter()
+						.map(|(signed_tx, receipt)| TransactionInfo::new(&receipt, signed_tx))
+						.collect::<Vec<_>>();
+
+					eth_block.transactions = HashesOrTransactionInfos::TransactionInfos(tx_infos);
+				}
+
+				Some(eth_block)
+			},
+			Err(err) => {
+				log::error!(target: LOG_TARGET, "Failed to get Ethereum block for hash {:?}: {err:?}", block.hash());
+				None
+			},
+		}
+>>>>>>> master
 	}
 
 	/// Get the post-dispatch weight associated with this Ethereum transaction hash.
