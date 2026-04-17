@@ -208,6 +208,37 @@ fn resolve_db_options(
 	}
 }
 
+/// Run a pre-flight chain identity check **before** spawning any background tasks.
+fn handle_chain_preflight(
+	try_result: Result<Result<pallet_revive::evm::H256, crate::client::ClientError>, ()>,
+	base_path: Option<BasePath>,
+) -> anyhow::Result<()> {
+	use crate::client::ClientError;
+	match try_result {
+		Err(()) => anyhow::bail!("Process interrupted during chain identity validation"),
+		Ok(Err(e)) if e.is_chain_validation_error() => {
+			let db_path = resolve_db_dir(base_path).join(DEFAULT_DATABASE_NAME);
+			anyhow::bail!(
+				"Chain identity mismatch: the receipt database at\n\
+				 \t'{}'\n\
+				 was created for a different chain (genesis hash mismatch).\n\
+				 \n\
+				 Recovery options:\n\
+				 \t(a) Delete the stale database and restart:\n\
+				 \t    rm -f '{}'\n\
+				 \t(b) Use an in-memory database (no history, no mismatch):\n\
+				 \t    --eth-pruning=256\n\
+				 \t(c) Persist to an explicit path you can wipe deliberately:\n\
+				 \t    --base-path /tmp/eth-rpc-dev",
+				db_path.display(),
+				db_path.display(),
+			)
+		},
+		Ok(Err(e)) => Err(e.into()),
+		Ok(Ok(_)) => Ok(()),
+	}
+}
+
 fn dev_accounts() -> Vec<crate::Account> {
 	#[cfg(feature = "subxt")]
 	{
@@ -420,6 +451,19 @@ where
 		}
 	};
 
+	// Pre-flight: validate chain identity before spawning any background tasks.
+	// This converts a panic deep inside `sync_backward` into a clean, actionable error.
+	if eth_pruning.is_archive() {
+		let preflight = {
+			let c = client.clone();
+			let fut = async move { c.validate_chain_identity().await }.fuse();
+			pin_mut!(fut);
+			let abort = tokio_runtime.block_on(async { Signals::capture() })?;
+			tokio_handle.block_on(abort.try_until_signal(fut))
+		};
+		handle_chain_preflight(preflight, shared_params.base_path()?)?;
+	}
+
 	if let Some(PrometheusConfig { port, registry }) = prometheus_config.clone() {
 		task_manager.spawn_handle().spawn(
 			"prometheus-endpoint",
@@ -460,7 +504,11 @@ where
 			}));
 
 			if let Err(err) = futures::future::try_join_all(futures).await {
-				panic!("Block subscription task failed: {err:?}")
+				panic!(
+					"Block subscription task failed: {err:?}\n\
+					 Hint: if this is a chain mismatch, delete the receipt DB or \
+					 use --eth-pruning=256 for an in-memory database."
+				)
 			}
 		});
 
@@ -575,6 +623,19 @@ pub fn run(cmd: CliCommand) -> anyhow::Result<()> {
 		}
 	};
 
+	// Pre-flight: validate chain identity before spawning any background tasks.
+	// Catches ChainMismatch from a stale DB and returns a clean error with recovery steps.
+	if eth_pruning.is_archive() {
+		let preflight = {
+			let c = client.clone();
+			let fut = async move { c.validate_chain_identity().await }.fuse();
+			futures::pin_mut!(fut);
+			let abort = tokio_runtime.block_on(async { sc_cli::Signals::capture() })?;
+			tokio_handle.block_on(abort.try_until_signal(fut))
+		};
+		handle_chain_preflight(preflight, shared_params.base_path()?)?;
+	}
+
 	// Prometheus metrics.
 	if let Some(sc_service::config::PrometheusConfig { port, registry }) = prometheus_config.clone()
 	{
@@ -598,13 +659,18 @@ pub fn run(cmd: CliCommand) -> anyhow::Result<()> {
 	)?;
 
 	// Archive mode: spawn the historical backward sync task.
+	// Note: chain identity was already validated above; this task handles ongoing sync only.
 	if eth_pruning.is_archive() {
 		let sync_client = client.clone();
 		task_manager
 			.spawn_essential_handle()
 			.spawn("block-backward-sync", None, async move {
 				if let Err(err) = sync_client.sync_backward().await {
-					panic!("Chain validation failed during backward sync: {err:?}");
+					panic!(
+						"sync_backward failed: {err:?}\n\
+						 Hint: if this is a chain mismatch, delete the receipt DB or \
+						 use --eth-pruning=256 for an in-memory database."
+					);
 				}
 			});
 	}
@@ -624,7 +690,11 @@ pub fn run(cmd: CliCommand) -> anyhow::Result<()> {
 			}));
 
 			if let Err(err) = futures::future::try_join_all(futures).await {
-				panic!("Block subscription task failed: {err:?}")
+				panic!(
+					"Block subscription task failed: {err:?}\n\
+					 Hint: if this is a chain mismatch, delete the receipt DB or \
+					 use --eth-pruning=256 for an in-memory database."
+				)
 			}
 		});
 

@@ -95,7 +95,7 @@ struct BackwardSyncRange {
 
 impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 	/// Verify that the stored genesis hash matches the connected chain.
-	async fn validate_chain_identity(&self) -> Result<H256, ClientError> {
+	pub(crate) async fn validate_chain_identity(&self) -> Result<H256, ClientError> {
 		// Fetch block 0 (genesis) to use as the chain identity fingerprint.
 		let genesis_hash: H256 = self
 			.block_provider()
