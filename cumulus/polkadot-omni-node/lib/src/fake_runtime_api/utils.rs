@@ -298,6 +298,14 @@ macro_rules! impl_node_runtime_apis {
 					_: pallet_revive::evm::GenericTransaction,
 					_: pallet_revive::evm::TracerType,
 				) -> Result<pallet_revive::evm::Trace, pallet_revive::EthTransactError> { unimplemented!() }
+				fn trace_call_with_config(
+					_: pallet_revive::evm::GenericTransaction,
+					_: pallet_revive::evm::TracerType,
+					_: pallet_revive::evm::TracingConfig,
+				) -> Result<pallet_revive::evm::Trace, pallet_revive::EthTransactError> { unimplemented!() }
+				fn eth_pre_dispatch_weight(
+					_: Vec<u8>,
+				) -> Result<Weight, pallet_revive::EthTransactError> { unimplemented!() }
 				fn block_author() -> sp_core::H160 { unimplemented!() }
 				fn address(_: sp_core::H160) -> sp_core::H160 { unimplemented!() }
 				fn account_id(_: sp_core::H160) -> sp_core::H160 { unimplemented!() }

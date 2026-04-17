@@ -460,10 +460,11 @@ impl SubstrateClientT for SubxtClient {
 		block_hash: SubstrateBlockHash,
 		transaction: GenericTransaction,
 		config: TracerType,
+		state_overrides: Option<pallet_revive::evm::StateOverrideSet>,
 	) -> Result<Trace, ClientError> {
 		use crate::client::runtime_api::RuntimeApi;
 		RuntimeApi::new(self.api.runtime_api().at(block_hash))
-			.trace_call(transaction, config)
+			.trace_call(transaction, config, state_overrides)
 			.await
 	}
 

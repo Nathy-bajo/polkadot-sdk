@@ -213,7 +213,6 @@ fn handle_chain_preflight(
 	try_result: Result<Result<pallet_revive::evm::H256, crate::client::ClientError>, ()>,
 	base_path: Option<BasePath>,
 ) -> anyhow::Result<()> {
-	use crate::client::ClientError;
 	match try_result {
 		Err(()) => anyhow::bail!("Process interrupted during chain identity validation"),
 		Ok(Err(e)) if e.is_chain_validation_error() => {
@@ -587,13 +586,12 @@ pub fn run(cmd: CliCommand) -> anyhow::Result<()> {
 	let (subscription_gap_queue, gap_fill_rx) = SubscriptionGapQueue::new();
 	let (client, _block_provider) = {
 		let fut = async {
-			let (api, rpc_client, rpc) =
-				connect(
-					&node_rpc_url,
-					rpc_config.max_request_size * 1024 * 1024,
-					rpc_config.max_response_size * 1024 * 1024,
-				)
-				.await?;
+			let (api, rpc_client, rpc) = connect(
+				&node_rpc_url,
+				rpc_config.max_request_size * 1024 * 1024,
+				rpc_config.max_response_size * 1024 * 1024,
+			)
+			.await?;
 
 			let subxt_client = SubxtClient::new(api.clone(), rpc_client, rpc.clone()).await?;
 			// Explicit type annotation to resolve the inference ambiguity

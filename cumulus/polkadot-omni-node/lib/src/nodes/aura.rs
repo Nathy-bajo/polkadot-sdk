@@ -569,13 +569,9 @@ where
 	RuntimeApi::RuntimeApi: AuraRuntimeApi<Block, AuraId>
 		+ pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi<Block, Balance>
 		+ substrate_frame_rpc_system::AccountNonceApi<Block, AccountId, Nonce>
-<<<<<<< pallet_revive_refactor
+		+ TargetBlockRate<Block>
 		+ GetParachainInfo<Block>
 		+ ReviveRuntimeApiT<Block, u64>,
-=======
-		+ TargetBlockRate<Block>
-		+ GetParachainInfo<Block>,
->>>>>>> master
 	AuraId: AuraIdT + Sync + Send,
 	<AuraId as AppCrypto>::Pair: Send + Sync,
 {

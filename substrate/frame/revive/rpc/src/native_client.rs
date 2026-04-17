@@ -422,12 +422,23 @@ where
 		block_hash: SubstrateBlockHash,
 		transaction: GenericTransaction,
 		config: TracerType,
+		state_overrides: Option<StateOverrideSet>,
 	) -> Result<Trace, ClientError> {
-		self.client
-			.runtime_api()
-			.trace_call(block_hash, transaction, config)
-			.map_err(native_err)?
-			.map_err(ClientError::TransactError)
+		if let Some(overrides) = state_overrides {
+			use pallet_revive::evm::TracingConfig;
+			let tracing_config = TracingConfig::new().with_state_overrides(overrides);
+			self.client
+				.runtime_api()
+				.trace_call_with_config(block_hash, transaction, config, tracing_config)
+				.map_err(native_err)?
+				.map_err(ClientError::TransactError)
+		} else {
+			self.client
+				.runtime_api()
+				.trace_call(block_hash, transaction, config)
+				.map_err(native_err)?
+				.map_err(ClientError::TransactError)
+		}
 	}
 
 	async fn submit_extrinsic(&self, payload: Vec<u8>) -> Result<SubmitResult, ClientError> {

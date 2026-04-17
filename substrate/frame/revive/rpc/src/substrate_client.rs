@@ -179,6 +179,7 @@ pub trait SubstrateClientT: Send + Sync + Clone + 'static {
 		block_hash: SubstrateBlockHash,
 		transaction: GenericTransaction,
 		config: TracerType,
+		state_overrides: Option<pallet_revive::evm::StateOverrideSet>,
 	) -> Result<Trace, crate::client::ClientError>;
 
 	/// Submit an unsigned `eth_transact` extrinsic and return the first
