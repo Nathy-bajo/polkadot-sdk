@@ -318,7 +318,7 @@ mod tests {
 			// Create an asset with 8 decimals (stable asset has 6).
 			assert_ok!(<Assets as FungiblesCreate<u64>>::create(WRONG_DECIMALS_ID, ALICE, true, 1));
 			assert_ok!(<Assets as MetadataMutate<u64>>::set(
-				WRONG_DECIMALS_ID,
+				&WRONG_DECIMALS_ID,
 				&ALICE,
 				b"Wrong".to_vec(),
 				b"WRG".to_vec(),
