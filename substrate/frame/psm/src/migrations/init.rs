@@ -121,7 +121,7 @@ impl<T: Config, I: InitialPsmConfig<T>> frame_support::traits::OnRuntimeUpgrade
 				continue;
 			}
 
-			if T::Fungibles::decimals(*asset_id) != stable_decimals {
+			if T::Fungibles::decimals(asset_id) != stable_decimals {
 				log::error!(
 					target: LOG_TARGET,
 					"Asset {:?} decimals do not match stable asset decimals, skipping",
