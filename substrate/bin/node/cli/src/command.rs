@@ -230,7 +230,7 @@ pub fn run() -> Result<()> {
 					backend,
 					other: (_, (_, _, babe_link, _), _, _, _, _),
 					..
-				} = new_partial(&config, None)?;
+				} = new_partial(&config, None, Default::default())?;
 
 				let weight_storage = babe_link.weight_storage().clone();
 
