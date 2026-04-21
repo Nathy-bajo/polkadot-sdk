@@ -16,9 +16,9 @@
 // limitations under the License.
 //! The Ethereum JSON-RPC server.
 use crate::{
-	DbContext, BlockInfoProvider, DebugRpcServer, DebugRpcServerImpl, EthRpcServer, EthRpcServerImpl,
-	LOG_TARGET, PolkadotRpcServer, PolkadotRpcServerImpl, ReceiptExtractor, ReceiptProvider,
-	SubstrateClientT, SystemHealthRpcServer, SystemHealthRpcServerImpl,
+	BlockInfoProvider, DbContext, DebugRpcServer, DebugRpcServerImpl, EthRpcServer,
+	EthRpcServerImpl, LOG_TARGET, PolkadotRpcServer, PolkadotRpcServerImpl, ReceiptExtractor,
+	ReceiptProvider, SubstrateClientT, SystemHealthRpcServer, SystemHealthRpcServerImpl,
 	client::{Client, ClientError, SubscriptionGapQueue, SubscriptionType, SubstrateBlockNumber},
 };
 use clap::{CommandFactory, FromArgMatches, Parser};
@@ -385,9 +385,15 @@ where
 		EthPruningMode::Archive => (SqlitePoolOptions::new().connect_with(db_options).await?, None),
 	};
 
-	let receipt_provider =
-		ReceiptProvider::new(pool, block_provider.clone(), receipt_extractor, keep_latest_n_blocks)
-			.await?;
+	let max_variable_number = sqlite_db_query_max_variable_number(&pool).await;
+	let db_ctx = DbContext::new(pool, max_variable_number);
+	let receipt_provider = ReceiptProvider::new(
+		db_ctx,
+		block_provider.clone(),
+		receipt_extractor,
+		keep_latest_n_blocks,
+	)
+	.await?;
 
 	let client = Client::from_backend(
 		backend,
