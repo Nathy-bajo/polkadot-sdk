@@ -24,7 +24,6 @@ use pallet_revive::{
 };
 use sp_core::keccak_256;
 use std::{
-	collections::{BTreeMap, HashMap, HashSet},
 	future::Future,
 	pin::Pin,
 	sync::{
@@ -359,9 +358,6 @@ impl ReceiptExtractor {
 		eth_payload: &[u8],
 		receipt_gas_info: &ReceiptGasInfo,
 		transaction_index: usize,
-		receipt_gas_info: ReceiptGasInfo,
-		reverted: bool,
-		logs: Vec<Log>,
 	) -> Result<(TransactionSigned, ReceiptInfo), ClientError> {
 		let transaction_hash = H256(keccak_256(eth_payload));
 		let signed_tx =
