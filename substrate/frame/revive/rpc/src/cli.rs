@@ -661,10 +661,11 @@ pub fn run(cmd: CliCommand) -> anyhow::Result<()> {
 	if eth_pruning.is_archive() {
 		let sync_client = client.clone();
 		task_manager
-			.spawn_essential_handle()
-			.spawn("block-backward-sync", None, async move {
+			.spawn_handle()
+			.spawn("block-backward-sync", Some("eth-rpc"), async move {
 				if let Err(err) = sync_client.sync_backward().await {
-					panic!(
+					log::error!(
+						target: crate::LOG_TARGET,
 						"sync_backward failed: {err:?}\n\
 						 Hint: if this is a chain mismatch, delete the receipt DB or \
 						 use --eth-pruning=256 for an in-memory database."
