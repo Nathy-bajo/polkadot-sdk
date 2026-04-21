@@ -24,6 +24,7 @@ use pallet_revive::{
 };
 use sp_core::keccak_256;
 use std::{
+	collections::{BTreeMap, HashMap, HashSet},
 	future::Future,
 	pin::Pin,
 	sync::{
@@ -358,6 +359,9 @@ impl ReceiptExtractor {
 		eth_payload: &[u8],
 		receipt_gas_info: &ReceiptGasInfo,
 		transaction_index: usize,
+		receipt_gas_info: ReceiptGasInfo,
+		reverted: bool,
+		logs: Vec<Log>,
 	) -> Result<(TransactionSigned, ReceiptInfo), ClientError> {
 		let transaction_hash = H256(keccak_256(eth_payload));
 		let signed_tx =
@@ -544,6 +548,156 @@ impl ReceiptExtractor {
 mod tests {
 	use super::*;
 
+	use pallet_revive::evm::{Account, TransactionLegacyUnsigned, TransactionUnsigned};
+
+	fn signed_call(account: &Account, tx: TransactionUnsigned) -> (EthTransact, H256) {
+		let payload = account.sign_transaction(tx).signed_payload();
+		let hash = H256(keccak_256(&payload));
+		(EthTransact { payload }, hash)
+	}
+
+	fn legacy_call_tx(to: H160) -> TransactionUnsigned {
+		TransactionUnsigned::from(TransactionLegacyUnsigned {
+			chain_id: Some(U256::from(1)),
+			to: Some(to),
+			gas: U256::from(21_000),
+			..Default::default()
+		})
+	}
+
+	fn gas_info() -> ReceiptGasInfo {
+		ReceiptGasInfo {
+			gas_used: U256::from(21_000),
+			effective_gas_price: U256::from(1_000_000_000),
+		}
+	}
+
+	#[test]
+	fn build_receipt_for_call() {
+		let extractor = ReceiptExtractor::new_mock();
+		let account = Account::default();
+		let eth_block_hash = H256::from([0xAB; 32]);
+		let block_number = U256::from(42);
+		let (call, tx_hash) = signed_call(&account, legacy_call_tx(account.address()));
+
+		// Successful call
+		let (signed_tx, receipt) = extractor
+			.decode_transaction_and_build_receipt(
+				eth_block_hash,
+				block_number,
+				call,
+				tx_hash,
+				3,
+				gas_info(),
+				false,
+				vec![],
+			)
+			.unwrap();
+
+		assert!(receipt.is_success());
+		assert_eq!(receipt.from, account.address());
+		assert_eq!(receipt.to, Some(account.address()));
+		assert_eq!(receipt.contract_address, None);
+		assert_eq!(receipt.block_hash, eth_block_hash);
+		assert_eq!(receipt.block_number, block_number);
+		assert_eq!(receipt.transaction_hash, tx_hash);
+		assert_eq!(receipt.transaction_index, U256::from(3));
+		assert_eq!(receipt.gas_used, U256::from(21_000));
+		assert_eq!(signed_tx.recover_eth_address().unwrap(), account.address());
+
+		// Same call, but reverted
+		let (call, tx_hash) = signed_call(&account, legacy_call_tx(account.address()));
+		let (_, receipt) = extractor
+			.decode_transaction_and_build_receipt(
+				eth_block_hash,
+				block_number,
+				call,
+				tx_hash,
+				3,
+				gas_info(),
+				true,
+				vec![],
+			)
+			.unwrap();
+
+		assert!(!receipt.is_success());
+		assert_eq!(receipt.from, account.address());
+	}
+
+	#[test]
+	fn build_receipt_for_deploy() {
+		let extractor = ReceiptExtractor::new_mock();
+		let account = Account::default();
+		let deploy_tx = TransactionUnsigned::from(TransactionLegacyUnsigned {
+			chain_id: Some(U256::from(1)),
+			gas: U256::from(100_000),
+			nonce: U256::from(0),
+			..Default::default()
+		});
+		let (call, tx_hash) = signed_call(&account, deploy_tx);
+
+		let (_, receipt) = extractor
+			.decode_transaction_and_build_receipt(
+				H256::zero(),
+				U256::from(1),
+				call,
+				tx_hash,
+				0,
+				gas_info(),
+				false,
+				vec![],
+			)
+			.unwrap();
+
+		assert!(receipt.is_success());
+		assert_eq!(receipt.to, None);
+		assert_eq!(receipt.contract_address, Some(create1(&account.address(), 0)));
+		assert_eq!(receipt.from, account.address());
+	}
+
+	#[test]
+	fn build_receipt_rejects_invalid_payload() {
+		let extractor = ReceiptExtractor::new_mock();
+
+		// Corrupt payload
+		let call = EthTransact { payload: vec![0xde, 0xad] };
+		let hash = H256(keccak_256(&call.payload));
+		let err = extractor
+			.decode_transaction_and_build_receipt(
+				H256::zero(),
+				U256::from(1),
+				call,
+				hash,
+				0,
+				gas_info(),
+				false,
+				vec![],
+			)
+			.unwrap_err();
+		assert!(matches!(err, ClientError::TxDecodingFailed));
+
+		// Valid payload but address recovery fails
+		let extractor = ReceiptExtractor {
+			recover_eth_address: Arc::new(|_| Err(())),
+			..ReceiptExtractor::new_mock()
+		};
+		let account = Account::default();
+		let (call, hash) = signed_call(&account, legacy_call_tx(account.address()));
+		let err = extractor
+			.decode_transaction_and_build_receipt(
+				H256::zero(),
+				U256::from(1),
+				call,
+				hash,
+				0,
+				gas_info(),
+				false,
+				vec![],
+			)
+			.unwrap_err();
+		assert!(matches!(err, ClientError::RecoverEthAddressFailed));
+	}
+
 	#[test]
 	fn defaults_and_first_evm_block_only_decreases() {
 		let extractor = ReceiptExtractor::new_mock();
@@ -560,5 +714,157 @@ mod tests {
 		// Higher value is ignored
 		extractor.set_first_evm_block(100);
 		assert_eq!(extractor.first_evm_block(), Some(50));
+	}
+
+	use codec::{Compact, Decode, Encode};
+	use frame_system::EventRecord;
+	use revive_dev_runtime::{Runtime, RuntimeEvent};
+	use subxt::{events::Events, metadata::Metadata};
+
+	/// Build `Events` by SCALE-encoding revive events against the generated runtime metadata.
+	struct EventsBuilder {
+		metadata: Metadata,
+		bytes: Vec<u8>,
+		count: u32,
+	}
+
+	impl EventsBuilder {
+		fn new() -> Self {
+			let metadata_bytes: &[u8] =
+				include_bytes!(concat!(env!("OUT_DIR"), "/revive_chain.scale"));
+			let metadata = Metadata::decode(&mut &metadata_bytes[..]).unwrap();
+			Self { metadata, bytes: Vec::new(), count: 0 }
+		}
+
+		fn push_event(
+			mut self,
+			phase: frame_system::Phase,
+			event: pallet_revive::Event<Runtime>,
+		) -> Self {
+			EventRecord::<RuntimeEvent, H256> {
+				phase,
+				event: RuntimeEvent::Revive(event),
+				topics: vec![],
+			}
+			.encode_to(&mut self.bytes);
+			self.count += 1;
+			self
+		}
+
+		fn build(self) -> Events<SrcChainConfig> {
+			let mut encoded_events = Vec::new();
+			Compact(self.count).encode_to(&mut encoded_events);
+			encoded_events.extend(self.bytes);
+			Events::decode_from(encoded_events, self.metadata)
+		}
+	}
+
+	#[test]
+	fn extract_revive_events_decodes_contract_emitted_log() {
+		let contract = H160::from([0x11; 20]);
+		let topics = vec![H256::from([0x22; 32]), H256::from([0x33; 32])];
+		let data = vec![0xde, 0xad, 0xbe, 0xef];
+		let events = EventsBuilder::new()
+			.push_event(
+				frame_system::Phase::ApplyExtrinsic(5),
+				pallet_revive::Event::ContractEmitted {
+					contract,
+					data: data.clone(),
+					topics: topics.clone(),
+				},
+			)
+			.build();
+
+		let tx_hash = H256::from([0xAA; 32]);
+		let eth_block_hash = H256::from([0xBB; 32]);
+		let substrate_block_number = 42u32;
+		let eth_block_number = U256::from(substrate_block_number);
+
+		let (reverts, logs) = extract_revive_events(
+			&events,
+			substrate_block_number,
+			eth_block_number,
+			eth_block_hash,
+			|idx| (idx == 5).then_some(tx_hash),
+		);
+
+		assert!(reverts.is_empty());
+		assert_eq!(logs.len(), 1);
+		let log = &logs[&5][0];
+		assert_eq!(log.address, contract);
+		assert_eq!(log.topics, topics);
+		assert_eq!(log.data.as_ref().unwrap().0, data);
+		assert_eq!(log.block_hash, eth_block_hash);
+		assert_eq!(log.block_number, eth_block_number);
+		assert_eq!(log.transaction_hash, tx_hash);
+		assert_eq!(log.transaction_index, U256::from(5));
+	}
+
+	#[test]
+	fn extract_revive_events_skips_irrelevant_events() {
+		// Events outside `ApplyExtrinsic` and events for extrinsics the tx-hash closure
+		// doesn't resolve are both dropped.
+		let empty_contract_emitted = pallet_revive::Event::ContractEmitted {
+			contract: H160::zero(),
+			data: vec![],
+			topics: vec![],
+		};
+		let revert = pallet_revive::Event::EthExtrinsicRevert {
+			dispatch_error: sp_runtime::DispatchError::Other("skipped-phase revert"),
+		};
+		let events = EventsBuilder::new()
+			.push_event(frame_system::Phase::Finalization, empty_contract_emitted.clone())
+			.push_event(frame_system::Phase::Initialization, revert.clone())
+			.push_event(frame_system::Phase::ApplyExtrinsic(5), empty_contract_emitted)
+			.push_event(frame_system::Phase::ApplyExtrinsic(5), revert)
+			.build();
+
+		// The tx-hash closure returns `Some` only for extrinsic 7 (not present)
+		let (reverts, logs) =
+			extract_revive_events(&events, 0, U256::zero(), H256::zero(), |idx| {
+				(idx == 7).then_some(H256::zero())
+			});
+
+		assert!(reverts.is_empty());
+		assert!(logs.is_empty());
+	}
+
+	#[test]
+	fn extract_revive_events_accumulates_per_extrinsic() {
+		let tx0 = H256::from([0x01; 32]);
+		let tx1 = H256::from([0x02; 32]);
+		let tx2 = H256::from([0x03; 32]);
+		let emitted_by = |contract: H160| pallet_revive::Event::ContractEmitted {
+			contract,
+			data: vec![],
+			topics: vec![],
+		};
+		let events = EventsBuilder::new()
+			.push_event(frame_system::Phase::ApplyExtrinsic(0), emitted_by(H160::from([0xaa; 20])))
+			.push_event(frame_system::Phase::ApplyExtrinsic(0), emitted_by(H160::from([0xbb; 20])))
+			.push_event(
+				frame_system::Phase::ApplyExtrinsic(1),
+				pallet_revive::Event::EthExtrinsicRevert {
+					dispatch_error: sp_runtime::DispatchError::Other("tx-1 revert"),
+				},
+			)
+			.push_event(frame_system::Phase::ApplyExtrinsic(2), emitted_by(H160::from([0xcc; 20])))
+			.build();
+
+		let (reverts, logs) =
+			extract_revive_events(&events, 0, U256::zero(), H256::zero(), |idx| match idx {
+				0 => Some(tx0),
+				1 => Some(tx1),
+				2 => Some(tx2),
+				_ => None,
+			});
+
+		assert_eq!(reverts, [1usize].into_iter().collect::<HashSet<_>>());
+		assert_eq!(logs[&0].len(), 2);
+		assert_eq!(logs[&2].len(), 1);
+		// log_index is block-wide
+		assert_eq!(logs[&0][0].log_index, U256::from(0));
+		assert_eq!(logs[&0][1].log_index, U256::from(1));
+		assert_eq!(logs[&2][0].log_index, U256::from(3));
 	}
 }
