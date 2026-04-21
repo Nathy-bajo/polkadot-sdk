@@ -231,6 +231,15 @@ pub trait SubstrateClientT: Send + Sync + Clone + 'static {
 		block_hash: SubstrateBlockHash,
 	) -> Result<Vec<RawExtrinsic>, crate::client::ClientError>;
 
+	/// Return per-extrinsic event data (success flag + EVM logs) for the given block.
+	/// Returns `Ok(None)` when event scanning is not supported by this client.
+	async fn block_events(
+		&self,
+		_block_hash: SubstrateBlockHash,
+	) -> Result<Option<crate::receipt_extractor::BlockEvents>, crate::client::ClientError> {
+		Ok(None)
+	}
+
 	/// Scan block events for the given extrinsic index and return its
 	/// post-dispatch weight (if available).
 	async fn extrinsic_post_dispatch_weight(

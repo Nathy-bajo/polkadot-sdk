@@ -597,6 +597,62 @@ impl SubstrateClientT for SubxtClient {
 			.collect())
 	}
 
+	async fn block_events(
+		&self,
+		block_hash: SubstrateBlockHash,
+	) -> Result<Option<crate::receipt_extractor::BlockEvents>, ClientError> {
+		use revive::events::{ContractEmitted, EthExtrinsicRevert};
+		use subxt::events::{Phase, StaticEvent as _};
+
+		let block = match self.api.blocks().at(block_hash).await {
+			Ok(b) => b,
+			Err(subxt::Error::Block(subxt::error::BlockError::NotFound(_))) => return Ok(None),
+			Err(e) => return Err(e.into()),
+		};
+
+		let extrinsics = block.extrinsics().await?;
+		let num_extrinsics = extrinsics.iter().count();
+		let events = block.events().await?;
+
+		let mut block_events: crate::receipt_extractor::BlockEvents = (0..num_extrinsics)
+			.map(|_| crate::receipt_extractor::ExtrinsicEvents { success: true, logs: vec![] })
+			.collect();
+
+		for event_result in events.iter() {
+			let event = match event_result {
+				Ok(e) => e,
+				Err(_) => continue,
+			};
+
+			let extrinsic_idx = match event.phase() {
+				Phase::ApplyExtrinsic(idx) => idx as usize,
+				_ => continue,
+			};
+
+			if extrinsic_idx >= block_events.len() {
+				continue;
+			}
+
+			if event.pallet_name() != ContractEmitted::PALLET {
+				continue;
+			}
+
+			if event.variant_name() == EthExtrinsicRevert::EVENT {
+				block_events[extrinsic_idx].success = false;
+			} else if event.variant_name() == ContractEmitted::EVENT {
+				if let Ok(Some(evt)) = event.as_event::<ContractEmitted>() {
+					block_events[extrinsic_idx].logs.push((
+						evt.contract,
+						evt.topics,
+						Some(evt.data),
+					));
+				}
+			}
+		}
+
+		Ok(Some(block_events))
+	}
+
 	async fn extrinsic_post_dispatch_weight(
 		&self,
 		block_hash: SubstrateBlockHash,

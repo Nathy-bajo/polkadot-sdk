@@ -282,12 +282,19 @@ impl ReceiptExtractor {
 			Box::pin(fut) as Pin<Box<dyn Future<Output = Option<Vec<RawExtrinsic>>> + Send>>
 		};
 
+		let client_for_events = client.clone();
+		let fetch_block_events_fn = move |block_hash: H256| {
+			let c = client_for_events.clone();
+			let fut = async move { c.block_events(block_hash).await.ok().flatten() };
+			Box::pin(fut) as Pin<Box<dyn Future<Output = Option<BlockEvents>> + Send>>
+		};
+
 		Self::new_native(
 			pallet_index,
 			fetch_receipt_data_fn,
 			fetch_eth_block_hash_fn,
 			earliest_receipt_block,
-			None::<fn(H256) -> Pin<Box<dyn Future<Output = Option<BlockEvents>> + Send>>>,
+			Some(fetch_block_events_fn),
 			Some(fetch_block_extrinsics_fn),
 		)
 	}
