@@ -16,7 +16,7 @@
 // limitations under the License.
 //! The Ethereum JSON-RPC server.
 use crate::{
-	BlockInfoProvider, DebugRpcServer, DebugRpcServerImpl, EthRpcServer, EthRpcServerImpl,
+	DbContext, BlockInfoProvider, DebugRpcServer, DebugRpcServerImpl, EthRpcServer, EthRpcServerImpl,
 	LOG_TARGET, PolkadotRpcServer, PolkadotRpcServerImpl, ReceiptExtractor, ReceiptProvider,
 	SubstrateClientT, SystemHealthRpcServer, SystemHealthRpcServerImpl,
 	client::{Client, ClientError, SubscriptionGapQueue, SubscriptionType, SubstrateBlockNumber},
@@ -30,8 +30,45 @@ use sc_service::{
 	config::{BasePath, PrometheusConfig, RpcConfiguration},
 	create_rpc_runtime, start_rpc_servers,
 };
-use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions};
+use sqlx::{
+	SqlitePool,
+	sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePoolOptions},
+};
 use std::path::PathBuf;
+
+/// Query the maximum number of bound parameters SQLite allows per query
+async fn sqlite_db_query_max_variable_number(pool: &SqlitePool) -> usize {
+	let limit = async {
+		let mut conn = pool
+			.acquire()
+			.await
+			.inspect_err(|e| log::warn!(target: LOG_TARGET, "💾 Failed to acquire connection: {e}"))
+			.ok()?;
+		let mut handle = conn
+			.lock_handle()
+			.await
+			.inspect_err(|e| log::warn!(target: LOG_TARGET, "💾 Failed to lock handle: {e}"))
+			.ok()?;
+		// SAFETY: `lock_handle` guarantees the raw pointer is valid for
+		// the lifetime of the guard, and passing -1 only queries the limit.
+		let raw = unsafe {
+			libsqlite3_sys::sqlite3_limit(
+				handle.as_raw_handle().as_ptr(),
+				libsqlite3_sys::SQLITE_LIMIT_VARIABLE_NUMBER,
+				-1,
+			)
+		};
+		raw.try_into().ok()
+	}
+	.await;
+
+	let default = DbContext::DEFAULT_MAX_VARIABLE_NUMBER;
+	limit.inspect(|n| log::info!(target: LOG_TARGET, "💾 SQLite db_query_max_variable_number: {n}"))
+		.unwrap_or_else(|| {
+			log::warn!(target: LOG_TARGET, "💾 Failed to query SQLite variable limit, falling back to {default}");
+			default
+		})
+}
 
 /// Specifies the eth-rpc pruning mode.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, derive_more::Display)]
