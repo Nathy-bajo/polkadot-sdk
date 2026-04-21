@@ -19,7 +19,7 @@
 //! [evm-test-suite](https://github.com/paritytech/evm-test-suite) repository.
 
 use crate::{
-	BlockInfoProvider, DebugRpcClient, EthRpcClient, ReceiptExtractor, ReceiptProvider,
+	BlockInfoProvider, DbContext, DebugRpcClient, EthRpcClient, ReceiptExtractor, ReceiptProvider,
 	SubxtBlockInfoProvider,
 	block_sync::{ChainMetadata, SyncLabel},
 	cli::{self, CliCommand},
@@ -1925,8 +1925,9 @@ async fn create_sync_test_client() -> anyhow::Result<Client<SubxtClient, SubxtBl
 		.await?;
 
 	let receipt_extractor = ReceiptExtractor::new_from_substrate_client(backend.clone(), None);
+	let db_ctx = DbContext::new(pool, DbContext::DEFAULT_MAX_VARIABLE_NUMBER);
 	let receipt_provider =
-		ReceiptProvider::new(pool, block_provider.clone(), receipt_extractor, None).await?;
+		ReceiptProvider::new(db_ctx, block_provider.clone(), receipt_extractor, None).await?;
 
 	let (subscription_gap_queue, _gap_fill_rx) = SubscriptionGapQueue::new();
 	let client = Client::from_backend(
@@ -1960,8 +1961,9 @@ async fn create_sync_test_client_with_subscription_gap_queue()
 		.await?;
 
 	let receipt_extractor = ReceiptExtractor::new_from_substrate_client(backend.clone(), None);
+	let db_ctx = DbContext::new(pool, DbContext::DEFAULT_MAX_VARIABLE_NUMBER);
 	let receipt_provider =
-		ReceiptProvider::new(pool, block_provider.clone(), receipt_extractor, None).await?;
+		ReceiptProvider::new(db_ctx, block_provider.clone(), receipt_extractor, None).await?;
 
 	let (subscription_gap_queue, gap_fill_rx) = SubscriptionGapQueue::new();
 	let client = Client::from_backend(

@@ -1675,7 +1675,9 @@ mod tests {
 		let receipts = make_receipts(0, 5, 3);
 
 		// First insert.
-		provider.insert_into_db(&block, &receipts, &ethereum_hash).await?;
+		provider
+			.insert_with_hashes(block.hash(), block.number(), &receipts, &ethereum_hash)
+			.await?;
 		assert_eq!(count(&provider.db_ctx.pool, "transaction_hashes", None).await, 5);
 		assert_eq!(count(&provider.db_ctx.pool, "logs", Some(ethereum_hash)).await, 15);
 		assert_eq!(count(&provider.db_ctx.pool, "eth_to_substrate_blocks", None).await, 1);
@@ -1687,7 +1689,9 @@ mod tests {
 		assert_eq!(count(&provider.db_ctx.pool, "eth_to_substrate_blocks", None).await, 0);
 
 		// Second insert hits the actual INSERT OR REPLACE statements.
-		provider.insert_into_db(&block, &receipts, &ethereum_hash).await?;
+		provider
+			.insert_with_hashes(block.hash(), block.number(), &receipts, &ethereum_hash)
+			.await?;
 
 		// Row counts unchanged — no duplicates.
 		assert_eq!(count(&provider.db_ctx.pool, "transaction_hashes", None).await, 5);
@@ -1735,7 +1739,9 @@ mod tests {
 			let block = MockBlockInfo { hash: make_hash(i, 0xAA), number: i as u32 + 1 };
 			let ethereum_hash = make_hash(i, 0xBB);
 			let receipts = make_receipts(i * n_tx_per_block, n_tx_per_block, n_logs_per_receipt);
-			provider.insert_into_db(&block, &receipts, &ethereum_hash).await?;
+			provider
+				.insert_with_hashes(block.hash(), block.number(), &receipts, &ethereum_hash)
+				.await?;
 			block_mappings.push(BlockHashMap::new(block.hash, ethereum_hash));
 		}
 

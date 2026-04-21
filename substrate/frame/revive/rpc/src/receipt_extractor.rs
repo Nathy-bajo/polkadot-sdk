@@ -546,10 +546,10 @@ mod tests {
 
 	use pallet_revive::evm::{Account, TransactionLegacyUnsigned, TransactionUnsigned};
 
-	fn signed_call(account: &Account, tx: TransactionUnsigned) -> (EthTransact, H256) {
+	fn signed_call(account: &Account, tx: TransactionUnsigned) -> (Vec<u8>, H256) {
 		let payload = account.sign_transaction(tx).signed_payload();
 		let hash = H256(keccak_256(&payload));
-		(EthTransact { payload }, hash)
+		(payload, hash)
 	}
 
 	fn legacy_call_tx(to: H160) -> TransactionUnsigned {
@@ -573,20 +573,18 @@ mod tests {
 		let extractor = ReceiptExtractor::new_mock();
 		let account = Account::default();
 		let eth_block_hash = H256::from([0xAB; 32]);
-		let block_number = U256::from(42);
-		let (call, tx_hash) = signed_call(&account, legacy_call_tx(account.address()));
+		let block_number = 42u32;
+		let (payload, tx_hash) = signed_call(&account, legacy_call_tx(account.address()));
 
 		// Successful call
 		let (signed_tx, receipt) = extractor
-			.decode_transaction_and_build_receipt(
-				eth_block_hash,
+			.build_receipt(
 				block_number,
-				call,
-				tx_hash,
+				eth_block_hash,
+				&ExtrinsicEvents { success: true, logs: vec![] },
+				&payload,
+				&gas_info(),
 				3,
-				gas_info(),
-				false,
-				vec![],
 			)
 			.unwrap();
 
@@ -595,24 +593,22 @@ mod tests {
 		assert_eq!(receipt.to, Some(account.address()));
 		assert_eq!(receipt.contract_address, None);
 		assert_eq!(receipt.block_hash, eth_block_hash);
-		assert_eq!(receipt.block_number, block_number);
+		assert_eq!(receipt.block_number, U256::from(block_number));
 		assert_eq!(receipt.transaction_hash, tx_hash);
 		assert_eq!(receipt.transaction_index, U256::from(3));
 		assert_eq!(receipt.gas_used, U256::from(21_000));
 		assert_eq!(signed_tx.recover_eth_address().unwrap(), account.address());
 
 		// Same call, but reverted
-		let (call, tx_hash) = signed_call(&account, legacy_call_tx(account.address()));
+		let (payload, _tx_hash) = signed_call(&account, legacy_call_tx(account.address()));
 		let (_, receipt) = extractor
-			.decode_transaction_and_build_receipt(
-				eth_block_hash,
+			.build_receipt(
 				block_number,
-				call,
-				tx_hash,
+				eth_block_hash,
+				&ExtrinsicEvents { success: false, logs: vec![] },
+				&payload,
+				&gas_info(),
 				3,
-				gas_info(),
-				true,
-				vec![],
 			)
 			.unwrap();
 
@@ -630,18 +626,16 @@ mod tests {
 			nonce: U256::from(0),
 			..Default::default()
 		});
-		let (call, tx_hash) = signed_call(&account, deploy_tx);
+		let (payload, _) = signed_call(&account, deploy_tx);
 
 		let (_, receipt) = extractor
-			.decode_transaction_and_build_receipt(
+			.build_receipt(
+				1u32,
 				H256::zero(),
-				U256::from(1),
-				call,
-				tx_hash,
+				&ExtrinsicEvents { success: true, logs: vec![] },
+				&payload,
+				&gas_info(),
 				0,
-				gas_info(),
-				false,
-				vec![],
 			)
 			.unwrap();
 
@@ -656,18 +650,15 @@ mod tests {
 		let extractor = ReceiptExtractor::new_mock();
 
 		// Corrupt payload
-		let call = EthTransact { payload: vec![0xde, 0xad] };
-		let hash = H256(keccak_256(&call.payload));
+		let payload = vec![0xde, 0xadu8];
 		let err = extractor
-			.decode_transaction_and_build_receipt(
+			.build_receipt(
+				1u32,
 				H256::zero(),
-				U256::from(1),
-				call,
-				hash,
+				&ExtrinsicEvents { success: true, logs: vec![] },
+				&payload,
+				&gas_info(),
 				0,
-				gas_info(),
-				false,
-				vec![],
 			)
 			.unwrap_err();
 		assert!(matches!(err, ClientError::TxDecodingFailed));
@@ -678,17 +669,15 @@ mod tests {
 			..ReceiptExtractor::new_mock()
 		};
 		let account = Account::default();
-		let (call, hash) = signed_call(&account, legacy_call_tx(account.address()));
+		let (payload, _) = signed_call(&account, legacy_call_tx(account.address()));
 		let err = extractor
-			.decode_transaction_and_build_receipt(
+			.build_receipt(
+				1u32,
 				H256::zero(),
-				U256::from(1),
-				call,
-				hash,
+				&ExtrinsicEvents { success: true, logs: vec![] },
+				&payload,
+				&gas_info(),
 				0,
-				gas_info(),
-				false,
-				vec![],
 			)
 			.unwrap_err();
 		assert!(matches!(err, ClientError::RecoverEthAddressFailed));
