@@ -211,6 +211,17 @@ impl From<ClientError> for ErrorObjectOwned {
 	}
 }
 
+/// Returns the first EVM block number for main and test nets, `None` otherwise.
+fn known_first_evm_block_for_chain(chain_id: u64) -> Option<u32> {
+	match chain_id {
+		420420417 => Some(4_367_914),  // Paseo Asset Hub
+		420420418 => Some(12_234_156), // Kusama Asset Hub
+		420420419 => Some(11_405_259), // Polkadot Asset Hub
+		420420421 => Some(13_169_391), // Westend Asset Hub
+		_ => None,
+	}
+}
+
 /// A client that connects to a Substrate node and maintains a receipt/block cache.
 #[derive(Clone)]
 pub struct Client<C: SubstrateClientT, BP: BlockInfoProvider> {
@@ -614,7 +625,11 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 				Ok(hash)
 			},
 			BlockNumberOrTagOrHash::BlockTag(BlockTag::Earliest) => {
-				self.get_block_hash(0).await?.ok_or(ClientError::BlockNotFound)
+				let hash = self
+					.get_block_hash(self.earliest_block_number())
+					.await?
+					.ok_or(ClientError::BlockNotFound)?;
+				Ok(hash)
 			},
 			BlockNumberOrTagOrHash::BlockTag(BlockTag::Finalized | BlockTag::Safe) => {
 				Ok(self.latest_finalized_block().await.hash())
@@ -656,7 +671,9 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 				let n = (*n).try_into().map_err(|_| ClientError::ConversionFailed)?;
 				self.block_by_number(n).await
 			},
-			BlockNumberOrTag::BlockTag(BlockTag::Earliest) => self.block_by_number(0).await,
+			BlockNumberOrTag::BlockTag(BlockTag::Earliest) => {
+				self.block_by_number(self.earliest_block_number()).await
+			},
 			BlockNumberOrTag::BlockTag(BlockTag::Finalized | BlockTag::Safe) => {
 				Ok(Some(self.block_provider.latest_finalized_block().await))
 			},
@@ -765,6 +782,13 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 		self.backend.chain_id()
 	}
 
+	fn earliest_block_number(&self) -> u32 {
+		self.receipt_provider
+			.first_evm_block()
+			.or_else(|| known_first_evm_block_for_chain(self.backend.chain_id()))
+			.unwrap_or(0)
+	}
+
 	/// Get the max block weight.
 	pub fn max_block_weight(&self) -> Weight {
 		self.backend.max_block_weight()
@@ -833,12 +857,13 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 
 	/// Get the logs matching the given filter.
 	pub async fn logs(&self, filter: Option<Filter>) -> Result<Vec<Log>, ClientError> {
+		let earliest = U256::from(self.earliest_block_number());
 		let latest_block_number = self.block_number().await?;
 
 		let resolve_block_number = move |block: BlockNumberOrTag| -> anyhow::Result<U256> {
 			match block {
 				BlockNumberOrTag::U256(v) => Ok(v),
-				BlockNumberOrTag::BlockTag(BlockTag::Earliest) => Ok(U256::zero()),
+				BlockNumberOrTag::BlockTag(BlockTag::Earliest) => Ok(earliest),
 				BlockNumberOrTag::BlockTag(
 					BlockTag::Latest | BlockTag::Pending | BlockTag::Safe | BlockTag::Finalized,
 				) => Ok(U256::from(latest_block_number)),
