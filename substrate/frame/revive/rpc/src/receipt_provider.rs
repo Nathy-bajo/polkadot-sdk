@@ -428,6 +428,20 @@ impl<BP: BlockInfoProvider> ReceiptProvider<BP> {
 		Some(H256::from_slice(&result.ethereum_block_hash[..]))
 	}
 
+	/// Look up the ethereum block hash for a previously processed block from the in-memory cache.
+	pub async fn get_processed_eth_block_hash(
+		&self,
+		block_number: SubstrateBlockNumber,
+		substrate_hash: H256,
+	) -> Option<H256> {
+		self.block_number_to_hashes
+			.lock()
+			.await
+			.get(&block_number)
+			.filter(|entry| entry.substrate_hash == substrate_hash)
+			.map(|entry| entry.ethereum_hash)
+	}
+
 	/// Get the number of receipts for a given substrate block hash.
 	pub async fn receipts_count_per_block(&self, block_hash: &H256) -> Option<usize> {
 		let block_hash_ref = block_hash.as_ref();
