@@ -483,6 +483,45 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 			.await
 	}
 
+	/// Extract receipts from a block, persist them and update fee history.
+	async fn process_block(
+		&self,
+		block: &SubstrateBlock,
+	) -> Result<(Block, Vec<ReceiptInfo>), ClientError> {
+		let block_number = block.number();
+		let hash = block.hash();
+
+		macro_rules! time {
+			($label:expr, $expr:expr) => {{
+				let t = std::time::Instant::now();
+				let r = $expr;
+				log::trace!(
+					target: LOG_TARGET,
+					"⏱️ #{block_number} {}: {:?}",
+					$label, t.elapsed(),
+				);
+				r
+			}};
+		}
+
+		let eth_block = time!("eth_block", self.runtime_api(hash).eth_block().await?);
+		let receipts = time!(
+			"receipts_from_block",
+			self.receipt_provider.receipts_from_block(block, eth_block.hash).await?
+		);
+		time!(
+			"insert_block_receipts",
+			self.receipt_provider
+				.insert_block_receipts(block, &receipts, &eth_block.hash)
+				.await?
+		);
+
+		let (_, receipt_infos): (Vec<_>, Vec<_>) = receipts.into_iter().unzip();
+		self.fee_history_provider.update_fee_history(&eth_block, &receipt_infos).await;
+
+		Ok((eth_block, receipt_infos))
+	}
+
 	/// Start the block subscription, and populate the block cache.
 	pub async fn subscribe_and_cache_new_blocks(
 		&self,
