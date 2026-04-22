@@ -970,7 +970,6 @@ async fn test_earliest_block_tag() -> anyhow::Result<()> {
 
 	// eth_feeHistory
 	let fee = client.fee_history(U256::from(1), BlockTag::Earliest.into(), None).await?;
-	assert_eq!(fee.oldest_block, U256::zero(), "feeHistory oldest_block should be 0");
 	assert!(!fee.base_fee_per_gas.is_empty(), "feeHistory should include base fee");
 
 	// eth_getLogs

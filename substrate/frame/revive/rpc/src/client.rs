@@ -613,6 +613,9 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 				let hash = self.get_block_hash(n).await?.ok_or(ClientError::BlockNotFound)?;
 				Ok(hash)
 			},
+			BlockNumberOrTagOrHash::BlockTag(BlockTag::Earliest) => {
+				self.get_block_hash(0).await?.ok_or(ClientError::BlockNotFound)
+			},
 			BlockNumberOrTagOrHash::BlockTag(BlockTag::Finalized | BlockTag::Safe) => {
 				Ok(self.latest_finalized_block().await.hash())
 			},
@@ -653,6 +656,7 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 				let n = (*n).try_into().map_err(|_| ClientError::ConversionFailed)?;
 				self.block_by_number(n).await
 			},
+			BlockNumberOrTag::BlockTag(BlockTag::Earliest) => self.block_by_number(0).await,
 			BlockNumberOrTag::BlockTag(BlockTag::Finalized | BlockTag::Safe) => {
 				Ok(Some(self.block_provider.latest_finalized_block().await))
 			},
