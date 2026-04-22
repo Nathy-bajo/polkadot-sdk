@@ -361,11 +361,15 @@ where
 		address: H160,
 		key: [u8; 32],
 	) -> Result<Option<Vec<u8>>, ClientError> {
-		self.client
+		match self
+			.client
 			.runtime_api()
 			.get_storage(block_hash, address, key)
 			.map_err(native_err)?
-			.map_err(|_| ClientError::ContractNotFound)
+		{
+			Err(_) => Ok(None),
+			Ok(value) => Ok(value),
+		}
 	}
 
 	async fn eth_block(&self, block_hash: SubstrateBlockHash) -> Result<EthBlock, ClientError> {

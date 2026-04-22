@@ -70,8 +70,10 @@ impl RuntimeApi {
 			.revive_api()
 			.get_storage(contract_address, key)
 			.unvalidated();
-		let result = self.0.call(payload).await?.map_err(|_| ClientError::ContractNotFound)?;
-		Ok(result)
+		match self.0.call(payload).await? {
+			Err(_) => Ok(None),
+			Ok(value) => Ok(value),
+		}
 	}
 
 	/// Dry run a transaction and returns the [`EthTransactInfo`] for the transaction.
