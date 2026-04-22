@@ -132,7 +132,7 @@ pub enum EthRpcError {
 	#[error("Account not found for address {0:?}")]
 	AccountNotFound(H160),
 	/// Received an invalid transaction
-	#[error("Invalid transaction")]
+	#[error("Invalid Transaction")]
 	InvalidTransaction,
 	/// Received an invalid transaction
 	#[error("Invalid transaction {0:?}")]
@@ -244,30 +244,42 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> EthRpcServer for EthRpcServerIm
 					EthRpcError::InvalidTransaction
 				})?;
 
-			let is_chain_id_provided = match signed_transaction {
+			let expected_chain_id = U256::from(self.client.chain_id());
+			let tx_chain_id = match signed_transaction {
 				TransactionSigned::Transaction7702Signed(tx) => {
-					tx.transaction_7702_unsigned.chain_id != U256::zero()
+					Some(tx.transaction_7702_unsigned.chain_id)
 				},
 				TransactionSigned::Transaction4844Signed(tx) => {
-					tx.transaction_4844_unsigned.chain_id != U256::zero()
+					Some(tx.transaction_4844_unsigned.chain_id)
 				},
 				TransactionSigned::Transaction1559Signed(tx) => {
-					tx.transaction_1559_unsigned.chain_id != U256::zero()
+					Some(tx.transaction_1559_unsigned.chain_id)
 				},
 				TransactionSigned::Transaction2930Signed(tx) => {
-					tx.transaction_2930_unsigned.chain_id != U256::zero()
+					Some(tx.transaction_2930_unsigned.chain_id)
 				},
 				TransactionSigned::TransactionLegacySigned(tx) => {
-					tx.transaction_legacy_unsigned.chain_id.is_some()
+					tx.transaction_legacy_unsigned.chain_id
 				},
 			};
 
-			if !is_chain_id_provided {
-				log::trace!(
-					target: LOG_TARGET,
-					"Invalid Transaction: no chain-id. ethereum_hash: {hash:?}"
-				);
-				Err(EthRpcError::InvalidTransaction)?;
+			match tx_chain_id {
+				None => {
+					log::trace!(
+						target: LOG_TARGET,
+						"Invalid Transaction: no chain-id. ethereum_hash: {hash:?}"
+					);
+					Err(EthRpcError::InvalidTransaction)?;
+				},
+				Some(id) if id != expected_chain_id => {
+					log::trace!(
+						target: LOG_TARGET,
+						"Invalid Transaction: wrong chain-id {id}, expected {expected_chain_id}. \
+						 ethereum_hash: {hash:?}"
+					);
+					Err(EthRpcError::InvalidTransaction)?;
+				},
+				_ => {},
 			}
 		}
 
