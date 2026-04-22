@@ -108,8 +108,9 @@ impl FeeHistoryProvider {
 		// When the requested newest block is older than our oldest cached block, clamp
 		// to the oldest available so callers always get at least one entry.
 		let effective_highest = highest.max(lowest_in_cache);
-		let lowest =
-			effective_highest.saturating_sub(block_count.saturating_sub(1)).max(lowest_in_cache);
+		let lowest = effective_highest
+			.saturating_sub(block_count.saturating_sub(1))
+			.max(lowest_in_cache);
 
 		let mut response = FeeHistoryResult {
 			oldest_block: U256::from(lowest),
