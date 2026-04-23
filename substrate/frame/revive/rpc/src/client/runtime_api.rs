@@ -21,7 +21,7 @@ use crate::{
 	client::Balance,
 	subxt_client::{self, SrcChainConfig},
 };
-use futures::TryFutureExt;
+use futures::{StreamExt, TryFutureExt, stream};
 use pallet_revive::{
 	DryRunConfig, EthTransactInfo, TracingConfig,
 	evm::{
@@ -74,6 +74,65 @@ impl RuntimeApi {
 			Err(_) => Ok(None),
 			Ok(value) => Ok(value),
 		}
+	}
+
+	/// Estimate the gas for the given transaction.
+	pub async fn estimate_gas(
+		&self,
+		tx: GenericTransaction,
+		block: BlockNumberOrTagOrHash,
+	) -> Result<U256, ClientError> {
+		let timestamp_override = match block {
+			BlockNumberOrTagOrHash::BlockTag(BlockTag::Pending) => {
+				Some(Timestamp::current().as_millis())
+			},
+			_ => None,
+		};
+
+		let mut stream = stream::once(Box::pin(async {
+			let payload = subxt_client::apis()
+				.revive_api()
+				.eth_estimate_gas(
+					tx.clone().into(),
+					DryRunConfig::default().with_timestamp_override(timestamp_override).into(),
+				)
+				.unvalidated();
+			self.0.call(payload).await.map(|value| value.map(|value| value.0))
+		}))
+		.chain(stream::once(Box::pin(async {
+			let payload = subxt_client::apis()
+				.revive_api()
+				.eth_transact_with_config(
+					tx.clone().into(),
+					DryRunConfig::default().with_timestamp_override(timestamp_override).into(),
+				)
+				.unvalidated();
+			self.0.call(payload).await.map(|value| value.map(|value| value.eth_gas))
+		})))
+		.chain(stream::once(Box::pin(async {
+			let payload =
+				subxt_client::apis().revive_api().eth_transact(tx.clone().into()).unvalidated();
+			self.0.call(payload).await.map(|value| value.map(|value| value.eth_gas))
+		})));
+
+		while let Some(result) = stream.next().await {
+			match result {
+				Ok(estimation) => {
+					return estimation.map_err(|err| ClientError::TransactError(err.0));
+				},
+				Err(Metadata(MetadataError::RuntimeMethodNotFound(name))) => {
+					log::debug!(target: LOG_TARGET, "Method {name:?} not found falling back");
+				},
+				Err(subxt::Error::Rpc(subxt::error::RpcError::ClientError(
+					subxt::ext::subxt_rpcs::Error::User(UserError { message, .. }),
+				))) if message.contains("is not found") => {
+					log::debug!(target: LOG_TARGET, "{message:?} not found falling back")
+				},
+				Err(err) => return Err(err.into()),
+			}
+		}
+
+		Err(ClientError::NativeClientError("No gas estimation method succeeded".to_string()))
 	}
 
 	/// Dry run a transaction and returns the [`EthTransactInfo`] for the transaction.

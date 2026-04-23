@@ -323,6 +323,25 @@ where
 			.map_err(ClientError::TransactError)
 	}
 
+	async fn estimate_gas(
+		&self,
+		block_hash: SubstrateBlockHash,
+		tx: GenericTransaction,
+		block: BlockNumberOrTagOrHash,
+	) -> Result<U256, ClientError> {
+		let timestamp_override: Option<Moment> =
+			matches!(block, BlockNumberOrTagOrHash::BlockTag(BlockTag::Pending))
+				.then(|| Moment::from(sp_timestamp::Timestamp::current().as_millis()));
+
+		let config = DryRunConfig::<Moment>::default().with_timestamp_override(timestamp_override);
+
+		self.client
+			.runtime_api()
+			.eth_estimate_gas(block_hash, tx, config)
+			.map_err(native_err)?
+			.map_err(ClientError::TransactError)
+	}
+
 	async fn gas_price(&self, block_hash: SubstrateBlockHash) -> Result<U256, ClientError> {
 		self.client.runtime_api().gas_price(block_hash).map_err(native_err)
 	}

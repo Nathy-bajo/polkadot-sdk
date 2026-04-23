@@ -201,7 +201,7 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> EthRpcServer for EthRpcServerIm
 
 		let eth_gas = self
 			.client
-			.dry_run(hash, transaction, block_tag_or_hash, None)
+			.estimate_gas(hash, transaction, block_tag_or_hash)
 			.await
 			.map_err(ClientError::from)?;
 

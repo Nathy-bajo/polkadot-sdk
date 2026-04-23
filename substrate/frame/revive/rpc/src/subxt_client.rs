@@ -354,6 +354,18 @@ impl SubstrateClientT for SubxtClient {
 			.await
 	}
 
+	async fn estimate_gas(
+		&self,
+		block_hash: SubstrateBlockHash,
+		tx: GenericTransaction,
+		block: BlockNumberOrTagOrHash,
+	) -> Result<U256, ClientError> {
+		use crate::client::runtime_api::RuntimeApi;
+		RuntimeApi::new(self.api.runtime_api().at(block_hash))
+			.estimate_gas(tx, block)
+			.await
+	}
+
 	async fn gas_price(&self, block_hash: SubstrateBlockHash) -> Result<U256, ClientError> {
 		use crate::client::runtime_api::RuntimeApi;
 		RuntimeApi::new(self.api.runtime_api().at(block_hash)).gas_price().await

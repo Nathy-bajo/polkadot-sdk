@@ -329,7 +329,7 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 
 		let (block_subscription_tx, _) =
 			tokio::sync::broadcast::channel::<Block>(NOTIFIER_CAPACITY);
-		let (log_subscription_tx, _) = tokio::sync::broadcast::channel::<Log>(NOTIFIER_CAPACITY);
+		let (log_subscription_tx, _) = tokio::sync::broadcast::channel::<Log>(1000);
 
 		Ok(Self {
 			backend,
@@ -547,8 +547,9 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 					let _ = block_subscription_tx.send(evm_block.clone());
 				}
 
-				// Broadcast logs to eth_subscribe("logs") subscribers.
-				if log_subscription_tx.receiver_count() > 0 {
+				if subscription_type == SubscriptionType::FinalizedBlocks &&
+					log_subscription_tx.receiver_count() > 0
+				{
 					for receipt in &receipts {
 						for log in &receipt.logs {
 							let _ = log_subscription_tx.send(log.clone());
@@ -934,6 +935,16 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 		key: [u8; 32],
 	) -> Result<Option<Vec<u8>>, ClientError> {
 		self.backend.get_storage(block_hash, address, key).await
+	}
+
+	/// Estimate the gas for the given transaction using binary search.
+	pub async fn estimate_gas(
+		&self,
+		block_hash: SubstrateBlockHash,
+		tx: GenericTransaction,
+		block: BlockNumberOrTagOrHash,
+	) -> Result<pallet_revive::evm::U256, ClientError> {
+		self.backend.estimate_gas(block_hash, tx, block).await
 	}
 
 	/// Dry-run a transaction and return the estimated gas as `U256`.

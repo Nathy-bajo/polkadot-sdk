@@ -96,6 +96,14 @@ pub trait SubstrateClientT: Send + Sync + Clone + 'static {
 		state_overrides: Option<StateOverrideSet>,
 	) -> Result<EthTransactInfo<Balance>, crate::client::ClientError>;
 
+	/// Estimate the gas for the given transaction using binary search.
+	async fn estimate_gas(
+		&self,
+		block_hash: SubstrateBlockHash,
+		tx: GenericTransaction,
+		block: BlockNumberOrTagOrHash,
+	) -> Result<pallet_revive::evm::U256, crate::client::ClientError>;
+
 	/// Return the current gas price.
 	async fn gas_price(
 		&self,
