@@ -976,6 +976,9 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 
 		let block_hash = self.block_hash_for_tag(at.into()).await?;
 		let block = self.tracing_block(block_hash).await?;
+		if block.header.parent_hash == Default::default() {
+			return Ok(vec![]);
+		}
 		let traces = self.backend.trace_block(block_hash, block, config).await?;
 
 		let mut hashes = self
