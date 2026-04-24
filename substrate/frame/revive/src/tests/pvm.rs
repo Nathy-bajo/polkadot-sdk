@@ -1950,6 +1950,47 @@ fn upload_code_works() {
 }
 
 #[test]
+fn upload_code_fails_when_already_uploaded() {
+	let (binary, code_hash) = compile_module("dummy").unwrap();
+
+	ExtBuilder::default().existential_deposit(100).build().execute_with(|| {
+		let _ = <Test as Config>::Currency::set_balance(&ALICE, 1_000_000);
+		let _ = <Test as Config>::Currency::set_balance(&BOB, 1_000_000);
+
+		assert_ok!(Contracts::upload_code(
+			RuntimeOrigin::signed(ALICE),
+			binary.clone(),
+			deposit_limit::<Test>(),
+		));
+		let alice_deposit_after_first = expected_deposit(ensure_stored(code_hash));
+
+		// Drop previous events so we can assert nothing further happens on the failed upload.
+		initialize_block(2);
+
+		// Re-uploading by the same origin must fail so that a dry-run reveals the upload
+		// is unnecessary, instead of silently succeeding as a no-op.
+		assert_noop!(
+			Contracts::upload_code(
+				RuntimeOrigin::signed(ALICE),
+				binary.clone(),
+				deposit_limit::<Test>(),
+			),
+			<Error<Test>>::CodeAlreadyExists,
+		);
+
+		// A different origin must not be able to "take over" or duplicate the upload either.
+		assert_noop!(
+			Contracts::upload_code(RuntimeOrigin::signed(BOB), binary, deposit_limit::<Test>(),),
+			<Error<Test>>::CodeAlreadyExists,
+		);
+
+		// Storage and the reserved deposit are unchanged.
+		assert_eq!(expected_deposit(ensure_stored(code_hash)), alice_deposit_after_first);
+		assert_eq!(System::events(), vec![]);
+	});
+}
+
+#[test]
 fn upload_code_limit_too_low() {
 	let (binary, _code_hash) = compile_module("dummy").unwrap();
 	let deposit_expected = expected_deposit(binary.len());
