@@ -5070,19 +5070,19 @@ fn eip3607_allow_tx_from_contract_or_precompile_if_debug_setting_configured() {
 					.build();
 				assert_ok!(result);
 
+				let result = <Pallet<Test>>::upload_code(
+					RuntimeOrigin::signed(origin.clone()),
+					upload_binaries[i].clone(),
+					<BalanceOf<Test>>::MAX,
+				);
+				assert_ok!(result);
+
 				let result = <Pallet<Test>>::dispatch_as_fallback_account(
 					RuntimeOrigin::signed(origin.clone()),
 					Box::new(RuntimeCall::Balances(pallet_balances::Call::transfer_all {
 						dest: EVE,
 						keep_alive: false,
 					})),
-				);
-				assert_ok!(result);
-
-				let result = <Pallet<Test>>::upload_code(
-					RuntimeOrigin::signed(origin.clone()),
-					upload_binaries[i].clone(),
-					<BalanceOf<Test>>::MAX,
 				);
 				assert_ok!(result);
 
