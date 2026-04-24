@@ -2431,7 +2431,7 @@ impl<T: Config> Pallet<T> {
 			deposit_limit: storage_deposit_limit,
 		})?;
 
-		let exec_config = ExecConfig::new_substrate_tx();
+		let exec_config = ExecConfig::<T>::new_substrate_tx();
 		let mut module = match bytecode_type {
 			BytecodeType::Pvm => ContractBlob::from_pvm_code(code, origin)?,
 			BytecodeType::Evm => ContractBlob::from_evm_runtime_code(code, origin)?,
