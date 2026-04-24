@@ -297,10 +297,15 @@ fn dev_accounts() -> Vec<crate::Account> {
 }
 
 /// Create the JSON-RPC module from a `Client`.
+///
+/// When embedded into a Substrate node that already exposes `sc_rpc::system::System`
+/// (which provides its own `system_health`), pass `include_system_health = false` to
+/// avoid a duplicate-method `merge` failure. Standalone `eth-rpc` should pass `true`.
 pub fn build_eth_rpc_module<C, BP>(
 	is_dev: bool,
 	client: Client<C, BP>,
 	allow_unprotected_txs: bool,
+	include_system_health: bool,
 ) -> Result<RpcModule<()>, sc_service::Error>
 where
 	C: SubstrateClientT,
@@ -312,13 +317,15 @@ where
 		.with_use_pending_for_estimate_gas(is_dev)
 		.into_rpc();
 
-	let health_api = SystemHealthRpcServerImpl::new(client.clone()).into_rpc();
 	let debug_api = DebugRpcServerImpl::new(client.clone()).into_rpc();
-	let polkadot_api = PolkadotRpcServerImpl::new(client).into_rpc();
+	let polkadot_api = PolkadotRpcServerImpl::new(client.clone()).into_rpc();
 
 	let mut module = RpcModule::new(());
 	module.merge(eth_api).map_err(|e| sc_service::Error::Application(e.into()))?;
-	module.merge(health_api).map_err(|e| sc_service::Error::Application(e.into()))?;
+	if include_system_health {
+		let health_api = SystemHealthRpcServerImpl::new(client).into_rpc();
+		module.merge(health_api).map_err(|e| sc_service::Error::Application(e.into()))?;
+	}
 	module.merge(debug_api).map_err(|e| sc_service::Error::Application(e.into()))?;
 	module
 		.merge(polkadot_api)
@@ -517,7 +524,7 @@ where
 	let rpc_runtime = create_rpc_runtime(rpc_config.max_connections)
 		.map_err(|e| anyhow::anyhow!("Failed to create RPC runtime: {}", e))?;
 
-	let rpc_api = build_eth_rpc_module(is_dev, client.clone(), allow_unprotected_txs)?;
+	let rpc_api = build_eth_rpc_module(is_dev, client.clone(), allow_unprotected_txs, true)?;
 	let rpc_server_handle = start_rpc_servers(
 		&rpc_config,
 		prometheus_registry,
@@ -689,7 +696,7 @@ pub fn run(cmd: CliCommand) -> anyhow::Result<()> {
 
 	let rpc_runtime = create_rpc_runtime(rpc_config.max_connections)
 		.map_err(|e| anyhow::anyhow!("Failed to create RPC runtime: {}", e))?;
-	let rpc_api = build_eth_rpc_module(is_dev, client.clone(), allow_unprotected_txs)?;
+	let rpc_api = build_eth_rpc_module(is_dev, client.clone(), allow_unprotected_txs, true)?;
 	let rpc_server_handle = start_rpc_servers(
 		&rpc_config,
 		prometheus_registry,

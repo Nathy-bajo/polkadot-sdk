@@ -140,17 +140,25 @@ mod eth_rpc {
 							NativeSubstrateClient::new(client.clone(), pool, chain_id, false)
 								.map_err(|e| format!("native substrate client: {e}"))?;
 
-						let eth_client = tokio::task::block_in_place(|| {
-							tokio::runtime::Handle::current().block_on(
-								build_native_inmemory_client(
+						let (bootstrap_tx, bootstrap_rx) = std::sync::mpsc::sync_channel(1);
+						spawn_handle.spawn(
+							"eth-rpc-bootstrap",
+							Some("eth-rpc"),
+							Box::pin(async move {
+								let result = build_native_inmemory_client(
 									native_client,
 									block_provider,
 									DEFAULT_KEEP_LATEST_BLOCKS,
 									false,
-								),
-							)
-						})
-						.map_err(|e| format!("ETH RPC client init: {e}"))?;
+								)
+								.await
+								.map_err(|e| format!("ETH RPC client init: {e}"));
+								let _ = bootstrap_tx.send(result);
+							}),
+						);
+						let eth_client = bootstrap_rx
+							.recv()
+							.map_err(|_| "eth-rpc bootstrap task did not return".to_string())??;
 
 						let eth_best = eth_client.clone();
 						spawn_handle.spawn(
@@ -187,7 +195,11 @@ mod eth_rpc {
 							}),
 						);
 
-						let eth_module = build_eth_rpc_module(false, eth_client, false)?;
+						// `include_system_health = false` because the parachain node already
+						// merges `sc_rpc::system::System` (which exposes `system_health`)
+						// in `sc_service::gen_rpc_module` — adding the eth-rpc one here
+						// would fail with a duplicate-method error and tear down the node.
+						let eth_module = build_eth_rpc_module(false, eth_client, false, false)?;
 						module.merge(eth_module)?;
 					},
 					Err(e) => {
