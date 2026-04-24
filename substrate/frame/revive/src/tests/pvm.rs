@@ -5018,7 +5018,7 @@ fn eip3607_allow_tx_from_contract_or_precompile_if_debug_setting_configured() {
 	let upload_binaries = [
 		compile_module("noop").unwrap().0,
 		compile_module("drain").unwrap().0,
-		compile_module("basic_block").unwrap().0,
+		compile_module("balance").unwrap().0,
 	];
 
 	let genesis_config = GenesisConfig::<Test> {
