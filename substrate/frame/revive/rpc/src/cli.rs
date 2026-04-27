@@ -500,8 +500,6 @@ where
 		}
 	};
 
-	// Pre-flight: validate chain identity before spawning any background tasks.
-	// This converts a panic deep inside `sync_backward` into a clean, actionable error.
 	if eth_pruning.is_archive() {
 		let preflight = {
 			let c = client.clone();
@@ -671,8 +669,6 @@ pub fn run(cmd: CliCommand) -> anyhow::Result<()> {
 		}
 	};
 
-	// Pre-flight: validate chain identity before spawning any background tasks.
-	// Catches ChainMismatch from a stale DB and returns a clean error with recovery steps.
 	if eth_pruning.is_archive() {
 		let preflight = {
 			let c = client.clone();
@@ -706,8 +702,6 @@ pub fn run(cmd: CliCommand) -> anyhow::Result<()> {
 		None,
 	)?;
 
-	// Archive mode: spawn the historical backward sync task.
-	// Note: chain identity was already validated above; this task handles ongoing sync only.
 	if eth_pruning.is_archive() {
 		let sync_client = client.clone();
 		task_manager

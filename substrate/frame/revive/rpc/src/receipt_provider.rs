@@ -272,9 +272,6 @@ impl<BP: BlockInfoProvider> ReceiptProvider<BP> {
 	}
 
 	/// Retrieve a sync label from the `sync_state` table.
-	///
-	/// Uses a plain `sqlx::query` (not the macro form) so that it does not require
-	/// a pre-populated SQLX offline query cache.
 	pub async fn get_sync_label<K: SyncStateKey>(
 		&self,
 		key: K,

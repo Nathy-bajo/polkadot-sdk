@@ -195,10 +195,6 @@ mod eth_rpc {
 							}),
 						);
 
-						// `include_system_health = false` because the parachain node already
-						// merges `sc_rpc::system::System` (which exposes `system_health`)
-						// in `sc_service::gen_rpc_module` — adding the eth-rpc one here
-						// would fail with a duplicate-method error and tear down the node.
 						let eth_module = build_eth_rpc_module(false, eth_client, false, false)?;
 						module.merge(eth_module)?;
 					},

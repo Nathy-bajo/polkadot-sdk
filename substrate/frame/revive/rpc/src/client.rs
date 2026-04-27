@@ -458,8 +458,6 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 		let lock = self.subscription_lock.clone();
 		let block_provider = self.block_provider.clone();
 		let subscription_gap_queue = self.subscription_gap_queue.clone();
-		// Tracks the last finalized block number seen, used for gap detection.
-		// u32::MAX is used as a sentinel meaning "not yet seen".
 		let last_finalized_seen = Arc::new(AtomicU32::new(u32::MAX));
 
 		self.backend
