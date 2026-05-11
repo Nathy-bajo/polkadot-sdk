@@ -1044,11 +1044,12 @@ pub mod pallet {
 				&treasury_account,
 			)?;
 
-			let reducible_native = <T::Currency as FungibleInspect<T::AccountId>>::reducible_balance(
-				&bounty_account,
-				Preservation::Expendable,
-				Fortitude::Force,
-			);
+			let reducible_native =
+				<T::Currency as FungibleInspect<T::AccountId>>::reducible_balance(
+					&bounty_account,
+					Preservation::Expendable,
+					Fortitude::Force,
+				);
 			if !reducible_native.is_zero() {
 				let res = <T::Currency as FungibleMutate<T::AccountId>>::transfer(
 					&bounty_account,
