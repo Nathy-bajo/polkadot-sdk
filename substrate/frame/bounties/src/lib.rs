@@ -96,6 +96,7 @@ extern crate alloc;
 use alloc::vec::Vec;
 
 use frame_support::traits::{
+	fungible::{Inspect as FungibleInspect, Mutate as FungibleMutate},
 	fungibles::{Inspect as FungiblesInspect, Mutate as FungiblesMutate},
 	tokens::{Fortitude, Preservation},
 	Currency,
@@ -278,7 +279,13 @@ pub mod pallet {
 	pub struct Pallet<T, I = ()>(_);
 
 	#[pallet::config]
-	pub trait Config<I: 'static = ()>: frame_system::Config + pallet_treasury::Config<I> {
+	pub trait Config<I: 'static = ()>:
+		frame_system::Config
+		+ pallet_treasury::Config<
+			I,
+			Currency: FungibleMutate<Self::AccountId, Balance = BalanceOf<Self, I>>,
+		>
+	{
 		/// The amount held on deposit for placing a bounty proposal.
 		#[pallet::constant]
 		type BountyDepositBase: Get<BalanceOf<Self, I>>;
@@ -768,11 +775,19 @@ pub mod pallet {
 					debug_assert!(children_fee <= fee);
 
 					let final_fee = fee.saturating_sub(children_fee);
-					let res =
-						T::Currency::transfer(&bounty_account, &curator, final_fee, AllowDeath); // should not fail
+					let res = <T::Currency as Currency<_>>::transfer(
+						&bounty_account,
+						&curator,
+						final_fee,
+						AllowDeath,
+					); // should not fail
 					debug_assert!(res.is_ok());
-					let res =
-						T::Currency::transfer(&bounty_account, &beneficiary, payout, AllowDeath); // should not fail
+					let res = <T::Currency as Currency<_>>::transfer(
+						&bounty_account,
+						&beneficiary,
+						payout,
+						AllowDeath,
+					); // should not fail
 					debug_assert!(res.is_ok());
 
 					*maybe_bounty = None;
@@ -1029,14 +1044,17 @@ pub mod pallet {
 				&treasury_account,
 			)?;
 
-			// Always attempt to transfer any remaining native currency.
-			let native_balance = T::Currency::free_balance(&bounty_account);
-			if !native_balance.is_zero() {
-				let res = T::Currency::transfer(
+			let reducible_native = <T::Currency as FungibleInspect<T::AccountId>>::reducible_balance(
+				&bounty_account,
+				Preservation::Expendable,
+				Fortitude::Force,
+			);
+			if !reducible_native.is_zero() {
+				let res = <T::Currency as FungibleMutate<T::AccountId>>::transfer(
 					&bounty_account,
 					&treasury_account,
-					native_balance,
-					AllowDeath,
+					reducible_native,
+					Preservation::Expendable,
 				);
 				transferred_any |= res.is_ok();
 			}

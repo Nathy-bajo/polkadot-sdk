@@ -1,13 +1,18 @@
-title: '[pallet-bounty]: add `dust_bounty_acc` to sweep stranded funds from closed
+title: '[pallet-bounty]: add `dust_bounty_account` to sweep stranded funds from closed
   bounty accounts'
 doc:
 - audience: Runtime Dev
   description: |-
     fixes https://github.com/paritytech/polkadot-sdk/issues/10996
 
-    This PR adds a permissionless `dust_bounty_acc` extrinsic that sweeps all
-    remaining native tokens and fungible assets from a stale bounty account
-    back to the treasury.
+    This PR adds a permissionless `dust_bounty_account` extrinsic that sweeps all
+    remaining native tokens and fungible assets from a stale bounty account back
+    to the treasury. Native funds are moved using `transfer_all` semantics
+    (reducible balance with `Expendable` preservation) so locks and freezes are
+    respected.
+
+    `pallet-bounties` now requires its `Currency` to also implement
+    `fungible::Mutate`.
 crates:
 - name: pallet-bounties
   bump: major
