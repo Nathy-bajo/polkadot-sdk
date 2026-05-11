@@ -464,24 +464,24 @@ pub trait Hooks<BlockNumber> {
 	/// This is the non-mandatory version of [`Hooks::on_initialize`].
 	fn on_poll(_n: BlockNumber, _weight: &mut WeightMeter) {}
 
-	/// Hook called when a pallet is being initialized for the first time.
+	/// Hook called the first time a pallet is added to a runtime, *after* genesis.
 	///
-	/// This is called:
-	/// - **At genesis**: for all pallets, as part of [`OnGenesis`].
-	/// - **Post-genesis**: for any pallet that is newly added to the runtime (i.e. mid-flight),
-	///   during the first block of the upgraded runtime, before any [`Hooks::on_runtime_upgrade`]
-	///   migrations run.
+	/// This is **not** called at genesis: a pallet that is part of the runtime from genesis is
+	/// expected to initialize itself via its `GenesisConfig` (see [`BuildGenesisConfig`]). This
+	/// hook only fires when a pallet is added to a runtime mid-flight, i.e. it has no on-chain
+	/// storage keys yet — including no on-chain storage version. In that case it runs during the
+	/// first block of the upgraded runtime, before any [`Hooks::on_runtime_upgrade`] migration.
 	///
 	/// Use this hook for pallet-internal initialization logic that can be derived entirely from
 	/// within the pallet (e.g. writing default storage values). For initialization that requires
-	/// external data — such as values from a genesis config or another pallet — use a
-	/// runtime-level migration instead.
+	/// external data — such as values from another pallet — use a runtime-level migration
+	/// instead.
 	///
 	/// ## Ordering
 	///
-	/// When a new pallet is detected post-genesis, `on_pallet_initialize` is called inside
+	/// `on_pallet_initialize` is called inside
 	/// [`BeforeAllRuntimeMigrations::before_all_runtime_migrations`], which runs **before** any
-	/// [`Hooks::on_runtime_upgrade`] logic. At the point this hook runs, the pallet's storage is
+	/// [`Hooks::on_runtime_upgrade`] logic. At the point this hook runs the pallet's storage is
 	/// empty and its on-chain storage version has just been written to match the in-code version.
 	fn on_pallet_initialize() {}
 

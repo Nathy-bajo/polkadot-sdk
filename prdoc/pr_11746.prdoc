@@ -4,7 +4,14 @@ doc:
   description: |-
     resolves https://github.com/paritytech/polkadot-sdk/issues/2762
 
-    This PR introduces a new `on_pallet_initialize()` hook to the `Hooks` trait in frame support, providing a unified and ergonomic mechanism for one-time pallet initialization both at genesis and when a pallet is added post-genesis, eliminating the need to misuse migrations for setup, while remaining fully backward compatible with a default no-op implementation and integrating the hook into genesis execution and runtime upgrade flows before any `on_runtime_upgrade` logic runs
+    Adds a new `on_pallet_initialize()` method to the `Hooks` trait in `frame-support` that
+    fires the first time a pallet is added to a runtime *after* genesis. It is invoked from
+    the auto-generated `BeforeAllRuntimeMigrations` impl when the pallet has no on-chain
+    storage keys yet, just after the on-chain storage version is initialized and before any
+    `on_runtime_upgrade` migration runs. The hook is **not** called at genesis: pallets that
+    are part of the runtime from genesis are expected to initialize themselves via their
+    `GenesisConfig::build`. Default implementation is a no-op, so existing pallets are
+    unaffected.
 crates:
 - name: frame-support-procedural
   bump: minor

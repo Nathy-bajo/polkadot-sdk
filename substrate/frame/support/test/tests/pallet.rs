@@ -2387,15 +2387,20 @@ fn pallet_on_chain_storage_version_initializes_correctly() {
 	});
 }
 
-/// `on_pallet_initialize` must fire when `OnGenesis::on_genesis` is called at genesis.
+/// `on_pallet_initialize` must NOT fire at genesis: pallets present from genesis are expected
+/// to initialize themselves via their `GenesisConfig`. Calling `OnGenesis::on_genesis` must
+/// only initialize the storage version.
 #[test]
-fn on_pallet_initialize_called_at_genesis() {
-	use frame_support::traits::OnGenesis;
-
+fn on_pallet_initialize_not_called_at_genesis() {
 	TestExternalities::default().execute_with(|| {
 		assert!(!unhashed::exists(ON_PALLET_INITIALIZE_KEY), "hook must not have run yet");
 		Example::on_genesis();
-		assert!(unhashed::exists(ON_PALLET_INITIALIZE_KEY), "hook must have run during on_genesis");
+		assert!(
+			!unhashed::exists(ON_PALLET_INITIALIZE_KEY),
+			"hook must NOT run during on_genesis — pallets at genesis initialize via GenesisConfig"
+		);
+		// `on_genesis` must still have set the on-chain storage version.
+		assert!(StorageVersion::exists::<Example>());
 	});
 }
 
@@ -2422,6 +2427,34 @@ fn on_pallet_initialize_called_for_new_pallet_post_genesis() {
 		assert!(
 			unhashed::exists(ON_PALLET_INITIALIZE_KEY),
 			"hook must have run when new pallet is detected post-genesis"
+		);
+	});
+}
+
+/// `on_pallet_initialize` must NOT fire during `execute_on_runtime_upgrade` for a pallet that
+/// already has on-chain storage (i.e., it isn't newly added to the runtime).
+#[test]
+fn on_pallet_initialize_not_called_for_existing_pallet_on_upgrade() {
+	type Executive = frame_executive::Executive<
+		Runtime,
+		Block,
+		frame_system::ChainContext<Runtime>,
+		Runtime,
+		AllPalletsWithSystem,
+	>;
+
+	TestExternalities::default().execute_with(|| {
+		// Simulate a runtime that already has this pallet from genesis: storage version is set,
+		// the `on_pallet_initialize` hook was not (and must not have been) called.
+		Example::on_genesis();
+		assert!(StorageVersion::exists::<Example>());
+		assert!(!unhashed::exists(ON_PALLET_INITIALIZE_KEY));
+
+		Executive::execute_on_runtime_upgrade();
+
+		assert!(
+			!unhashed::exists(ON_PALLET_INITIALIZE_KEY),
+			"hook must NOT run on upgrade for a pallet that already exists in the runtime"
 		);
 	});
 }
