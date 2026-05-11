@@ -82,8 +82,9 @@ mod tests;
 
 const LOG_TARGET: &str = "runtime::inclusion-inherent";
 
-/// A bitfield concerning concluded disputes for candidates
-/// associated to the core index equivalent to the bit position.
+/// A bitfield marking cores whose availability votes must be ignored. Bits are set
+/// for cores associated with concluded disputes, and for cores occupied by candidates
+/// belonging to a frozen parachain. The core index corresponds to the bit position.
 #[derive(Default, PartialEq, Eq, Clone, Encode, Decode, Debug, TypeInfo)]
 pub(crate) struct DisputedBitfield(pub(crate) BitVec<u8, bitvec::order::Lsb0>);
 
@@ -865,12 +866,12 @@ pub(crate) fn apply_weight_limit<T: Config + inclusion::Config>(
 ///  2. bitfields are ascending by validator index.
 ///  3. each bitfield has exactly `expected_bits`
 ///  4. signature is valid
-///  5. remove any disputed core indices
+///  5. remove any disputed core indices or cores occupied by frozen parachains
 ///
 /// If any of those is not passed, the bitfield is dropped.
 pub(crate) fn sanitize_bitfields<T: crate::inclusion::Config>(
 	unchecked_bitfields: UncheckedSignedAvailabilityBitfields,
-	disputed_bitfield: DisputedBitfield,
+	unavailable_cores_bitfield: DisputedBitfield,
 	expected_bits: usize,
 	parent_hash: T::Hash,
 	session_index: SessionIndex,
@@ -880,10 +881,10 @@ pub(crate) fn sanitize_bitfields<T: crate::inclusion::Config>(
 
 	let mut last_index: Option<ValidatorIndex> = None;
 
-	if disputed_bitfield.0.len() != expected_bits {
+	if unavailable_cores_bitfield.0.len() != expected_bits {
 		// This is a system logic error that should never occur, but we want to handle it gracefully
 		// so we just drop all bitfields
-		log::error!(target: LOG_TARGET, "BUG: disputed_bitfield != expected_bits");
+		log::error!(target: LOG_TARGET, "BUG: unavailable_cores_bitfield != expected_bits");
 		return vec![];
 	}
 
@@ -901,13 +902,14 @@ pub(crate) fn sanitize_bitfields<T: crate::inclusion::Config>(
 			continue;
 		}
 
-		if unchecked_bitfield.unchecked_payload().0.clone() & disputed_bitfield.0.clone() !=
+		if unchecked_bitfield.unchecked_payload().0.clone() & unavailable_cores_bitfield.0.clone() !=
 			all_zeros
 		{
 			log::trace!(
 				target: LOG_TARGET,
-				"bitfield contains disputed cores: {:?}",
-				unchecked_bitfield.unchecked_payload().0.clone() & disputed_bitfield.0.clone()
+				"bitfield contains unavailable cores (disputed or frozen): {:?}",
+				unchecked_bitfield.unchecked_payload().0.clone() &
+					unavailable_cores_bitfield.0.clone()
 			);
 			continue;
 		}

@@ -617,7 +617,7 @@ impl parachains_paras::Config for Runtime {
 	type NextSessionRotation = Babe;
 	type OnNewHead = ();
 	type AssignCoretime = Scheduler;
-	type OnParaFrozen = ();
+	type OnParaFrozen = (ParaInclusion, Dmp);
 	type Fungible = Balances;
 	type CooldownRemovalMultiplier = ConstUint<1>;
 	type AuthorizeCurrentCodeOrigin = frame_system::EnsureRoot<AccountId>;

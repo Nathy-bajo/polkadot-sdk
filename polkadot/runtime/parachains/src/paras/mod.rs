@@ -567,9 +567,12 @@ pub trait OnParaFrozen {
 	fn on_para_frozen(id: ParaId) -> Weight;
 }
 
-impl OnParaFrozen for () {
-	fn on_para_frozen(_: ParaId) -> Weight {
-		Weight::zero()
+#[impl_trait_for_tuples::impl_for_tuples(30)]
+impl OnParaFrozen for Tuple {
+	fn on_para_frozen(id: ParaId) -> Weight {
+		let mut weight: Weight = Default::default();
+		for_tuples!( #( weight.saturating_accrue(Tuple::on_para_frozen(id)); )* );
+		weight
 	}
 }
 
@@ -1382,8 +1385,9 @@ pub mod pallet {
 			Ok(Pays::No.into())
 		}
 
-		/// Freeze a parachain. After freezing, the parachain cannot make any progress.
-		/// Any candidates waiting for availability will be dropped immediately.
+		/// Freeze a parachain. After freezing, the parachain cannot make any progress: no new
+		/// candidates are accepted for backing, candidates pending availability are dropped, and
+		/// pending runtime upgrades are cancelled. Only callable by root.
 		#[pallet::call_index(12)]
 		#[pallet::weight(<T as Config>::WeightInfo::freeze_parachain())]
 		pub fn freeze_parachain(origin: OriginFor<T>, para: ParaId) -> DispatchResult {
@@ -1466,11 +1470,6 @@ pub mod pallet {
 				.find(|(p, _)| p == &para)
 				.map(|(_, c)| Self::calculate_remove_upgrade_cooldown_cost(*c))
 				.unwrap_or_default()
-		}
-
-		/// Returns true if the given para is currently frozen.
-		pub fn para_is_frozen(id: ParaId) -> bool {
-			ParaLifecycles::<T>::get(&id).map_or(false, |lifecycle| lifecycle.is_frozen())
 		}
 	}
 

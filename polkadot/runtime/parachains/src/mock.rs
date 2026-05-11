@@ -252,7 +252,7 @@ impl crate::paras::Config for Test {
 	type NextSessionRotation = TestNextSessionRotation;
 	type OnNewHead = ();
 	type AssignCoretime = ();
-	type OnParaFrozen = ();
+	type OnParaFrozen = (ParaInclusion, Dmp);
 	type Fungible = Balances;
 	type CooldownRemovalMultiplier = ConstUint<1>;
 	type AuthorizeCurrentCodeOrigin = EnsureRoot<AccountId>;
