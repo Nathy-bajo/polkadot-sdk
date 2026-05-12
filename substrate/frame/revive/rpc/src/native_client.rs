@@ -31,7 +31,7 @@ use codec::{Decode, Encode};
 use futures::StreamExt;
 use jsonrpsee::core::async_trait;
 use pallet_revive::{
-	DryRunConfig, EthTransactInfo, ReviveApi,
+	DryRunConfig, EthExtrinsicEvents, EthTransactInfo, ReviveApi,
 	evm::{
 		Block as EthBlock, BlockNumberOrTagOrHash, BlockTag, GenericTransaction, ReceiptGasInfo,
 		StateOverrideSet, Trace, TracerType, U256,
@@ -173,11 +173,11 @@ where
 
 	pub fn with_network(
 		mut self,
-		network: Arc<impl NetworkStatusProvider + Send + Sync + 'static>,
-		sync_oracle: Arc<impl SyncOracle + Send + Sync + 'static>,
+		network: Arc<dyn NetworkStatusProvider + Send + Sync>,
+		sync_oracle: Arc<dyn SyncOracle + Send + Sync>,
 	) -> Self {
-		self.network = Some(network as Arc<dyn NetworkStatusProvider + Send + Sync>);
-		self.sync_oracle = Some(sync_oracle as Arc<dyn SyncOracle + Send + Sync>);
+		self.network = Some(network);
+		self.sync_oracle = Some(sync_oracle);
 		self
 	}
 
@@ -656,5 +656,50 @@ where
 			.enumerate()
 			.map(|(index, ext)| RawExtrinsic { payload: ext.encode(), index })
 			.collect())
+	}
+
+	async fn block_events(
+		&self,
+		block_hash: SubstrateBlockHash,
+	) -> Result<Option<crate::receipt_extractor::BlockEvents>, ClientError> {
+		use crate::receipt_extractor::ExtrinsicEvents;
+
+		let num_extrinsics = match self.client.block_body(block_hash).map_err(native_err)? {
+			Some(body) => body.len(),
+			None => return Ok(None),
+		};
+
+		let runtime_events: Vec<EthExtrinsicEvents> =
+			match self.client.runtime_api().eth_block_events(block_hash) {
+				Ok(events) => events,
+				Err(err) => {
+					log::debug!(
+						target: crate::LOG_TARGET,
+						"NativeSubstrateClient: eth_block_events unavailable at {:?} ({err:?}); \
+						 falling back to no-events",
+						block_hash,
+					);
+					return Ok(None);
+				},
+			};
+
+		let mut block_events: crate::receipt_extractor::BlockEvents = (0..num_extrinsics)
+			.map(|_| ExtrinsicEvents { success: true, logs: Vec::new() })
+			.collect();
+
+		for ext_events in runtime_events {
+			let idx = ext_events.extrinsic_index as usize;
+			if idx >= block_events.len() {
+				continue;
+			}
+			block_events[idx].success = ext_events.success;
+			block_events[idx].logs = ext_events
+				.logs
+				.into_iter()
+				.map(|(addr, topics, data)| (addr, topics, Some(data)))
+				.collect();
+		}
+
+		Ok(Some(block_events))
 	}
 }

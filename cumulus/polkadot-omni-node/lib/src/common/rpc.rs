@@ -88,6 +88,7 @@ mod eth_rpc {
 		BuildRpcExtensions<
 			ParachainClient<Block, RuntimeApi>,
 			ParachainBackend<Block>,
+			Block,
 			sc_transaction_pool::TransactionPoolHandle<Block, ParachainClient<Block, RuntimeApi>>,
 			sc_statement_store::Store,
 		> for BuildParachainRpcExtensions<Block, RuntimeApi>
@@ -114,6 +115,8 @@ mod eth_rpc {
 			>,
 			statement_store: Option<Arc<sc_statement_store::Store>>,
 			spawn_handle: Arc<dyn sp_core::traits::SpawnNamed>,
+			network: Arc<dyn sc_network::service::traits::NetworkService>,
+			sync_service: Arc<sc_network_sync::SyncingService<Block>>,
 		) -> sc_service::error::Result<RpcExtension> {
 			let build = || -> Result<RpcExtension, Box<dyn std::error::Error + Send + Sync>> {
 				let mut module = RpcExtension::new(());
@@ -136,9 +139,14 @@ mod eth_rpc {
 						let block_provider = NativeClientBlockInfoProvider::new(client.clone())
 							.map_err(|e| format!("block info provider: {e}"))?;
 
+						let net_status: Arc<dyn sc_network::NetworkStatusProvider + Send + Sync> =
+							network.clone();
+						let sync_oracle: Arc<dyn sp_consensus::SyncOracle + Send + Sync> =
+							sync_service.clone();
 						let native_client =
 							NativeSubstrateClient::new(client.clone(), pool, chain_id, false)
-								.map_err(|e| format!("native substrate client: {e}"))?;
+								.map_err(|e| format!("native substrate client: {e}"))?
+								.with_network(net_status, sync_oracle);
 
 						let (bootstrap_tx, bootstrap_rx) = std::sync::mpsc::sync_channel(1);
 						spawn_handle.spawn(
@@ -213,12 +221,17 @@ mod eth_rpc {
 	}
 }
 
-pub(crate) trait BuildRpcExtensions<Client, Backend, Pool, StatementStore> {
+pub(crate) trait BuildRpcExtensions<Client, Backend, Block, Pool, StatementStore>
+where
+	Block: BlockT,
+{
 	fn build_rpc_extensions(
 		client: Arc<Client>,
 		backend: Arc<Backend>,
 		pool: Arc<Pool>,
 		statement_store: Option<Arc<StatementStore>>,
 		spawn_handle: Arc<dyn sp_core::traits::SpawnNamed>,
+		network: Arc<dyn sc_network::service::traits::NetworkService>,
+		sync_service: Arc<sc_network_sync::SyncingService<Block>>,
 	) -> sc_service::error::Result<RpcExtension>;
 }

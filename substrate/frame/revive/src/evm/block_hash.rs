@@ -47,6 +47,22 @@ pub struct ReceiptGasInfo {
 	pub effective_gas_price: U256,
 }
 
+/// Per-extrinsic event summary used by ETH RPC to reconstruct receipts when the
+/// node is embedded.
+///
+/// The runtime exposes this via [`crate::ReviveApi::eth_block_events`].
+#[derive(Encode, Decode, TypeInfo, Clone, Debug, Default, PartialEq, Eq)]
+pub struct EthExtrinsicEvents {
+	/// The index of the extrinsic within the block these events belong to.
+	pub extrinsic_index: u32,
+
+	/// Whether the Ethereum transaction succeeded (`true`) or reverted (`false`).
+	pub success: bool,
+
+	/// Contract event logs `(address, topics, data)` emitted by this extrinsic.
+	pub logs: Vec<(sp_core::H160, Vec<H256>, Vec<u8>)>,
+}
+
 impl Block {
 	/// Compute the trie root using the `(rlp(index), encoded(item))` pairs.
 	pub fn compute_trie_root(items: &[Vec<u8>]) -> B256 {

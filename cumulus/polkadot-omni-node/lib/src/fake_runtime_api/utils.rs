@@ -245,6 +245,7 @@ macro_rules! impl_node_runtime_apis {
 				fn eth_block() -> pallet_revive::evm::Block { unimplemented!() }
 				fn eth_block_hash(_: pallet_revive::evm::U256) -> Option<sp_core::H256> { unimplemented!() }
 				fn eth_receipt_data() -> Vec<pallet_revive::evm::ReceiptGasInfo> { unimplemented!() }
+				fn eth_block_events() -> Vec<pallet_revive::evm::EthExtrinsicEvents> { unimplemented!() }
 				fn block_gas_limit() -> pallet_revive::evm::U256 { unimplemented!() }
 				fn max_extrinsic_weight_in_gas() -> pallet_revive::evm::U256 { unimplemented!() }
 				fn balance(_: sp_core::H160) -> pallet_revive::evm::U256 { unimplemented!() }

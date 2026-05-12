@@ -26,7 +26,7 @@ use crate::{
 };
 use codec::Decode;
 use jsonrpsee::core::async_trait;
-use sc_client_api::{BlockBackend, BlockchainEvents, HeaderBackend};
+use sc_client_api::{BlockBackend, HeaderBackend};
 use sp_core::H256;
 use sp_runtime::traits::{Block as BlockT, Header as HeaderT};
 use std::sync::Arc;
@@ -90,12 +90,7 @@ impl<Client, Block> NativeClientBlockInfoProvider<Client, Block>
 where
 	Block: BlockT<Hash = H256> + Send + Sync + 'static,
 	Block::Header: HeaderT<Number = u32, Hash = H256>,
-	Client: HeaderBackend<Block>
-		+ BlockBackend<Block>
-		+ BlockchainEvents<Block>
-		+ Send
-		+ Sync
-		+ 'static,
+	Client: HeaderBackend<Block> + BlockBackend<Block> + Send + Sync + 'static,
 {
 	/// Create a new provider, seeding the cache with the current best block.
 	pub fn new(client: Arc<Client>) -> Result<Self, ClientError> {
@@ -142,12 +137,7 @@ impl<Client, Block> BlockInfoProvider for NativeClientBlockInfoProvider<Client, 
 where
 	Block: BlockT<Hash = H256> + Send + Sync + 'static,
 	Block::Header: HeaderT<Number = u32, Hash = H256> + Send + Sync,
-	Client: HeaderBackend<Block>
-		+ BlockBackend<Block>
-		+ BlockchainEvents<Block>
-		+ Send
-		+ Sync
-		+ 'static,
+	Client: HeaderBackend<Block> + BlockBackend<Block> + Send + Sync + 'static,
 {
 	type Block = NativeCachedBlock;
 

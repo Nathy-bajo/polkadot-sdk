@@ -423,6 +423,8 @@ where
 			let transaction_pool = transaction_pool.clone();
 			let backend_for_rpc = backend.clone();
 			let statement_store = statement_store.clone();
+			let network = network.clone();
+			let sync_service = sync_service.clone();
 
 			Box::new(move |_| {
 				let module = Self::BuildRpcExtensions::build_rpc_extensions(
@@ -431,6 +433,8 @@ where
 					transaction_pool.clone(),
 					statement_store.clone(),
 					spawn_handle.clone(),
+					network.clone(),
+					sync_service.clone(),
 				)?;
 				Ok(module)
 			})
