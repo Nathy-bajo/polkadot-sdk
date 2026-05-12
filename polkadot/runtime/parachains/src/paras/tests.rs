@@ -2442,7 +2442,13 @@ fn freeze_test_genesis(parachain_id: ParaId, parathread_id: ParaId) -> MockGenes
 			},
 		),
 	];
-	MockGenesisConfig { paras: GenesisConfig { paras, ..Default::default() }, ..Default::default() }
+	MockGenesisConfig {
+		paras: GenesisConfig { paras, ..Default::default() },
+		configuration: crate::configuration::GenesisConfig {
+			config: HostConfiguration { max_downward_message_size: 1024, ..Default::default() },
+		},
+		..Default::default()
+	}
 }
 
 #[test]
