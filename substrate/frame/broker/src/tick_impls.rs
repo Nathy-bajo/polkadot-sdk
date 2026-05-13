@@ -178,10 +178,8 @@ impl<T: Config> Pallet<T> {
 		let mut new_prices = T::PriceAdapter::adapt_price(SalePerformance::from_sale(&old_sale));
 		// Check if there's a pending base price reset to apply.
 		if let Some(pending_price) = ScheduledBasePrice::<T>::take() {
-			// Use the pending price for end_price, but calculate target_price normally
-			// This ensures renewals are priced correctly based on market performance
 			new_prices.end_price = pending_price;
-			// Ensure target_price is at least as high as end_price
+			// Ensure target_price is at least as high as end_price.
 			new_prices.target_price = new_prices.target_price.max(pending_price);
 		}
 

@@ -3075,8 +3075,10 @@ fn reset_base_price_with_admin_origin_works() {
 
 		let sale = SaleInfo::<Test>::get().unwrap();
 		assert_eq!(sale.end_price, 75);
-    }
-  }
+	});
+}
+
+#[test]
 fn force_transfer_works() {
 	TestExt::new().endow(1, 1000).execute_with(|| {
 		assert_ok!(Broker::do_start_sales(100, 4));
