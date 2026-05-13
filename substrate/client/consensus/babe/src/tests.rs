@@ -1366,51 +1366,6 @@ async fn allows_skipping_epochs_on_some_forks() {
 }
 
 #[tokio::test]
-async fn test_weight_storage_concurrent_access() {
-	sp_tracing::try_init_simple();
-
-	// Test concurrent access to shared weight storage
-	let weight_storage = SharedBlockWeightStorage::<Block>::new();
-
-	let hash1 = Hash::random();
-	let hash2 = Hash::random();
-
-	// Store weights from multiple threads
-	let thread1 = std::thread::spawn({
-		let storage = weight_storage.clone();
-		move || {
-			storage.store(hash1, 100, 1);
-			std::thread::sleep(std::time::Duration::from_millis(10));
-			storage.load(&hash1)
-		}
-	});
-
-	let thread2 = std::thread::spawn({
-		let storage = weight_storage.clone();
-		move || {
-			std::thread::sleep(std::time::Duration::from_millis(5));
-			storage.store(hash2, 200, 2);
-			storage.load(&hash2)
-		}
-	});
-
-	let weight1 = thread1.join().unwrap();
-	let weight2 = thread2.join().unwrap();
-
-	assert_eq!(weight1, Some(100));
-	assert_eq!(weight2, Some(200));
-
-	// Test removal
-	weight_storage.remove(&hash1);
-	assert_eq!(weight_storage.load(&hash1), None);
-	assert_eq!(weight_storage.load(&hash2), Some(200));
-
-	// Test clear
-	weight_storage.clear();
-	assert_eq!(weight_storage.load(&hash2), None);
-}
-
-#[tokio::test]
 async fn shared_weight_storage_integrated_in_import() {
 	sp_tracing::try_init_simple();
 
@@ -1455,146 +1410,6 @@ async fn shared_weight_storage_integrated_in_import() {
 		weight_in_storage.unwrap(),
 		weight_in_db.unwrap(),
 		"Shared storage and database should have same weight"
-	);
-}
-
-#[tokio::test]
-async fn fork_choice_race_condition_fixed() {
-	sp_tracing::try_init_simple();
-
-	let mut net = BabeTestNet::new(2);
-
-	let peer0 = net.peer(0);
-	let data0 = peer0.data.as_ref().expect("babe link set up");
-	let client0 = peer0.client().as_client();
-
-	let mut proposer_factory = DummyFactory {
-		client: client0.clone(),
-		epoch_changes: data0.link.epoch_changes.clone(),
-		mutator: Arc::new(|_, _| ()),
-	};
-
-	let mut block_import = data0.block_import.lock().take().expect("import set up");
-
-	let genesis_hash = client0.chain_info().genesis_hash;
-	let genesis_header = client0.header(genesis_hash).unwrap().unwrap();
-
-	// Simulate: Validator receives primary block from network
-	// Store its weight in shared storage
-	let primary_block_hash = Hash::random();
-	let primary_weight = 1; // Primary blocks have weight 1
-	let primary_number = 1;
-
-	data0
-		.link
-		.weight_storage
-		.store(primary_block_hash, primary_weight, primary_number);
-
-	// Validator also builds its own secondary block at same slot
-	// Secondary blocks have weight 0
-	let secondary_hash = propose_and_import_block(
-		&genesis_header,
-		Some(1.into()),
-		&mut proposer_factory,
-		&mut block_import,
-	)
-	.await;
-
-	let secondary_weight = aux_schema::load_block_weight(&*client0, secondary_hash)
-		.unwrap()
-		.expect("Secondary block should have weight");
-
-	let primary_weight_from_storage = data0.link.weight_storage.load(&primary_block_hash);
-	assert_eq!(
-		primary_weight_from_storage,
-		Some(primary_weight),
-		"Primary block weight should be immediately available in shared storage"
-	);
-
-	// Verify fork choice would correctly prefer the primary block
-	assert!(
-		primary_weight > secondary_weight,
-		"Primary block (weight {}) should have higher weight than secondary block (weight {})",
-		primary_weight,
-		secondary_weight
-	);
-}
-
-#[tokio::test]
-async fn test_primary_vs_secondary_race_condition() {
-	sp_tracing::try_init_simple();
-
-	let mut net = BabeTestNet::new(1);
-	let peer = net.peer(0);
-	let data = peer.data.as_ref().expect("babe link set up");
-	let client = peer.client().as_client();
-
-	let mut proposer_factory = DummyFactory {
-		client: client.clone(),
-		epoch_changes: data.link.epoch_changes.clone(),
-		mutator: Arc::new(|_, _| ()),
-	};
-
-	let mut block_import = data.block_import.lock().take().expect("import set up during init");
-
-	let genesis_hash = client.chain_info().genesis_hash;
-	let genesis_header = client.header(genesis_hash).unwrap().unwrap();
-
-	// Simulate receiving a PRIMARY block from the network
-	let primary_block_hash = Hash::random();
-	let primary_weight = 1; // Primary block weight
-	let primary_number = 1;
-
-	// Immediately store in shared storage
-	data.link
-		.weight_storage
-		.store(primary_block_hash, primary_weight, primary_number);
-
-	// Build local SECONDARY block at the same slot
-	let secondary_hash = propose_and_import_block(
-		&genesis_header,
-		Some(1.into()), // Same slot as the primary block
-		&mut proposer_factory,
-		&mut block_import,
-	)
-	.await;
-
-	// Get the secondary block's weight from database
-	let secondary_weight = aux_schema::load_block_weight(&*client, secondary_hash)
-		.unwrap()
-		.expect("Secondary block must have weight");
-
-	// Verify block weights are correct
-	assert_eq!(secondary_weight, 0, "Secondary blocks have weight 0");
-	assert_eq!(primary_weight, 1, "Primary blocks have weight 1");
-
-	let primary_weight_from_storage = data.link.weight_storage.load(&primary_block_hash);
-	assert_eq!(
-		primary_weight_from_storage,
-		Some(1),
-		"BUG FIX: Primary block weight MUST be immediately available in shared storage"
-	);
-
-	// Simulate fork-choice logic: primary should win (1 > 0)
-	assert!(
-		primary_weight > secondary_weight,
-		"Fork-choice MUST prefer primary block (weight {}) over secondary block (weight {})",
-		primary_weight,
-		secondary_weight
-	);
-
-	// Additional verification: shared storage matches database eventually
-	let weight_from_db = aux_schema::load_block_weight(&*client, secondary_hash)
-		.unwrap()
-		.expect("Weight should be in database");
-	let weight_from_shared = data
-		.link
-		.weight_storage
-		.load(&secondary_hash)
-		.expect("Weight should be in shared storage");
-	assert_eq!(
-		weight_from_db, weight_from_shared,
-		"Shared storage and database must eventually converge"
 	);
 }
 
@@ -1645,8 +1460,10 @@ async fn test_shared_storage_updated_before_database() {
 	);
 }
 
+// Verifies that the on-finality action registered in `block_import` prunes
+// the shared weight storage *automatically* when a block is finalized.
 #[tokio::test]
-async fn test_finalization_prunes_shared_storage() {
+async fn finalization_triggers_shared_weight_storage_pruning() {
 	sp_tracing::try_init_simple();
 
 	let mut net = BabeTestNet::new(1);
@@ -1662,7 +1479,6 @@ async fn test_finalization_prunes_shared_storage() {
 
 	let mut block_import = data.block_import.lock().take().expect("import set up during init");
 
-	// Create a chain of 10 blocks
 	let blocks = propose_and_import_blocks(
 		&client,
 		&mut proposer_factory,
@@ -1672,35 +1488,30 @@ async fn test_finalization_prunes_shared_storage() {
 	)
 	.await;
 
-	// Verify all blocks have weights in shared storage
 	for (i, hash) in blocks.iter().enumerate() {
 		assert!(
 			data.link.weight_storage.load(hash).is_some(),
-			"Block {} must be in shared storage before finalization",
-			i + 1
+			"block #{} must be in shared storage before finalization",
+			i + 1,
 		);
 	}
 
 	// Finalize block #5
 	client.finalize_block(blocks[4], None, true).unwrap();
 
-	data.link.weight_storage.prune_finalized(5);
-
-	// Blocks 1-5 should be removed from shared storage
 	for i in 0..5 {
 		assert!(
 			data.link.weight_storage.load(&blocks[i]).is_none(),
-			"PRUNING TEST: Finalized block {} MUST be removed from shared storage",
-			i + 1
+			"finalized block #{} should have been pruned by the on-finality action",
+			i + 1,
 		);
 	}
 
-	// Blocks 6-10 should still be in shared storage
 	for i in 5..10 {
 		assert!(
 			data.link.weight_storage.load(&blocks[i]).is_some(),
-			"PRUNING TEST: Unfinalized block {} MUST remain in shared storage",
-			i + 1
+			"unfinalized block #{} must remain in shared storage",
+			i + 1,
 		);
 	}
 }
@@ -1751,6 +1562,190 @@ async fn test_concurrent_access_to_shared_storage() {
 	assert!(weight_storage.load(&hash1).is_some(), "hash1 should have final value");
 	assert!(weight_storage.load(&hash2).is_some(), "hash2 should have final value");
 	assert!(weight_storage.load(&hash3).is_some(), "hash3 should have final value");
+}
+
+// Gates the first `import_block` call delivered to it so that we can observe
+// a BABE block import while its `inner.import_block` is in flight.
+#[derive(Clone)]
+struct GatedInner {
+	inner: Arc<TestClient>,
+	armed: Arc<std::sync::atomic::AtomicBool>,
+	arrived: Arc<tokio::sync::Notify>,
+	proceed: Arc<tokio::sync::Notify>,
+}
+
+#[async_trait::async_trait]
+impl BlockImport<TestBlock> for GatedInner {
+	type Error = sp_consensus::Error;
+
+	async fn import_block(
+		&self,
+		block: BlockImportParams<TestBlock>,
+	) -> Result<ImportResult, Self::Error> {
+		if self.armed.swap(false, std::sync::atomic::Ordering::SeqCst) {
+			self.arrived.notify_one();
+			self.proceed.notified().await;
+		}
+		BlockImport::import_block(&*self.inner, block).await
+	}
+
+	async fn check_block(
+		&self,
+		block: BlockCheckParams<TestBlock>,
+	) -> Result<ImportResult, Self::Error> {
+		BlockImport::check_block(&*self.inner, block).await
+	}
+}
+
+// Builds and signs a BABE block on top of `parent` for the given slot, without
+// importing it.
+async fn build_block_for_import(
+	parent: &TestHeader,
+	slot: Slot,
+	proposer_factory: &mut DummyFactory,
+) -> (BlockImportParams<TestBlock>, Hash) {
+	let mut proposer = proposer_factory.init(parent).await.unwrap();
+
+	let pre_digest = sp_runtime::generic::Digest {
+		logs: vec![Item::babe_pre_digest(PreDigest::SecondaryPlain(SecondaryPlainPreDigest {
+			authority_index: 0,
+			slot,
+		}))],
+	};
+
+	let parent_hash = parent.hash();
+	let mut block = proposer.propose_with(pre_digest).await.unwrap().block;
+
+	let epoch_descriptor = proposer_factory
+		.epoch_changes
+		.shared_data()
+		.epoch_descriptor_for_child_of(
+			descendent_query(&*proposer_factory.client),
+			&parent_hash,
+			*parent.number(),
+			slot,
+		)
+		.unwrap()
+		.unwrap();
+
+	let seal = {
+		let pair = AuthorityPair::from_seed(&[1; 32]);
+		let pre_hash = block.header.hash();
+		let signature = pair.sign(pre_hash.as_ref());
+		Item::babe_seal(signature)
+	};
+
+	let post_hash = {
+		block.header.digest_mut().push(seal.clone());
+		let h = block.header.hash();
+		block.header.digest_mut().pop();
+		h
+	};
+
+	let mut import = BlockImportParams::new(BlockOrigin::Own, block.header);
+	import.post_digests.push(seal);
+	import.body = Some(block.extrinsics);
+	import
+		.insert_intermediate(INTERMEDIATE_KEY, BabeIntermediate::<TestBlock> { epoch_descriptor });
+	import.fork_choice = Some(ForkChoiceStrategy::LongestChain);
+	(import, post_hash)
+}
+
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
+async fn concurrent_import_publishes_in_flight_weight_via_shared_storage() {
+	use std::sync::atomic::AtomicBool;
+	use substrate_test_runtime_client::TestClientBuilder;
+
+	sp_tracing::try_init_simple();
+
+	let (test_client, longest_chain) = TestClientBuilder::new().build_with_longest_chain();
+	let client = Arc::new(test_client);
+
+	let armed = Arc::new(AtomicBool::new(true));
+	let arrived = Arc::new(tokio::sync::Notify::new());
+	let proceed = Arc::new(tokio::sync::Notify::new());
+
+	let gated_inner = GatedInner {
+		inner: client.clone(),
+		armed: armed.clone(),
+		arrived: arrived.clone(),
+		proceed: proceed.clone(),
+	};
+
+	let config = crate::configuration(&*client).expect("config available");
+	let (babe_block_import, link) = crate::block_import(
+		config,
+		gated_inner,
+		client.clone(),
+		Arc::new(move |_, _| async {
+			let timestamp = sp_timestamp::InherentDataProvider::from_system_time();
+			let slot = InherentDataProvider::from_timestamp_and_slot_duration(
+				*timestamp,
+				SlotDuration::from_millis(SLOT_DURATION_MS),
+			);
+			Ok((slot, timestamp))
+		}) as BabeCreateInherentDataProviders<TestBlock>,
+		longest_chain,
+		OffchainTransactionPoolFactory::new(RejectAllTxPool::default()),
+	)
+	.expect("can initialize block-import");
+
+	let proposer_factory = DummyFactory {
+		client: client.clone(),
+		epoch_changes: link.epoch_changes.clone(),
+		mutator: Arc::new(|_, _| ()),
+	};
+
+	let genesis_hash = client.chain_info().genesis_hash;
+	let genesis_header = client.header(genesis_hash).unwrap().unwrap();
+
+	// Pre-build two sibling blocks (same parent, different slots) so the
+	// block-builder state work is done before we start the concurrent imports.
+	let mut factory_a = proposer_factory.clone();
+	let mut factory_b = proposer_factory.clone();
+	let (params_a, hash_a) =
+		build_block_for_import(&genesis_header, 1.into(), &mut factory_a).await;
+	let (params_b, hash_b) =
+		build_block_for_import(&genesis_header, 2.into(), &mut factory_b).await;
+
+	// Drive the first sibling on a separate task. It will sit blocked inside
+	// `inner.import_block` until we release the gate.
+	let import_a = babe_block_import.clone();
+	let task_a = tokio::spawn(async move { import_a.import_block(params_a).await });
+
+	// Wait until task A has reached the gate. Once we observe this, BABE's
+	// prologue for A must have completed, which is exactly the in-flight
+	// window the race fix has to cover.
+	arrived.notified().await;
+
+	assert!(
+		link.weight_storage().load(&hash_a).is_some(),
+		"BABE must publish the new block's weight to shared storage before \
+		 delegating to inner.import_block (regression of #6013)",
+	);
+
+	// Drive the second sibling in parallel. It must complete despite A's
+	// inner commit still being blocked.
+	let result_b = babe_block_import
+		.import_block(params_b)
+		.await
+		.expect("sibling import succeeds while first is gated");
+	assert!(matches!(result_b, ImportResult::Imported(_)));
+	assert!(
+		link.weight_storage().load(&hash_b).is_some(),
+		"second sibling's weight must be in shared storage after its import",
+	);
+
+	// Release A and wait for it to finish.
+	proceed.notify_one();
+	let result_a = task_a.await.expect("join").expect("first import succeeds");
+	assert!(matches!(result_a, ImportResult::Imported(_)));
+
+	// Both blocks must end up in the shared storage and in the aux DB.
+	assert!(link.weight_storage().load(&hash_a).is_some());
+	assert!(link.weight_storage().load(&hash_b).is_some());
+	assert!(aux_schema::load_block_weight(&*client, hash_a).unwrap().is_some());
+	assert!(aux_schema::load_block_weight(&*client, hash_b).unwrap().is_some());
 }
 
 #[test]

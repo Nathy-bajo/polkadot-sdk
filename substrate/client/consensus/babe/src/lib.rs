@@ -1603,6 +1603,11 @@ where
 			let (epoch_descriptor, first_in_epoch, parent_weight) = {
 				let parent_weight = if *parent_header.number() == Zero::zero() {
 					0
+				} else if let Some(weight) = self.weight_storage.load(&parent_hash) {
+					// The parent may have been imported in another concurrent task that has
+					// already published its weight to the shared storage but not yet committed
+					// it to the aux DB.
+					weight
 				} else {
 					aux_schema::load_block_weight(&*self.client, parent_hash)
 						.map_err(|e| ConsensusError::ClientImport(e.to_string()))?
