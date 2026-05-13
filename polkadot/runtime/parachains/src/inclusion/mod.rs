@@ -465,27 +465,24 @@ impl<T: Config> Pallet<T> {
 
 	/// Free pending availability candidates for the given parachain.
 	pub(crate) fn free_para_pending_availability(para_id: ParaId) -> Weight {
-		let mut weight = T::DbWeight::get().reads(1);
-		if PendingAvailability::<T>::contains_key(para_id) {
-			PendingAvailability::<T>::remove(para_id);
-			weight.saturating_accrue(T::DbWeight::get().writes(1));
-			log::debug!(
-				target: LOG_TARGET,
-				"Freed pending availability candidates for frozen para {:?}",
-				para_id,
-			);
-		}
-		weight
+		PendingAvailability::<T>::remove(para_id);
+		log::debug!(
+			target: LOG_TARGET,
+			"Freed pending availability candidates for frozen para {:?}",
+			para_id,
+		);
+		T::DbWeight::get().writes(1)
 	}
 
-	/// Sweep the UMP queue for the given para.
-	pub(crate) fn sweep_para_upward_messages(para_id: ParaId) {
-		Self::cleanup_outgoing_ump_dispatch_queue(para_id);
+	/// Sweep the UMP queue for the given para. Returns the weight consumed.
+	pub(crate) fn sweep_para_upward_messages(para_id: ParaId) -> Weight {
+		let weight = Self::cleanup_outgoing_ump_dispatch_queue(para_id);
 		log::debug!(
 			target: LOG_TARGET,
 			"Swept upward messages for frozen para {:?}",
 			para_id,
 		);
+		weight
 	}
 
 	/// Handle an incoming session change.
@@ -497,17 +494,20 @@ impl<T: Config> Pallet<T> {
 		// and require consumption.
 		for _ in PendingAvailability::<T>::drain() {}
 
-		Self::cleanup_outgoing_ump_dispatch_queues(outgoing_paras);
+		let _ = Self::cleanup_outgoing_ump_dispatch_queues(outgoing_paras);
 	}
 
-	pub(crate) fn cleanup_outgoing_ump_dispatch_queues(outgoing: &[ParaId]) {
+	pub(crate) fn cleanup_outgoing_ump_dispatch_queues(outgoing: &[ParaId]) -> Weight {
+		let mut weight = Weight::zero();
 		for outgoing_para in outgoing {
-			Self::cleanup_outgoing_ump_dispatch_queue(*outgoing_para);
+			weight.saturating_accrue(Self::cleanup_outgoing_ump_dispatch_queue(*outgoing_para));
 		}
+		weight
 	}
 
-	pub(crate) fn cleanup_outgoing_ump_dispatch_queue(para: ParaId) {
+	pub(crate) fn cleanup_outgoing_ump_dispatch_queue(para: ParaId) -> Weight {
 		T::MessageQueue::sweep_queue(AggregateMessageOrigin::Ump(UmpQueueId::Para(para)));
+		T::DbWeight::get().writes(1)
 	}
 
 	pub(crate) fn get_occupied_cores(
@@ -1195,8 +1195,7 @@ impl<T: Config> paras::OnParaFrozen for Pallet<T> {
 	fn on_para_frozen(id: ParaId) -> Weight {
 		let mut weight = Weight::zero();
 		weight.saturating_accrue(Self::free_para_pending_availability(id));
-		Self::sweep_para_upward_messages(id);
-		weight.saturating_accrue(T::DbWeight::get().writes(1));
+		weight.saturating_accrue(Self::sweep_para_upward_messages(id));
 		weight
 	}
 }
