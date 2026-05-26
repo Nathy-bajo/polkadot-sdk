@@ -22,7 +22,7 @@ use pallet_revive::{
 	ReviveApi, create1,
 	evm::{GenericTransaction, H256, Log, ReceiptGasInfo, ReceiptInfo, TransactionSigned, U256},
 };
-use sp_core::keccak_256;
+use sp_crypto_hashing::keccak_256;
 use std::{
 	future::Future,
 	pin::Pin,
