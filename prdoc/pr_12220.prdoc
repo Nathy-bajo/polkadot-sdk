@@ -1,0 +1,10 @@
+title: 'pallet-revive eth-rpc: make SubmittedTransaction::gas() return Option<U256>'
+doc:
+- audience: Node Dev
+  description: |-
+    closes #11889
+
+    Change `SubmittedTransaction::gas()` to return `Option<U256>` mirroring the underlying `GenericTransaction::gas` field, and skip the `wait_for_receipt` gas-limit assertion when no gas limit is set, removing the panic that occurred on legacy/incomplete payloads.
+crates:
+- name: pallet-revive-eth-rpc
+  bump: major
