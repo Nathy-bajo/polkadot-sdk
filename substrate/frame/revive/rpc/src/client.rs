@@ -529,13 +529,17 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 				let number = block.number();
 				let evm_block = backend.eth_block(hash).await?;
 
+				// Advance `latest` before receipts become queryable, so a visible receipt always
+				// implies `latest` reflects its block. Otherwise `eth_call`/`eth_getBalance` at
+				// `latest` can race the receipt and read stale parent-block state (native client).
+				block_provider_update.update_latest(Arc::clone(&block), subscription_type).await;
+
 				let (_, receipts): (Vec<_>, Vec<_>) = receipt_provider
 					.insert_block_receipts_by_hash(hash, number, &evm_block.hash)
 					.await?
 					.into_iter()
 					.unzip();
 
-				block_provider_update.update_latest(Arc::clone(&block), subscription_type).await;
 				fee_history_provider.update_fee_history(&evm_block, &receipts).await;
 
 				// Broadcast new block to eth_subscribe("newHeads") subscribers.
