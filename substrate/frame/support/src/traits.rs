@@ -88,9 +88,10 @@ mod hooks;
 #[allow(deprecated)]
 pub use hooks::GenesisBuild;
 pub use hooks::{
-	BeforeAllRuntimeMigrations, BuildGenesisConfig, Hooks, IntegrityTest, OnFinalize, OnGenesis,
-	OnIdle, OnInitialize, OnPoll, OnRuntimeUpgrade, OnTimestampSet, PostInherents,
-	PostTransactions, PreInherents, UncheckedOnRuntimeUpgrade,
+	newly_added_pallet_marker_key, AfterAllRuntimeMigrations, BeforeAllRuntimeMigrations,
+	BuildGenesisConfig, Hooks, IntegrityTest, OnFinalize, OnGenesis, OnIdle, OnInitialize, OnPoll,
+	OnRuntimeUpgrade, OnTimestampSet, PostInherents, PostTransactions, PreInherents,
+	UncheckedOnRuntimeUpgrade,
 };
 
 pub mod schedule;
