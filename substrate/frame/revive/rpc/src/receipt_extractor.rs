@@ -21,6 +21,20 @@ use crate::{
 use pallet_revive::{
 	ReviveApi, create1,
 	evm::{GenericTransaction, H256, Log, ReceiptGasInfo, ReceiptInfo, TransactionSigned, U256},
+	ClientError, H160, LOG_TARGET, ReceiptGasInfoV1,
+	client::{SubstrateBlock, SubstrateBlockNumber, runtime_api::RuntimeApi},
+	subxt_client::{
+		SrcChainConfig,
+		revive::{
+			calls::types::EthTransact,
+			events::{ContractEmitted, EthExtrinsicRevert},
+		},
+	},
+};
+
+use pallet_revive::{
+	create1,
+	evm::{GenericTransaction, H256, Log, ReceiptInfo, TransactionSigned, U256},
 };
 use sp_crypto_hashing::keccak_256;
 use std::{
@@ -38,7 +52,9 @@ const ETH_TRANSACT_CALL_INDEX: u8 = 0;
 const NOT_DISCOVERED: u32 = u32::MAX;
 
 type FetchReceiptDataFn = Arc<
-	dyn Fn(H256) -> Pin<Box<dyn Future<Output = Option<Vec<ReceiptGasInfo>>> + Send>> + Send + Sync,
+	dyn Fn(H256) -> Pin<Box<dyn Future<Output = Option<Vec<ReceiptGasInfoV1>>> + Send>>
+		+ Send
+		+ Sync,
 >;
 
 type FetchEthBlockHashFn =
@@ -365,6 +381,9 @@ impl ReceiptExtractor {
 		eth_payload: &[u8],
 		receipt_gas_info: &ReceiptGasInfo,
 		transaction_index: usize,
+		receipt_gas_info: ReceiptGasInfoV1,
+		reverted: bool,
+		logs: Vec<Log>,
 	) -> Result<(TransactionSigned, ReceiptInfo), ClientError> {
 		let transaction_hash = H256(keccak_256(eth_payload));
 		let signed_tx =
@@ -441,6 +460,76 @@ impl ReceiptExtractor {
 		block_events: Option<&[ExtrinsicEvents]>,
 	) -> Result<Vec<(TransactionSigned, ReceiptInfo)>, ClientError> {
 		let eth_extrinsics: Vec<(usize, Vec<u8>)> = raw_extrinsics
+		if self.is_before_first_evm_block(block.number()) {
+			return Ok(vec![]);
+		}
+
+		let eth_tx_by_index: BTreeMap<usize, (EthTransact, H256, ReceiptGasInfoV1)> = self
+			.get_block_extrinsics(block)
+			.await?
+			.map(|(call, receipt_gas_info, extrinsic_index)| {
+				let hash = H256(keccak_256(&call.payload));
+				(extrinsic_index, (call, hash, receipt_gas_info))
+			})
+			.collect();
+
+		if eth_tx_by_index.is_empty() {
+			return Ok(vec![]);
+		}
+
+		let substrate_block_number = block.number();
+		let eth_block_number: U256 = substrate_block_number.into();
+		let block_events = block.events().await.inspect_err(|err| {
+			log::debug!(target: LOG_TARGET, "Error fetching events for block #{substrate_block_number}: {err:?}");
+		})?;
+		let (reverted_extrinsics, mut logs_by_extrinsic) = extract_revive_events(
+			&block_events,
+			substrate_block_number,
+			eth_block_number,
+			eth_block_hash,
+			|idx| eth_tx_by_index.get(&idx).map(|(_, hash, _)| *hash),
+		);
+
+		eth_tx_by_index
+			.into_iter()
+			.map(|(transaction_index, (call, transaction_hash, receipt_gas_info))| {
+				let reverted = reverted_extrinsics.contains(&transaction_index);
+				let logs = logs_by_extrinsic.remove(&transaction_index).unwrap_or_default();
+				self.decode_transaction_and_build_receipt(
+					eth_block_hash,
+					eth_block_number,
+					call,
+					transaction_hash,
+					transaction_index,
+					receipt_gas_info,
+					reverted,
+					logs,
+				)
+				.inspect_err(|err| {
+					log::warn!(target: LOG_TARGET, "Error extracting extrinsic: {err:?}");
+				})
+			})
+			.collect()
+	}
+
+	/// Return the ETH extrinsics of the block grouped with reconstruction receipt info and
+	/// extrinsic index
+	async fn get_block_extrinsics(
+		&self,
+		block: &SubstrateBlock,
+	) -> Result<impl Iterator<Item = (EthTransact, ReceiptGasInfoV1, usize)>, ClientError> {
+		// Filter extrinsics from pallet_revive
+		let extrinsics = block.extrinsics().await.inspect_err(|err| {
+			log::debug!(target: LOG_TARGET, "Error fetching for #{:?} extrinsics: {err:?}", block.number());
+		})?;
+
+		let receipt_data = (self.fetch_receipt_data)(block.hash()).await.ok_or_else(|| {
+			log::trace!(target: LOG_TARGET,
+				"Receipt data not found for block #{} ({:?})",
+				block.number(), block.hash());
+			ClientError::ReceiptDataNotFound
+		})?;
+		let extrinsics: Vec<_> = extrinsics
 			.iter()
 			.filter_map(|raw| {
 				let payload = self.decode_eth_transact(raw)?;
@@ -568,8 +657,8 @@ mod tests {
 		})
 	}
 
-	fn gas_info() -> ReceiptGasInfo {
-		ReceiptGasInfo {
+	fn gas_info() -> ReceiptGasInfoV1 {
+		ReceiptGasInfoV1 {
 			gas_used: U256::from(21_000),
 			effective_gas_price: U256::from(1_000_000_000),
 		}
