@@ -62,6 +62,8 @@ pub struct EthExtrinsicEvents {
 
 	/// Contract event logs `(address, topics, data)` emitted by this extrinsic.
 	pub logs: Vec<(sp_core::H160, Vec<H256>, Vec<u8>)>,
+}
+
 impl From<ReceiptGasInfo> for ReceiptGasInfoV1 {
 	fn from(value: ReceiptGasInfo) -> Self {
 		Self { gas_used: value.gas_used, effective_gas_price: value.effective_gas_price }

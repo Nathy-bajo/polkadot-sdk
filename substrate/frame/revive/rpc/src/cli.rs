@@ -274,39 +274,6 @@ fn handle_chain_preflight(
 		Ok(Ok(_)) => Ok(()),
 	}
 }
-fn build_client(
-	tokio_handle: &tokio::runtime::Handle,
-	eth_pruning: EthPruningMode,
-	node_rpc_url: &str,
-	db_options: SqliteConnectOptions,
-	max_request_size: u32,
-	max_response_size: u32,
-	abort_signal: Signals,
-	subscription_gap_queue: SubscriptionGapQueue,
-) -> anyhow::Result<Client> {
-	let fut = async {
-		let (api, rpc_client, rpc) =
-			connect(node_rpc_url, max_request_size, max_response_size).await?;
-		let block_provider = SubxtBlockInfoProvider::new(api.clone(), rpc.clone()).await?;
-
-		let (pool, keep_latest_n_blocks) = match eth_pruning {
-			EthPruningMode::Archive => {
-				(SqlitePoolOptions::new().connect_with(db_options).await?, None)
-			},
-			EthPruningMode::KeepLatest(max_blocks) => {
-				log::info!(target: LOG_TARGET,
-					"💾 Using in-memory database, keeping only {max_blocks} blocks");
-				// see sqlite in-memory issue: https://github.com/transact-rs/sqlx/issues/2510
-				let pool = SqlitePoolOptions::new()
-					.max_connections(1)
-					.idle_timeout(None)
-					.max_lifetime(None)
-					.connect_with(db_options)
-					.await?;
-				(pool, Some(max_blocks))
-			},
-		};
-
 fn dev_accounts() -> Vec<crate::Account> {
 	#[cfg(feature = "subxt")]
 	{

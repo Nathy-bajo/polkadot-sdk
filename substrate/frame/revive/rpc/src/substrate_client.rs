@@ -28,11 +28,9 @@ use crate::{
 use jsonrpsee::core::async_trait;
 use pallet_revive::{
 	EthTransactInfo,
-	evm::{
-		Block as EthBlock, BlockNumberOrTagOrHash, GenericTransaction, ReceiptGasInfo,
-		StateOverrideSet, Trace, TracerType, U256,
-	},
+	evm::{Block as EthBlock, BlockNumberOrTagOrHash, GenericTransaction, StateOverrideSet, U256},
 };
+use pallet_revive_types::runtime_api::{ReceiptGasInfoV1, TraceV1, TracerTypeV1};
 use sc_transaction_pool_api::TransactionStatus;
 use sp_core::H256;
 use sp_weights::Weight;
@@ -156,7 +154,7 @@ pub trait SubstrateClientT: Send + Sync + Clone + 'static {
 	async fn eth_receipt_data(
 		&self,
 		block_hash: SubstrateBlockHash,
-	) -> Result<Vec<ReceiptGasInfo>, crate::client::ClientError>;
+	) -> Result<Vec<ReceiptGasInfoV1>, crate::client::ClientError>;
 
 	/// Trace the given block.
 	async fn trace_block(
@@ -166,8 +164,8 @@ pub trait SubstrateClientT: Send + Sync + Clone + 'static {
 			sp_runtime::generic::Header<u32, sp_runtime::traits::BlakeTwo256>,
 			sp_runtime::OpaqueExtrinsic,
 		>,
-		config: TracerType,
-	) -> Result<Vec<(u32, Trace)>, crate::client::ClientError>;
+		config: TracerTypeV1,
+	) -> Result<Vec<(u32, TraceV1)>, crate::client::ClientError>;
 
 	/// Trace a single transaction within a block.
 	async fn trace_tx(
@@ -178,17 +176,17 @@ pub trait SubstrateClientT: Send + Sync + Clone + 'static {
 			sp_runtime::OpaqueExtrinsic,
 		>,
 		transaction_index: u32,
-		config: TracerType,
-	) -> Result<Trace, crate::client::ClientError>;
+		config: TracerTypeV1,
+	) -> Result<TraceV1, crate::client::ClientError>;
 
 	/// Trace a dry-run call.
 	async fn trace_call(
 		&self,
 		block_hash: SubstrateBlockHash,
 		transaction: GenericTransaction,
-		config: TracerType,
+		config: TracerTypeV1,
 		state_overrides: Option<pallet_revive::evm::StateOverrideSet>,
-	) -> Result<Trace, crate::client::ClientError>;
+	) -> Result<TraceV1, crate::client::ClientError>;
 
 	/// Submit an unsigned `eth_transact` extrinsic and return the first
 	/// transaction status received from the pool.

@@ -32,11 +32,9 @@ use futures::StreamExt;
 use jsonrpsee::core::async_trait;
 use pallet_revive::{
 	DryRunConfig, EthExtrinsicEvents, EthTransactInfo, ReviveApi,
-	evm::{
-		Block as EthBlock, BlockNumberOrTagOrHash, BlockTag, GenericTransaction, ReceiptGasInfo,
-		StateOverrideSet, Trace, TracerType, U256,
-	},
+	evm::{Block as EthBlock, BlockNumberOrTagOrHash, BlockTag, GenericTransaction, StateOverrideSet, U256},
 };
+use pallet_revive_types::runtime_api::{ReceiptGasInfoV1, TraceV1, TracerTypeV1};
 use sc_client_api::{BlockBackend, BlockchainEvents, HeaderBackend};
 use sc_network::NetworkStatusProvider;
 use sc_transaction_pool_api::TransactionPool;
@@ -406,7 +404,7 @@ where
 	async fn eth_receipt_data(
 		&self,
 		block_hash: SubstrateBlockHash,
-	) -> Result<Vec<ReceiptGasInfo>, ClientError> {
+	) -> Result<Vec<ReceiptGasInfoV1>, ClientError> {
 		self.client.runtime_api().eth_receipt_data(block_hash).map_err(native_err)
 	}
 
@@ -414,8 +412,8 @@ where
 		&self,
 		_block_hash: SubstrateBlockHash,
 		block: OpaqueBlock,
-		config: TracerType,
-	) -> Result<Vec<(u32, Trace)>, ClientError> {
+		config: TracerTypeV1,
+	) -> Result<Vec<(u32, TraceV1)>, ClientError> {
 		let parent = *block.header().parent_hash();
 		let block_generic: Block = Block::decode(&mut &block.encode()[..]).map_err(native_err)?;
 		self.client
@@ -429,8 +427,8 @@ where
 		_block_hash: SubstrateBlockHash,
 		block: OpaqueBlock,
 		transaction_index: u32,
-		config: TracerType,
-	) -> Result<Trace, ClientError> {
+		config: TracerTypeV1,
+	) -> Result<TraceV1, ClientError> {
 		let parent = *block.header().parent_hash();
 		let block_generic: Block = Block::decode(&mut &block.encode()[..]).map_err(native_err)?;
 		self.client
@@ -444,9 +442,9 @@ where
 		&self,
 		block_hash: SubstrateBlockHash,
 		transaction: GenericTransaction,
-		config: TracerType,
-		state_overrides: Option<StateOverrideSet>,
-	) -> Result<Trace, ClientError> {
+		config: TracerTypeV1,
+		state_overrides: Option<pallet_revive::evm::StateOverrideSet>,
+	) -> Result<TraceV1, ClientError> {
 		if let Some(overrides) = state_overrides {
 			use pallet_revive::evm::TracingConfig;
 			let tracing_config = TracingConfig::new().with_state_overrides(overrides);

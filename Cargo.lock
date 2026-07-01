@@ -17208,6 +17208,7 @@ dependencies = [
  "nix 0.29.0",
  "pallet-revive",
  "pallet-revive-eth-rpc",
+ "pallet-revive-types",
  "pallet-transaction-payment",
  "pallet-transaction-payment-rpc",
  "pallet-transaction-payment-rpc-runtime-api",

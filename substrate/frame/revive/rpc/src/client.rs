@@ -21,15 +21,12 @@
 pub(crate) mod runtime_api;
 
 use crate::{
-	BlockInfoProvider, BlockTag, FeeHistoryProvider, ReceiptProvider, TracerType, TransactionInfo,
+	BlockInfoProvider, BlockTag, FeeHistoryProvider, ReceiptProvider, TraceV1, TransactionInfo,
 	block_info_provider::BlockInfo,
 	block_sync::{SyncCheckpoint, SyncLabel},
 	substrate_client::{NodeHealth, SubmitResult, SubstrateClientT},
-	BlockInfoProvider, BlockTag, FeeHistoryProvider, ReceiptProvider, SubxtBlockInfoProvider,
-	SyncLabel, TransactionInfo,
-	block_sync::SyncCheckpoint,
-	subxt_client::{self, SrcChainConfig, revive::calls::types::EthTransact},
 };
+use pallet_revive_types::runtime_api::TracerTypeV1;
 use jsonrpsee::types::{ErrorObjectOwned, error::CALL_EXECUTION_FAILED_CODE};
 use pallet_revive::{
 	EthTransactError,
@@ -40,9 +37,6 @@ use pallet_revive::{
 		decode_revert_reason,
 	},
 };
-use pallet_revive_types::runtime_api::*;
-use runtime_api::RuntimeApi;
-use sp_runtime::traits::Block as BlockT;
 use sp_weights::Weight;
 use std::{
 	ops::Range,

@@ -436,11 +436,9 @@ use futures::TryStreamExt;
 use jsonrpsee::core::async_trait;
 use pallet_revive::{
 	EthTransactInfo,
-	evm::{
-		Block as EthBlock, BlockNumberOrTagOrHash, GenericTransaction, ReceiptGasInfo,
-		StateOverrideSet, Trace, TracerType, U256,
-	},
+	evm::{Block as EthBlock, BlockNumberOrTagOrHash, GenericTransaction, StateOverrideSet, U256},
 };
+use pallet_revive_types::runtime_api::{ReceiptGasInfoV1, TraceV1, TracerTypeV1};
 use sp_core::H256;
 use sp_weights::Weight;
 use std::{future::Future, sync::Arc, time::Duration};
@@ -772,7 +770,7 @@ impl SubstrateClientT for SubxtClient {
 	async fn eth_receipt_data(
 		&self,
 		block_hash: SubstrateBlockHash,
-	) -> Result<Vec<ReceiptGasInfo>, ClientError> {
+	) -> Result<Vec<ReceiptGasInfoV1>, ClientError> {
 		use crate::client::runtime_api::RuntimeApi;
 		RuntimeApi::new(self.api.runtime_api().at(block_hash)).eth_receipt_data().await
 	}
@@ -784,8 +782,8 @@ impl SubstrateClientT for SubxtClient {
 			sp_runtime::generic::Header<u32, sp_runtime::traits::BlakeTwo256>,
 			sp_runtime::OpaqueExtrinsic,
 		>,
-		config: TracerType,
-	) -> Result<Vec<(u32, Trace)>, ClientError> {
+		config: TracerTypeV1,
+	) -> Result<Vec<(u32, TraceV1)>, ClientError> {
 		use crate::client::runtime_api::RuntimeApi;
 		let parent = block.header.parent_hash;
 		RuntimeApi::new(self.api.runtime_api().at(parent))
@@ -801,8 +799,8 @@ impl SubstrateClientT for SubxtClient {
 			sp_runtime::OpaqueExtrinsic,
 		>,
 		transaction_index: u32,
-		config: TracerType,
-	) -> Result<Trace, ClientError> {
+		config: TracerTypeV1,
+	) -> Result<TraceV1, ClientError> {
 		use crate::client::runtime_api::RuntimeApi;
 		let parent = block.header.parent_hash;
 		RuntimeApi::new(self.api.runtime_api().at(parent))
@@ -814,9 +812,9 @@ impl SubstrateClientT for SubxtClient {
 		&self,
 		block_hash: SubstrateBlockHash,
 		transaction: GenericTransaction,
-		config: TracerType,
-		state_overrides: Option<pallet_revive::evm::StateOverrideSet>,
-	) -> Result<Trace, ClientError> {
+		config: TracerTypeV1,
+		state_overrides: Option<StateOverrideSet>,
+	) -> Result<TraceV1, ClientError> {
 		use crate::client::runtime_api::RuntimeApi;
 		RuntimeApi::new(self.api.runtime_api().at(block_hash))
 			.trace_call(transaction, config, state_overrides)
