@@ -477,7 +477,6 @@ pub mod pallet {
 
 			ensure!(voting_cleaned || locks_cleaned, Error::<T, I>::NotVoter);
 
-
 			// Refund the fee on success to incentivise third parties to clean up stale storage.
 			Ok(Pays::No.into())
 		}
