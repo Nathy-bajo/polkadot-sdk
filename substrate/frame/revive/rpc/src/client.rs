@@ -25,15 +25,18 @@ use crate::{
 	block_info_provider::BlockInfo,
 	block_sync::{SyncCheckpoint, SyncLabel},
 	substrate_client::{NodeHealth, SubmitResult, SubstrateClientT},
+	BlockId, BlockInfoProvider, BlockNumberOrTag, FeeHistoryProvider, FeeHistoryResult, Filter,
+	Log, ReceiptInfo, ReceiptProvider, SubxtBlockInfoProvider, SyncLabel, SyncingProgress,
+	SyncingStatus, TransactionTrace,
+	block_sync::SyncCheckpoint,
+	subxt_client::{self, SrcChainConfig, revive::calls::types::EthTransact},
 };
 use jsonrpsee::types::{ErrorObjectOwned, error::CALL_EXECUTION_FAILED_CODE};
 use pallet_revive::{
 	EthTransactError,
 	evm::{
-		Block, BlockNumberOrTag, BlockNumberOrTagOrHash, FeeHistoryResult, Filter,
-		GenericTransaction, H256, HashesOrTransactionInfos, Log, ReceiptInfo, StateOverrideSet,
-		SyncingProgress, SyncingStatus, TransactionSigned, TransactionTrace, U256,
-		decode_revert_reason,
+		Block, GenericTransaction, H256, HashesOrTransactionInfos, StateOverrideSet,
+		TransactionSigned, U256, decode_revert_reason,
 	},
 };
 use pallet_revive_types::runtime_api::TracerTypeV1;
@@ -613,22 +616,24 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 	}
 
 	/// Get the block hash for the given block number or tag.
-	pub async fn block_hash_for_tag(
-		&self,
-		at: BlockNumberOrTagOrHash,
-	) -> Result<SubstrateBlockHash, ClientError> {
+	pub async fn block_hash_for_tag(&self, at: BlockId) -> Result<SubstrateBlockHash, ClientError> {
 		match at {
-			BlockNumberOrTagOrHash::BlockHash(hash) => self
-				.resolve_substrate_hash(&hash)
+			BlockId::Hash(hash) => self
+				.resolve_substrate_hash(&H256::from(hash.block_hash.0))
 				.await
 				.ok_or(ClientError::EthereumBlockNotFound),
-			BlockNumberOrTagOrHash::BlockNumber(block_number) => {
+			BlockId::Number(BlockNumberOrTag::Number(block_number)) => {
 				let n: SubstrateBlockNumber =
 					block_number.try_into().map_err(|_| ClientError::ConversionFailed)?;
 				let hash = self.get_block_hash(n).await?.ok_or(ClientError::BlockNotFound)?;
 				Ok(hash)
 			},
 			BlockNumberOrTagOrHash::BlockTag(BlockTag::Earliest) => {
+			BlockId::Number(BlockNumberOrTag::Finalized | BlockNumberOrTag::Safe) => {
+				let block = self.latest_finalized_block().await;
+				Ok(block.hash())
+			},
+			BlockId::Number(BlockNumberOrTag::Earliest) => {
 				let hash = self
 					.get_block_hash(self.earliest_block_number())
 					.await?
@@ -637,6 +642,9 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 			},
 			BlockNumberOrTagOrHash::BlockTag(BlockTag::Finalized | BlockTag::Safe) => {
 				Ok(self.latest_finalized_block().await.hash())
+			BlockId::Number(BlockNumberOrTag::Latest | BlockNumberOrTag::Pending) => {
+				let block = self.latest_block().await;
+				Ok(block.hash())
 			},
 			BlockNumberOrTagOrHash::BlockTag(_) => Ok(self.latest_block().await.hash()),
 		}
@@ -763,12 +771,11 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 		let health = self.backend.system_health().await?;
 		let status = if health.is_syncing {
 			let sync_state = self.sync_state().await?;
-			SyncingProgress {
+			SyncingStatus::SyncingProgress(SyncingProgress {
 				current_block: Some(sync_state.current_block.into()),
 				highest_block: Some(sync_state.highest_block.into()),
 				starting_block: Some(sync_state.starting_block.into()),
-			}
-			.into()
+			})
 		} else {
 			SyncingStatus::Bool(false)
 		};
@@ -855,6 +862,21 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 					block.hash()
 				);
 				None
+		block: &BlockNumberOrTag,
+	) -> Result<Option<Arc<SubstrateBlock>>, ClientError> {
+		match block {
+			BlockNumberOrTag::Number(n) => {
+				let n = (*n).try_into().map_err(|_| ClientError::ConversionFailed)?;
+				self.block_by_number(n).await
+			},
+			BlockNumberOrTag::Finalized | BlockNumberOrTag::Safe => {
+				let block = self.block_provider.latest_finalized_block().await;
+				Ok(Some(block))
+			},
+			BlockNumberOrTag::Earliest => self.block_by_number(self.earliest_block_number()).await,
+			BlockNumberOrTag::Latest | BlockNumberOrTag::Pending => {
+				let block = self.block_provider.latest_block().await;
+				Ok(Some(block))
 			},
 		}
 	}
@@ -1028,7 +1050,7 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 	pub async fn trace_call(
 		&self,
 		transaction: GenericTransaction,
-		block: BlockNumberOrTagOrHash,
+		block: BlockId,
 		config: TracerTypeV1,
 		state_overrides: Option<StateOverrideSet>,
 	) -> Result<TraceV1, ClientError> {
@@ -1042,6 +1064,109 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 		let block_hash = self.resolve_substrate_hash(&receipt.block_hash).await?;
 		self.backend
 			.extrinsic_post_dispatch_weight(block_hash, receipt.transaction_index.as_usize())
+	/// Get the EVM block for the given Substrate block.
+	pub async fn evm_block(
+		&self,
+		block: Arc<SubstrateBlock>,
+		hydrated_transactions: bool,
+	) -> Option<Block> {
+		log::trace!(target: LOG_TARGET, "Get Ethereum block for hash {:?}", block.hash());
+
+		if self
+			.receipt_provider
+			.is_before_earliest_block(&BlockNumberOrTag::Number(block.number().into()))
+		{
+			log::trace!(target: LOG_TARGET,
+				"Block #{} is before receipt floor, skipping", block.number());
+			return None;
+		}
+
+		// This could potentially fail under below circumstances:
+		//  - state has been pruned
+		//  - the block author cannot be obtained from the digest logs (highly unlikely)
+		//  - the node we are targeting has an outdated revive pallet (or ETH block functionality is
+		//    disabled)
+		match self.runtime_api(block.hash()).eth_block().await {
+			Ok(mut eth_block) => {
+				log::trace!(target: LOG_TARGET, "Ethereum block from runtime API hash {:?}", eth_block.hash);
+
+				if hydrated_transactions {
+					// Hydrate the block.
+					let tx_infos = self
+						.receipt_provider
+						.receipts_from_block(&block, eth_block.hash)
+						.await
+						.inspect_err(|err| {
+							log::trace!(target: LOG_TARGET,
+								"Failed to extract receipts for block #{}: {err:?}",
+								block.number());
+						})
+						.unwrap_or_default()
+						.into_iter()
+						.map(|(signed_tx, receipt)| receipt.transaction_info(signed_tx))
+						.collect::<Vec<_>>();
+
+					eth_block.transactions = HashesOrTransactionInfos::TransactionInfos(tx_infos);
+				}
+
+				Some(eth_block)
+			},
+			Err(err) => {
+				log::error!(target: LOG_TARGET, "Failed to get Ethereum block for hash {:?}: {err:?}", block.hash());
+				None
+			},
+		}
+	}
+
+	/// Get the chain ID.
+	pub fn chain_id(&self) -> u64 {
+		self.chain_id
+	}
+
+	/// Get the Max Block Weight.
+	pub fn max_block_weight(&self) -> Weight {
+		self.max_block_weight
+	}
+
+	/// Get the block notifier, if automine is enabled or Self::create_block_notifier was called.
+	pub fn block_notifier(&self) -> Option<tokio::sync::broadcast::Sender<H256>> {
+		self.block_notifier.clone()
+	}
+
+	/// Get the logs matching the given filter.
+	pub async fn logs(&self, filter: Option<Filter>) -> Result<Vec<Log>, ClientError> {
+		let earliest = U256::from(self.earliest_block_number());
+		let latest = U256::from(self.latest_block().await.number());
+		let resolve_block_number = |block: BlockNumberOrTag| match block {
+			BlockNumberOrTag::Number(v) => Ok(U256::from(v)),
+			BlockNumberOrTag::Earliest => Ok(earliest),
+			BlockNumberOrTag::Latest => Ok(latest),
+			BlockNumberOrTag::Finalized | BlockNumberOrTag::Safe | BlockNumberOrTag::Pending => {
+				anyhow::bail!("Unsupported tag: {block:?}")
+			},
+		};
+
+		let logs = self
+			.receipt_provider
+			.logs(filter, &resolve_block_number)
+			.await
+			.map_err(ClientError::LogFilterFailed)?;
+
+		Ok(logs)
+	}
+
+	pub async fn fee_history(
+		&self,
+		block_count: u32,
+		latest_block: BlockNumberOrTag,
+		reward_percentiles: Option<Vec<f64>>,
+	) -> Result<FeeHistoryResult, ClientError> {
+		let Some(latest_block) = self.block_by_number_or_tag(&latest_block).await? else {
+			return Err(ClientError::BlockNotFound);
+		};
+
+		self.fee_history_provider
+			.fee_history(block_count, latest_block.number(), reward_percentiles)
 			.await
 	}
 }

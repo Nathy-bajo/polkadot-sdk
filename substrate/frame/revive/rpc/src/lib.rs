@@ -17,6 +17,7 @@
 //! The [`EthRpcServer`] RPC server implementation
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
+pub use alloy_rpc_types::{BlockId, BlockNumberOrTag, Filter, FilterBlockOption};
 use client::ClientError;
 use futures::{Stream, StreamExt, TryStreamExt};
 use jsonrpsee::{
@@ -26,6 +27,9 @@ use jsonrpsee::{
 };
 use pallet_revive::evm::*;
 use pallet_revive_types::runtime_api::TraceV1;
+use pallet_revive_types::runtime_api::{
+	ExecutionTracerConfigV1, ReceiptGasInfoV1, TraceV1, TracerTypeV1,
+};
 use sp_core::{H160, H256, U256};
 use sp_crypto_hashing::keccak_256;
 use std::pin::Pin;
@@ -67,6 +71,8 @@ pub use substrate_client::SubstrateClientT;
 
 #[cfg(feature = "subxt")]
 pub use subxt_client::SubxtClient;
+mod types;
+pub use types::*;
 
 pub const LOG_TARGET: &str = "eth-rpc";
 
@@ -202,13 +208,16 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> EthRpcServer for EthRpcServerIm
 
 		let block = block.unwrap_or_else(|| {
 			if self.use_pending_for_estimate_gas {
-				BlockTag::Pending.into()
+				BlockNumberOrTag::Pending
 			} else {
 				Default::default()
 			}
 		});
 		let block_tag_or_hash: BlockNumberOrTagOrHash = block.into();
 		let hash = self.client.block_hash_for_tag(block_tag_or_hash.clone()).await?;
+		let block = BlockId::from(block);
+		let hash = self.client.block_hash_for_tag(block).await?;
+		let gas_estimate = self.client.runtime_api(hash).estimate_gas(transaction, block).await?;
 
 		let eth_gas = self
 			.client
@@ -223,7 +232,7 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> EthRpcServer for EthRpcServerIm
 	async fn call(
 		&self,
 		transaction: GenericTransaction,
-		block: Option<BlockNumberOrTagOrHash>,
+		block: Option<BlockId>,
 		state_overrides: Option<StateOverrideSet>,
 	) -> RpcResult<Bytes> {
 		let block = block.unwrap_or_default();
@@ -236,6 +245,10 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> EthRpcServer for EthRpcServerIm
 			.await
 			.map_err(ClientError::from)?;
 		Ok(info.data.into())
+		let hash = self.client.block_hash_for_tag(block).await?;
+		let runtime_api = self.client.runtime_api(hash);
+		let dry_run = runtime_api.dry_run(transaction, block, state_overrides).await?;
+		Ok(dry_run.data.into())
 	}
 
 	async fn send_raw_transaction(&self, transaction: Bytes) -> RpcResult<H256> {
@@ -363,8 +376,7 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> EthRpcServer for EthRpcServerIm
 		}
 
 		if transaction.nonce.is_none() {
-			transaction.nonce =
-				Some(self.get_transaction_count(from, BlockTag::Latest.into()).await?);
+			transaction.nonce = Some(self.get_transaction_count(from, Default::default()).await?);
 		}
 
 		if transaction.chain_id.is_none() {
@@ -387,7 +399,7 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> EthRpcServer for EthRpcServerIm
 		Ok(self.client.evm_block(block, hydrated_transactions).await)
 	}
 
-	async fn get_balance(&self, address: H160, block: BlockNumberOrTagOrHash) -> RpcResult<U256> {
+	async fn get_balance(&self, address: H160, block: BlockId) -> RpcResult<U256> {
 		let hash = self.client.block_hash_for_tag(block).await?;
 		Ok(self.client.balance_at(hash, address).await?)
 	}
@@ -399,6 +411,9 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> EthRpcServer for EthRpcServerIm
 	async fn gas_price(&self) -> RpcResult<U256> {
 		let hash = self.client.block_hash_for_tag(BlockTag::Latest.into()).await?;
 		Ok(self.client.gas_price_at(hash).await?)
+		let hash = self.client.block_hash_for_tag(Default::default()).await?;
+		let runtime_api = self.client.runtime_api(hash);
+		Ok(runtime_api.gas_price().await?)
 	}
 
 	async fn max_priority_fee_per_gas(&self) -> RpcResult<U256> {
@@ -407,7 +422,7 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> EthRpcServer for EthRpcServerIm
 		Ok(Default::default())
 	}
 
-	async fn get_code(&self, address: H160, block: BlockNumberOrTagOrHash) -> RpcResult<Bytes> {
+	async fn get_code(&self, address: H160, block: BlockId) -> RpcResult<Bytes> {
 		let hash = self.client.block_hash_for_tag(block).await?;
 		Ok(self.client.code_at(hash, address).await?.into())
 	}
@@ -446,7 +461,7 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> EthRpcServer for EthRpcServerIm
 	) -> RpcResult<Option<U256>> {
 		let substrate_hash = if let Some(block) = self
 			.client
-			.block_by_number_or_tag(&block.unwrap_or_else(|| BlockTag::Latest.into()))
+			.block_by_number_or_tag(&block.unwrap_or_else(|| BlockNumberOrTag::Latest))
 			.await?
 		{
 			block.hash()
@@ -465,7 +480,7 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> EthRpcServer for EthRpcServerIm
 		&self,
 		address: H160,
 		storage_slot: U256,
-		block: BlockNumberOrTagOrHash,
+		block: BlockId,
 	) -> RpcResult<Bytes> {
 		let hash = self.client.block_hash_for_tag(block).await?;
 		let bytes = self.client.storage_at(hash, address, storage_slot.to_big_endian()).await?;
@@ -507,13 +522,14 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> EthRpcServer for EthRpcServerIm
 		let receipt = self.client.receipt(&transaction_hash).await;
 		let signed_tx = self.client.signed_tx_by_hash(&transaction_hash).await;
 		Ok(receipt.zip(signed_tx).map(|(r, tx)| TransactionInfo::new(&r, tx)))
+		if let (Some(receipt), Some(signed_tx)) = (receipt, signed_tx) {
+			return Ok(Some(receipt.transaction_info(signed_tx)));
+		}
+
+		Ok(None)
 	}
 
-	async fn get_transaction_count(
-		&self,
-		address: H160,
-		block: BlockNumberOrTagOrHash,
-	) -> RpcResult<U256> {
+	async fn get_transaction_count(&self, address: H160, block: BlockId) -> RpcResult<U256> {
 		let hash = self.client.block_hash_for_tag(block).await?;
 		Ok(self.client.nonce_at(hash, address).await?)
 	}
@@ -591,7 +607,7 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> EthRpcServerImpl<C, BP> {
 			return Ok(None);
 		};
 
-		Ok(Some(TransactionInfo::new(&receipt, signed_tx)))
+		Ok(Some(receipt.transaction_info(signed_tx)))
 	}
 
 	async fn handle_subscription_forwarding(
