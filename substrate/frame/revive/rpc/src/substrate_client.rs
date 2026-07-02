@@ -22,13 +22,14 @@
 //! into a parachain node (e.g. Asset Hub) without requiring a separate `subxt`
 //! connection.
 use crate::{
+	BlockId,
 	block_info_provider::BlockInfo,
 	client::{Balance, SubscriptionType, SubstrateBlockHash, SubstrateBlockNumber},
 };
 use jsonrpsee::core::async_trait;
 use pallet_revive::{
 	EthTransactInfo,
-	evm::{Block as EthBlock, BlockNumberOrTagOrHash, GenericTransaction, StateOverrideSet, U256},
+	evm::{Block as EthBlock, GenericTransaction, StateOverrideSet, U256},
 };
 use pallet_revive_types::runtime_api::{ReceiptGasInfoV1, TraceV1, TracerTypeV1};
 use sc_transaction_pool_api::TransactionStatus;
@@ -90,7 +91,7 @@ pub trait SubstrateClientT: Send + Sync + Clone + 'static {
 		&self,
 		block_hash: SubstrateBlockHash,
 		tx: GenericTransaction,
-		block: BlockNumberOrTagOrHash,
+		block: BlockId,
 		state_overrides: Option<StateOverrideSet>,
 	) -> Result<EthTransactInfo<Balance>, crate::client::ClientError>;
 
@@ -99,7 +100,7 @@ pub trait SubstrateClientT: Send + Sync + Clone + 'static {
 		&self,
 		block_hash: SubstrateBlockHash,
 		tx: GenericTransaction,
-		block: BlockNumberOrTagOrHash,
+		block: BlockId,
 	) -> Result<pallet_revive::evm::U256, crate::client::ClientError>;
 
 	/// Return the current gas price.

@@ -15,23 +15,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 use crate::{
-	ClientError, H160, LOG_TARGET, client::SubstrateBlockNumber, substrate_client::RawExtrinsic,
+	ClientError, H160, LOG_TARGET, Log, ReceiptInfo,
+	client::SubstrateBlockNumber, substrate_client::RawExtrinsic,
 };
-
-use pallet_revive::{
-	ReviveApi, create1,
-	evm::{GenericTransaction, H256, Log, ReceiptInfo, TransactionSigned, U256},
-	ClientError, H160, LOG_TARGET, Log, ReceiptGasInfoV1, ReceiptInfo,
-	client::{SubstrateBlock, SubstrateBlockNumber, runtime_api::RuntimeApi},
-	subxt_client::{
-		SrcChainConfig,
-		revive::{
-			calls::types::EthTransact,
-			events::{ContractEmitted, EthExtrinsicRevert},
-		},
-	},
-};
-
 use pallet_revive::{
 	create1,
 	evm::{GenericTransaction, H256, TransactionSigned, U256},
@@ -221,6 +207,7 @@ impl ReceiptExtractor {
 		Client::Api: crate::native_client::ReviveRuntimeApiT<Block, Moment>,
 	{
 		use codec::Encode;
+		use pallet_revive::ReviveApi;
 
 		let client_for_data = client.clone();
 		let fetch_receipt_data_fn = move |block_hash: H256| {

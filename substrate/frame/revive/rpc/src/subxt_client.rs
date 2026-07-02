@@ -428,6 +428,7 @@ mod src_chain {}
 pub use src_chain::*;
 
 use crate::{
+	BlockId,
 	block_info_provider::{BlockInfo, BlockInfoProvider},
 	client::{Balance, ClientError, SubscriptionType, SubstrateBlockHash, SubstrateBlockNumber},
 	substrate_client::{NodeHealth, RawExtrinsic, SubmitResult, SubstrateClientT},
@@ -436,7 +437,7 @@ use futures::TryStreamExt;
 use jsonrpsee::core::async_trait;
 use pallet_revive::{
 	EthTransactInfo,
-	evm::{Block as EthBlock, BlockNumberOrTagOrHash, GenericTransaction, StateOverrideSet, U256},
+	evm::{Block as EthBlock, GenericTransaction, StateOverrideSet, U256},
 };
 use pallet_revive_types::runtime_api::{ReceiptGasInfoV1, TraceV1, TracerTypeV1};
 use sp_core::H256;
@@ -686,7 +687,7 @@ impl SubstrateClientT for SubxtClient {
 		&self,
 		block_hash: SubstrateBlockHash,
 		tx: GenericTransaction,
-		block: BlockNumberOrTagOrHash,
+		block: BlockId,
 		state_overrides: Option<StateOverrideSet>,
 	) -> Result<EthTransactInfo<Balance>, ClientError> {
 		use crate::client::runtime_api::RuntimeApi;
@@ -699,7 +700,7 @@ impl SubstrateClientT for SubxtClient {
 		&self,
 		block_hash: SubstrateBlockHash,
 		tx: GenericTransaction,
-		block: BlockNumberOrTagOrHash,
+		block: BlockId,
 	) -> Result<U256, ClientError> {
 		use crate::client::runtime_api::RuntimeApi;
 		RuntimeApi::new(self.api.runtime_api().at(block_hash))

@@ -15,16 +15,11 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 use crate::{
-	Address, AddressOrAddresses, BlockInfoProvider, BlockNumberOrTag, Bytes, ClientError,
-	FilterTopic, ReceiptExtractor,
+	Address, BlockInfoProvider, BlockNumberOrTag, Bytes, ClientError, Filter, FilterBlockOption,
+	Log, ReceiptExtractor, ReceiptInfo,
 	block_info_provider::{BlockInfo, test::MockBlockInfoProvider},
 	block_sync::{ChainMetadata, SyncCheckpoint, SyncLabel, SyncStateKey},
 	client::SubstrateBlockNumber,
-	Address, BlockInfoProvider, BlockNumberOrTag, Bytes, ChainMetadata, ClientError, Filter,
-	FilterBlockOption, Log, ReceiptExtractor, ReceiptInfo, SubxtBlockInfoProvider, SyncLabel,
-	SyncStateKey,
-	block_sync::SyncCheckpoint,
-	client::{SubstrateBlock, SubstrateBlockNumber},
 };
 use pallet_revive::evm::TransactionSigned;
 use sp_core::{H256, U256};
@@ -853,11 +848,6 @@ impl<BP: BlockInfoProvider> ReceiptProvider<BP> {
 mod tests {
 	use super::*;
 	use crate::block_info_provider::test::{MockBlockInfo, MockBlockInfoProvider};
-	use pallet_revive::evm::{BlockTag, ReceiptInfo, TransactionSigned};
-	use crate::{
-		ReceiptInfo,
-		test::{MockBlockInfo, MockBlockInfoProvider},
-	};
 	use alloy_primitives::{Address as AlloyAddress, B256};
 	use pallet_revive::evm::TransactionSigned;
 	use pretty_assertions::assert_eq;

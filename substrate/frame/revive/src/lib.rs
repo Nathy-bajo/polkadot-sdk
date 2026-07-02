@@ -106,10 +106,8 @@ pub use crate::{
 	debug::DebugSettings,
 	deposit_payment::{Deposit, PGasDeposit},
 	evm::{
-		Address as EthAddress, Block as EthBlock, DryRunConfig, ReceiptInfo, TracingConfig,
-		block_hash::{EthExtrinsicEvents, ReceiptGasInfo},
 		Address as EthAddress, Block as EthBlock, DryRunConfig, TracingConfig,
-		block_hash::ReceiptGasInfo,
+		block_hash::{EthExtrinsicEvents, ReceiptGasInfo},
 	},
 	exec::{CallResources, DelegateInfo, Executable, Key, MomentOf, Origin as ExecOrigin},
 	limits::TRANSIENT_STORAGE_BYTES as TRANSIENT_STORAGE_LIMIT,

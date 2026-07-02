@@ -26,10 +26,7 @@ use jsonrpsee::{
 	types::{ErrorCode, ErrorObjectOwned},
 };
 use pallet_revive::evm::*;
-use pallet_revive_types::runtime_api::TraceV1;
-use pallet_revive_types::runtime_api::{
-	ExecutionTracerConfigV1, ReceiptGasInfoV1, TraceV1, TracerTypeV1,
-};
+use pallet_revive_types::runtime_api::{ExecutionTracerConfigV1, TraceV1, TracerTypeV1};
 use sp_core::{H160, H256, U256};
 use sp_crypto_hashing::keccak_256;
 use std::pin::Pin;
@@ -213,15 +210,12 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> EthRpcServer for EthRpcServerIm
 				Default::default()
 			}
 		});
-		let block_tag_or_hash: BlockNumberOrTagOrHash = block.into();
-		let hash = self.client.block_hash_for_tag(block_tag_or_hash.clone()).await?;
-		let block = BlockId::from(block);
-		let hash = self.client.block_hash_for_tag(block).await?;
-		let gas_estimate = self.client.runtime_api(hash).estimate_gas(transaction, block).await?;
+		let block_id = BlockId::Number(block);
+		let hash = self.client.block_hash_for_tag(block_id.clone()).await?;
 
 		let eth_gas = self
 			.client
-			.estimate_gas(hash, transaction, block_tag_or_hash)
+			.estimate_gas(hash, transaction, block_id)
 			.await
 			.map_err(ClientError::from)?;
 
@@ -245,10 +239,6 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> EthRpcServer for EthRpcServerIm
 			.await
 			.map_err(ClientError::from)?;
 		Ok(info.data.into())
-		let hash = self.client.block_hash_for_tag(block).await?;
-		let runtime_api = self.client.runtime_api(hash);
-		let dry_run = runtime_api.dry_run(transaction, block, state_overrides).await?;
-		Ok(dry_run.data.into())
 	}
 
 	async fn send_raw_transaction(&self, transaction: Bytes) -> RpcResult<H256> {
@@ -409,11 +399,8 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> EthRpcServer for EthRpcServerIm
 	}
 
 	async fn gas_price(&self) -> RpcResult<U256> {
-		let hash = self.client.block_hash_for_tag(BlockTag::Latest.into()).await?;
+		let hash = self.client.block_hash_for_tag(BlockId::Number(BlockNumberOrTag::Latest)).await?;
 		Ok(self.client.gas_price_at(hash).await?)
-		let hash = self.client.block_hash_for_tag(Default::default()).await?;
-		let runtime_api = self.client.runtime_api(hash);
-		Ok(runtime_api.gas_price().await?)
 	}
 
 	async fn max_priority_fee_per_gas(&self) -> RpcResult<U256> {
@@ -521,12 +508,7 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> EthRpcServer for EthRpcServerIm
 	) -> RpcResult<Option<TransactionInfo>> {
 		let receipt = self.client.receipt(&transaction_hash).await;
 		let signed_tx = self.client.signed_tx_by_hash(&transaction_hash).await;
-		Ok(receipt.zip(signed_tx).map(|(r, tx)| TransactionInfo::new(&r, tx)))
-		if let (Some(receipt), Some(signed_tx)) = (receipt, signed_tx) {
-			return Ok(Some(receipt.transaction_info(signed_tx)));
-		}
-
-		Ok(None)
+		Ok(receipt.zip(signed_tx).map(|(r, tx)| r.transaction_info(tx)))
 	}
 
 	async fn get_transaction_count(&self, address: H160, block: BlockId) -> RpcResult<U256> {

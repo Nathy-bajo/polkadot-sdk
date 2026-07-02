@@ -22,7 +22,7 @@
 //! removing the need for a separate `subxt`/WebSocket connection when the RPC
 //! server is embedded inside the node binary.
 use crate::{
-	ClientError, SubstrateClientT,
+	BlockId, ClientError, SubstrateClientT,
 	client::{Balance, SubscriptionType, SubstrateBlockHash, SubstrateBlockNumber},
 	native_block_info_provider::NativeCachedBlock,
 	substrate_client::{NodeHealth, RawExtrinsic, SubmitResult},
@@ -32,10 +32,7 @@ use futures::StreamExt;
 use jsonrpsee::core::async_trait;
 use pallet_revive::{
 	DryRunConfig, EthExtrinsicEvents, EthTransactInfo, ReviveApi,
-	evm::{
-		Block as EthBlock, BlockNumberOrTagOrHash, BlockTag, GenericTransaction, StateOverrideSet,
-		U256,
-	},
+	evm::{Block as EthBlock, GenericTransaction, StateOverrideSet, U256},
 };
 use pallet_revive_types::runtime_api::{ReceiptGasInfoV1, TraceV1, TracerTypeV1};
 use sc_client_api::{BlockBackend, BlockchainEvents, HeaderBackend};
@@ -308,12 +305,11 @@ where
 		&self,
 		block_hash: SubstrateBlockHash,
 		tx: GenericTransaction,
-		block: BlockNumberOrTagOrHash,
+		block: BlockId,
 		state_overrides: Option<StateOverrideSet>,
 	) -> Result<EthTransactInfo<Balance>, ClientError> {
 		let timestamp_override: Option<Moment> =
-			matches!(block, BlockNumberOrTagOrHash::BlockTag(BlockTag::Pending))
-				.then(|| Moment::from(sp_timestamp::Timestamp::current().as_millis()));
+			block.is_pending().then(|| Moment::from(sp_timestamp::Timestamp::current().as_millis()));
 
 		let config = DryRunConfig::<Moment>::default()
 			.with_timestamp_override(timestamp_override)
@@ -330,11 +326,10 @@ where
 		&self,
 		block_hash: SubstrateBlockHash,
 		tx: GenericTransaction,
-		block: BlockNumberOrTagOrHash,
+		block: BlockId,
 	) -> Result<U256, ClientError> {
 		let timestamp_override: Option<Moment> =
-			matches!(block, BlockNumberOrTagOrHash::BlockTag(BlockTag::Pending))
-				.then(|| Moment::from(sp_timestamp::Timestamp::current().as_millis()));
+			block.is_pending().then(|| Moment::from(sp_timestamp::Timestamp::current().as_millis()));
 
 		let config = DryRunConfig::<Moment>::default().with_timestamp_override(timestamp_override);
 
