@@ -21,9 +21,8 @@
 pub(crate) mod runtime_api;
 
 use crate::{
-	BlockId, BlockInfoProvider, BlockNumberOrTag, FeeHistoryProvider, FeeHistoryResult,
-	Filter, Log, ReceiptInfo, ReceiptProvider, SyncingProgress,
-	SyncingStatus, TraceV1, TransactionTrace,
+	BlockId, BlockInfoProvider, BlockNumberOrTag, FeeHistoryProvider, FeeHistoryResult, Filter,
+	Log, ReceiptInfo, ReceiptProvider, SyncingProgress, SyncingStatus, TraceV1, TransactionTrace,
 	block_info_provider::BlockInfo,
 	block_sync::{SyncCheckpoint, SyncLabel},
 	substrate_client::{NodeHealth, SubmitResult, SubstrateClientT},
@@ -676,9 +675,7 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 				let n = (*n).try_into().map_err(|_| ClientError::ConversionFailed)?;
 				self.block_by_number(n).await
 			},
-			BlockNumberOrTag::Earliest => {
-				self.block_by_number(self.earliest_block_number()).await
-			},
+			BlockNumberOrTag::Earliest => self.block_by_number(self.earliest_block_number()).await,
 			BlockNumberOrTag::Finalized | BlockNumberOrTag::Safe => {
 				Ok(Some(self.block_provider.latest_finalized_block().await))
 			},
@@ -855,9 +852,9 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 					block.hash()
 				);
 				None
-		},
+			},
+		}
 	}
-}
 
 	/// Get the logs matching the given filter.
 	pub async fn logs(&self, filter: Option<Filter>) -> Result<Vec<Log>, ClientError> {
@@ -1042,7 +1039,6 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 			.extrinsic_post_dispatch_weight(block_hash, receipt.transaction_index.as_usize())
 			.await
 	}
-
 }
 
 #[cfg(feature = "subxt")]

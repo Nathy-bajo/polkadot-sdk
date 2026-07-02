@@ -308,8 +308,9 @@ where
 		block: BlockId,
 		state_overrides: Option<StateOverrideSet>,
 	) -> Result<EthTransactInfo<Balance>, ClientError> {
-		let timestamp_override: Option<Moment> =
-			block.is_pending().then(|| Moment::from(sp_timestamp::Timestamp::current().as_millis()));
+		let timestamp_override: Option<Moment> = block
+			.is_pending()
+			.then(|| Moment::from(sp_timestamp::Timestamp::current().as_millis()));
 
 		let config = DryRunConfig::<Moment>::default()
 			.with_timestamp_override(timestamp_override)
@@ -328,8 +329,9 @@ where
 		tx: GenericTransaction,
 		block: BlockId,
 	) -> Result<U256, ClientError> {
-		let timestamp_override: Option<Moment> =
-			block.is_pending().then(|| Moment::from(sp_timestamp::Timestamp::current().as_millis()));
+		let timestamp_override: Option<Moment> = block
+			.is_pending()
+			.then(|| Moment::from(sp_timestamp::Timestamp::current().as_millis()));
 
 		let config = DryRunConfig::<Moment>::default().with_timestamp_override(timestamp_override);
 

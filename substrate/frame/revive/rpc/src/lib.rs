@@ -211,7 +211,7 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> EthRpcServer for EthRpcServerIm
 			}
 		});
 		let block_id = BlockId::Number(block);
-		let hash = self.client.block_hash_for_tag(block_id.clone()).await?;
+		let hash = self.client.block_hash_for_tag(block_id).await?;
 
 		let eth_gas = self
 			.client
@@ -230,7 +230,7 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> EthRpcServer for EthRpcServerIm
 		state_overrides: Option<StateOverrideSet>,
 	) -> RpcResult<Bytes> {
 		let block = block.unwrap_or_default();
-		let hash = self.client.block_hash_for_tag(block.clone()).await?;
+		let hash = self.client.block_hash_for_tag(block).await?;
 
 		let info = self
 			.client
@@ -399,7 +399,10 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> EthRpcServer for EthRpcServerIm
 	}
 
 	async fn gas_price(&self) -> RpcResult<U256> {
-		let hash = self.client.block_hash_for_tag(BlockId::Number(BlockNumberOrTag::Latest)).await?;
+		let hash = self
+			.client
+			.block_hash_for_tag(BlockId::Number(BlockNumberOrTag::Latest))
+			.await?;
 		Ok(self.client.gas_price_at(hash).await?)
 	}
 

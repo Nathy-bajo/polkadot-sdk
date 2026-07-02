@@ -19,12 +19,10 @@
 //! [evm-test-suite](https://github.com/paritytech/evm-test-suite) repository.
 
 use crate::{
-	BlockInfoProvider, DbContext, DebugRpcClient, EthRpcClient, ReceiptExtractor, ReceiptProvider,
-	SubxtBlockInfoProvider,
+	BlockHeader, BlockInfoProvider, BoundedOneOrMany, DbContext, DebugRpcClient, EthRpcClient,
+	FilterResults, Log, ReceiptExtractor, ReceiptProvider, SubscriptionItem, SubscriptionKind,
+	SubscriptionOptions, SubxtBlockInfoProvider,
 	block_sync::{ChainMetadata, SyncLabel},
-	BlockHeader, BlockInfoProvider, BoundedOneOrMany, ChainMetadata, DbContext, DebugRpcClient,
-	EthRpcClient, FilterResults, Log, ReceiptExtractor, ReceiptProvider, SubscriptionItem,
-	SubscriptionKind, SubscriptionOptions, SubxtBlockInfoProvider, SyncLabel,
 	cli::{self, CliCommand},
 	client::{Client, GapFillRequest, SubscriptionGapQueue},
 	example::TransactionBuilder,
@@ -980,7 +978,6 @@ async fn test_earliest_block_tag() -> anyhow::Result<()> {
 	assert!(gas > U256::zero(), "gas estimate should be non-zero");
 
 	// eth_feeHistory
-	let fee = client.fee_history(U256::from(1), BlockTag::Earliest.into(), None).await?;
 	let fee = client.fee_history(U256::from(1), BlockNumberOrTag::Earliest, None).await?;
 	assert_eq!(fee.oldest_block, U256::zero(), "feeHistory oldest_block should be 0");
 	assert!(!fee.base_fee_per_gas.is_empty(), "feeHistory should include base fee");

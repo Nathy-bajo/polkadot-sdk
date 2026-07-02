@@ -15,8 +15,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 use crate::{
-	ClientError, H160, LOG_TARGET, Log, ReceiptInfo,
-	client::SubstrateBlockNumber, substrate_client::RawExtrinsic,
+	ClientError, H160, LOG_TARGET, Log, ReceiptInfo, client::SubstrateBlockNumber,
+	substrate_client::RawExtrinsic,
 };
 use pallet_revive::{
 	create1,
