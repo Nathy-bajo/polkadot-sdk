@@ -186,6 +186,7 @@ impl ReceiptExtractor {
 	}
 
 	/// Build a `ReceiptExtractor` for the native path directly from a Substrate client.
+	#[allow(deprecated)]
 	pub fn new_native_from_client<Client, Block, Moment>(
 		client: Arc<Client>,
 		earliest_receipt_block: Option<SubstrateBlockNumber>,
@@ -252,7 +253,7 @@ impl ReceiptExtractor {
 		)
 	}
 
-	/// Create a `ReceiptExtractor` from a [`SubstrateClientT`] implementation.
+	/// Create a `ReceiptExtractor` from a [`crate::SubstrateClientT`] implementation.
 	pub fn new_from_substrate_client<C>(
 		client: C,
 		earliest_receipt_block: Option<SubstrateBlockNumber>,

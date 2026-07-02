@@ -32,7 +32,10 @@ use futures::StreamExt;
 use jsonrpsee::core::async_trait;
 use pallet_revive::{
 	DryRunConfig, EthExtrinsicEvents, EthTransactInfo, ReviveApi,
-	evm::{Block as EthBlock, BlockNumberOrTagOrHash, BlockTag, GenericTransaction, StateOverrideSet, U256},
+	evm::{
+		Block as EthBlock, BlockNumberOrTagOrHash, BlockTag, GenericTransaction, StateOverrideSet,
+		U256,
+	},
 };
 use pallet_revive_types::runtime_api::{ReceiptGasInfoV1, TraceV1, TracerTypeV1};
 use sc_client_api::{BlockBackend, BlockchainEvents, HeaderBackend};
@@ -138,6 +141,7 @@ where
 	Pool: TransactionPool<Block = Block> + Send + Sync + 'static,
 {
 	/// Create a new native client.
+	#[allow(deprecated)]
 	pub fn new(
 		client: Arc<Client>,
 		pool: Arc<Pool>,
@@ -244,6 +248,7 @@ where
 }
 
 #[async_trait]
+#[allow(deprecated)]
 impl<Client, Pool, Block, Moment> SubstrateClientT
 	for NativeSubstrateClient<Client, Pool, Block, Moment>
 where

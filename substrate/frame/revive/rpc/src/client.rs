@@ -26,7 +26,6 @@ use crate::{
 	block_sync::{SyncCheckpoint, SyncLabel},
 	substrate_client::{NodeHealth, SubmitResult, SubstrateClientT},
 };
-use pallet_revive_types::runtime_api::TracerTypeV1;
 use jsonrpsee::types::{ErrorObjectOwned, error::CALL_EXECUTION_FAILED_CODE};
 use pallet_revive::{
 	EthTransactError,
@@ -37,6 +36,7 @@ use pallet_revive::{
 		decode_revert_reason,
 	},
 };
+use pallet_revive_types::runtime_api::TracerTypeV1;
 use sp_weights::Weight;
 use std::{
 	ops::Range,
