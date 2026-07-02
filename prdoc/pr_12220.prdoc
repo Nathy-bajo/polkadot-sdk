@@ -4,7 +4,7 @@ doc:
   description: |-
     closes #11889
 
-    Change `SubmittedTransaction::gas()` to return `Option<U256>` mirroring the underlying `GenericTransaction::gas` field, and skip the `wait_for_receipt` gas-limit assertion when no gas limit is set, removing the panic that occurred on legacy/incomplete payloads.
+    Change SubmittedTransaction::gas() to return Option<U256> to match the underlying optional GenericTransaction::gas field, and only run the wait_for_receipt gas-limit assertion when a gas limit is set. This avoids a possible unwrap() panic on payloads without a gas field, which could only occur in the test and example helpers.
 crates:
 - name: pallet-revive-eth-rpc
   bump: major
