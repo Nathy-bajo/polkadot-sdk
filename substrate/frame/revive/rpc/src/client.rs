@@ -626,28 +626,6 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 		}
 	}
 
-	/// Get a block for the specified hash or number.
-	pub async fn block_by_number_or_tag(
-		&self,
-		block: &BlockNumberOrTag,
-	) -> Result<Option<Arc<SubstrateBlock>>, ClientError> {
-		match block {
-			BlockNumberOrTag::Number(n) => {
-				let n = (*n).try_into().map_err(|_| ClientError::ConversionFailed)?;
-				self.block_by_number(n).await
-			},
-			BlockNumberOrTag::Finalized | BlockNumberOrTag::Safe => {
-				let block = self.block_provider.latest_finalized_block().await;
-				Ok(Some(block))
-			},
-			BlockNumberOrTag::Earliest => self.block_by_number(self.earliest_block_number()).await,
-			BlockNumberOrTag::Latest | BlockNumberOrTag::Pending => {
-				let block = self.block_provider.latest_block().await;
-				Ok(Some(block))
-			},
-		}
-	}
-
 	/// Resolve a [`BlockNumberOrTag`] to a concrete block number.
 	async fn resolve_tag_to_number(&self, tag: BlockNumberOrTag) -> Result<U256, ClientError> {
 		match tag {
@@ -660,16 +638,6 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 				.number()
 				.into()),
 		}
-	}
-
-	/// Get the storage API for the given block.
-	pub fn storage_api(&self, block_hash: H256) -> StorageApi {
-		StorageApi::new(self.api.storage().at(block_hash))
-	}
-
-	/// Get the runtime API for the given block.
-	pub fn runtime_api(&self, block_hash: H256) -> RuntimeApi {
-		RuntimeApi::new(self.api.runtime_api().at(block_hash))
 	}
 
 	/// Get the latest finalized block.
@@ -886,42 +854,6 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 		}
 	}
 
-	/// Get the logs matching the given filter.
-	pub async fn logs(&self, filter: Option<Filter>) -> Result<Vec<Log>, ClientError> {
-		let earliest = U256::from(self.earliest_block_number());
-		let latest_block_number = self.block_number().await?;
-
-		let resolve_block_number = move |block: BlockNumberOrTag| -> anyhow::Result<U256> {
-			match block {
-				BlockNumberOrTag::Number(v) => Ok(U256::from(v)),
-				BlockNumberOrTag::Earliest => Ok(earliest),
-				_ => Ok(U256::from(latest_block_number)),
-			}
-		};
-
-		self.receipt_provider
-			.logs(filter, resolve_block_number)
-			.await
-			.map_err(ClientError::LogFilterFailed)
-	}
-
-	pub async fn fee_history(
-	/// Get a block by hash
-	pub async fn block_by_hash(
-		&self,
-		block_count: u32,
-		latest_block: BlockNumberOrTag,
-		reward_percentiles: Option<Vec<f64>>,
-	) -> Result<FeeHistoryResult, ClientError> {
-		let Some(latest_block) = self.block_by_number_or_tag(&latest_block).await? else {
-			return Err(ClientError::BlockNotFound);
-		};
-
-		self.fee_history_provider
-			.fee_history(block_count, latest_block.number(), reward_percentiles)
-			.await
-	}
-
 	/// Get the gas price at the given block.
 	pub async fn gas_price_at(
 		&self,
@@ -992,15 +924,6 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 	}
 
 	/// Fetch the raw signed block (used for tracing).
-	/// Get a block hash for the given block number.
-	pub async fn get_block_hash(
-		&self,
-		block_number: SubstrateBlockNumber,
-	) -> Result<Option<SubstrateBlockHash>, ClientError> {
-		let maybe_block = self.block_provider.block_by_number(block_number).await?;
-		Ok(maybe_block.map(|block| block.hash()))
-	}
-
 	async fn tracing_block(
 		&self,
 		block_hash: H256,
@@ -1078,6 +1001,9 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 		let block_hash = self.resolve_substrate_hash(&receipt.block_hash).await?;
 		self.backend
 			.extrinsic_post_dispatch_weight(block_hash, receipt.transaction_index.as_usize())
+			.await
+	}
+
 	/// Get the logs matching the given filter.
 	pub async fn logs(&self, filter: Option<Filter>) -> Result<Vec<Log>, ClientError> {
 		let logs =

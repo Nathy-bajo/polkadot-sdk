@@ -326,6 +326,8 @@ macro_rules! impl_node_runtime_apis {
 					_: pallet_revive::evm::U256,
 				) -> Result<(Balance, u32), pallet_revive::BalanceConversionError> { unimplemented!() }
 				// Versioned API methods (api_version = 2)
+				fn version_declarations(
+				) -> pallet_revive_types::runtime_api::ReviveRuntimeApiVersionDeclarations { unimplemented!() }
 				fn eth_block_hash_versioned(
 					_: pallet_revive_types::runtime_api::BlockHashVersionedInputPayload,
 				) -> pallet_revive_types::runtime_api::BlockHashVersionedOutputPayload { unimplemented!() }
@@ -348,8 +350,8 @@ macro_rules! impl_node_runtime_apis {
 					_: pallet_revive_types::runtime_api::NonceVersionedInputPayload,
 				) -> pallet_revive_types::runtime_api::NonceVersionedOutputPayload<Nonce> { unimplemented!() }
 				fn eth_pre_dispatch_weight_versioned(
-					_: pallet_revive_types::runtime_api::EthPreDispatchWeightVersionedInputPayload,
-				) -> Result<pallet_revive_types::runtime_api::EthPreDispatchWeightVersionedOutputPayload, pallet_revive::EthTransactError> { unimplemented!() }
+					_: pallet_revive_types::runtime_api::PreDispatchWeightVersionedInputPayload,
+				) -> Result<pallet_revive_types::runtime_api::PreDispatchWeightVersionedOutputPayload, pallet_revive::EthTransactError> { unimplemented!() }
 				fn upload_code_versioned(
 					_: pallet_revive_types::runtime_api::UploadCodeVersionedInputPayload<sp_core::H160, Balance>,
 				) -> Result<pallet_revive_types::runtime_api::UploadCodeVersionedOutputPayload<Balance>, sp_runtime::DispatchError> { unimplemented!() }
