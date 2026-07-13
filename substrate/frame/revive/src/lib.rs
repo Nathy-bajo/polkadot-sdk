@@ -711,6 +711,14 @@ pub mod pallet {
 	#[pallet::storage]
 	pub(crate) type AccountInfoOf<T: Config> = StorageMap<_, Identity, H160, AccountInfo<T>>;
 
+	/// Contract accounts whose existential deposit was funded externally (the account already
+	/// existed at instantiation, e.g. a pre-funded `CREATE2` address) so the pallet minted none.
+	///
+	/// On termination the ED is only reclaimed when there is no entry here; an entry means the
+	/// pallet never minted it, so reclaiming would skew `active_issuance`.
+	#[pallet::storage]
+	pub(crate) type ExternallyFundedEd<T: Config> = StorageMap<_, Identity, T::AccountId, ()>;
+
 	/// Native currency storage deposit contributed by a user into a contract.
 	///
 	/// Bounds how much native value the user can receive back from that contract's

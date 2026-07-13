@@ -17,8 +17,8 @@
 
 use crate::{
 	AccountInfo, AccountInfoOf, BalanceOf, BalanceWithDust, Code, CodeInfo, CodeInfoOf,
-	CodeRemoved, Config, ContractInfo, Error, Event, ImmutableData, ImmutableDataOf, LOG_TARGET,
-	Pallet as Contracts, RuntimeCosts, TrieId,
+	CodeRemoved, Config, ContractInfo, Error, Event, ExternallyFundedEd, ImmutableData,
+	ImmutableDataOf, LOG_TARGET, Pallet as Contracts, RuntimeCosts, TrieId,
 	access_list::{AccessEntry, AccessList, StorageAccessKind},
 	address::{self, AddressMapper},
 	deposit_payment::Deposit as _,
@@ -1334,7 +1334,12 @@ where
 			// We need to make sure that the contract's account exists before calling its
 			// constructor.
 			if entry_point == ExportedFunction::Constructor {
-				if !frame_system::Pallet::<T>::account_exists(&account_id) {
+				if frame_system::Pallet::<T>::account_exists(&account_id) {
+					// Account already holds an ED, so the
+					// pallet mints none. Record it so termination won't reclaim an ED it never
+					// minted, which would skew `active_issuance`. See #12641.
+					<ExternallyFundedEd<T>>::insert(&account_id, ());
+				} else {
 					T::Deposit::init_contract(account_id)?;
 				}
 
@@ -1805,8 +1810,12 @@ where
 			// we added this consumer manually when instantiating
 			System::<T>::dec_consumers(&contract_account);
 
-			// ED was minted when the account was brought into existence; burn it now.
-			T::Deposit::destroy_contract(contract_account)?;
+			// Only reclaim the ED if the pallet minted it at instantiation. If the account was
+			// externally funded, the ED stays in its balance (forwarded to the beneficiary
+			// below); burning/reactivating it here would skew `active_issuance`. See #12641.
+			if <ExternallyFundedEd<T>>::take(&contract_account).is_none() {
+				T::Deposit::destroy_contract(contract_account)?;
+			}
 
 			// this is needed to:
 			// 1) Send any balance that was send to the contract after termination.
