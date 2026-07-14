@@ -490,8 +490,6 @@ impl<T: Config<I>, I: 'static> Pallet<T, I> {
 		poll_index: PollIndexOf<T, I>,
 		vote: AccountVote<BalanceOf<T, I>>,
 	) -> DispatchResult {
-		// Votes with zero balance serve no purpose and would create empty storage entries.
-		ensure!(!vote.balance().is_zero(), Error::<T, I>::ZeroVote);
 		ensure!(
 			vote.balance() <= T::Currency::total_balance(who),
 			Error::<T, I>::InsufficientFunds
@@ -503,6 +501,13 @@ impl<T: Config<I>, I: 'static> Pallet<T, I> {
 			let (tally, class) = poll_status.ensure_ongoing().ok_or(Error::<T, I>::NotOngoing)?;
 			VotingFor::<T, I>::try_mutate(who, &class, |voting| {
 				if let Voting::Casting(Casting { ref mut votes, delegations, .. }) = voting {
+					// Reject a zero-balance vote unless the account has delegations to direct.
+					ensure!(
+						!vote.balance().is_zero() ||
+							!delegations.capital.is_zero() ||
+							!delegations.votes.is_zero(),
+						Error::<T, I>::ZeroVote
+					);
 					match votes.binary_search_by_key(&poll_index, |i| i.0) {
 						Ok(i) => {
 							// Shouldn't be possible to fail, but we handle it gracefully.

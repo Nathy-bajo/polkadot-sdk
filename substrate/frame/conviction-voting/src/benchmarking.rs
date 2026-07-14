@@ -272,6 +272,8 @@ benchmarks_instance_pallet! {
 	}: _(RawOrigin::Signed(caller), target_lookup, class.clone())
 	verify {
 		assert!(!VotingFor::<T, I>::contains_key(&target, &class));
+		// The zero-balance lock entry must have been pruned by the cleanup as well.
+		assert!(!ClassLocksFor::<T, I>::get(&target).iter().any(|(c, _)| c == &class));
 	}
 
 	unlock {

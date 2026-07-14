@@ -1093,6 +1093,7 @@ fn empty_tally_approval_is_zero() {
 #[test]
 fn zero_balance_vote_is_rejected() {
 	new_test_ext().execute_with(|| {
+		// Account 1 has no incoming delegations, so a zero-balance vote is meaningless.
 		assert_noop!(
 			Voting::vote(RuntimeOrigin::signed(1), 3, aye(0, 0)),
 			Error::<Test>::ZeroVote
@@ -1101,6 +1102,24 @@ fn zero_balance_vote_is_rejected() {
 			Voting::vote(RuntimeOrigin::signed(1), 3, nay(0, 0)),
 			Error::<Test>::ZeroVote
 		);
+	});
+}
+
+#[test]
+fn delegate_can_vote_with_zero_own_balance() {
+	new_test_ext().execute_with(|| {
+		// Poll 3 is ongoing in class 0. Account 1 delegates its class-0 voting power to
+		// account 2, giving account 2 delegated capital/votes without any own stake.
+		assert_ok!(Voting::delegate(RuntimeOrigin::signed(1), class(3), 2, Conviction::Locked1x, 5));
+
+		// Account 2 can now cast a vote using none of its own balance: the delegated power
+		// alone is applied to the poll.
+		assert_ok!(Voting::vote(RuntimeOrigin::signed(2), 3, aye(0, 0)));
+		assert_eq!(tally(3), Tally::from_parts(5, 0, 5));
+
+		// Removing the (zero-balance) vote unwinds the delegated contribution again.
+		assert_ok!(Voting::remove_vote(RuntimeOrigin::signed(2), Some(class(3)), 3));
+		assert_eq!(tally(3), Tally::from_parts(0, 0, 0));
 	});
 }
 
