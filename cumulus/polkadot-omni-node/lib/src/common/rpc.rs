@@ -130,7 +130,11 @@ mod eth_rpc {
 				module.merge(StateMigration::new(client.clone(), backend).into_rpc())?;
 				if let Some(statement_store) = statement_store {
 					module.merge(
-						StatementStore::new(statement_store, spawn_handle.clone()).into_rpc(),
+						StatementStore::new(statement_store.clone(), spawn_handle.clone())
+							.into_rpc(),
+					)?;
+					module.merge(
+						StatementSpec::new(statement_store, spawn_handle.clone()).into_rpc(),
 					)?;
 				}
 				if let Some(hop_pool) = hop_pool {
@@ -241,52 +245,4 @@ where
 		network: Arc<dyn sc_network::service::traits::NetworkService>,
 		sync_service: Arc<sc_network_sync::SyncingService<Block>>,
 	) -> sc_service::error::Result<RpcExtension>;
-}
-
-pub(crate) struct BuildParachainRpcExtensions<Block, RuntimeApi>(PhantomData<(Block, RuntimeApi)>);
-
-impl<Block: BlockT, RuntimeApi>
-	BuildRpcExtensions<
-		ParachainClient<Block, RuntimeApi>,
-		ParachainBackend<Block>,
-		sc_transaction_pool::TransactionPoolHandle<Block, ParachainClient<Block, RuntimeApi>>,
-		sc_statement_store::Store,
-	> for BuildParachainRpcExtensions<Block, RuntimeApi>
-where
-	RuntimeApi:
-		ConstructNodeRuntimeApi<Block, ParachainClient<Block, RuntimeApi>> + Send + Sync + 'static,
-	RuntimeApi::RuntimeApi: pallet_transaction_payment_rpc::TransactionPaymentRuntimeApi<Block, Balance>
-		+ substrate_frame_rpc_system::AccountNonceApi<Block, AccountId, Nonce>,
-{
-	fn build_rpc_extensions(
-		client: Arc<ParachainClient<Block, RuntimeApi>>,
-		backend: Arc<ParachainBackend<Block>>,
-		pool: Arc<
-			sc_transaction_pool::TransactionPoolHandle<Block, ParachainClient<Block, RuntimeApi>>,
-		>,
-		statement_store: Option<Arc<sc_statement_store::Store>>,
-		hop_pool: Option<Arc<sc_hop::HopDataPool>>,
-		spawn_handle: Arc<dyn sp_core::traits::SpawnNamed>,
-	) -> sc_service::error::Result<RpcExtension> {
-		let build = || -> Result<RpcExtension, Box<dyn std::error::Error + Send + Sync>> {
-			let mut module = RpcExtension::new(());
-
-			module.merge(System::new(client.clone(), pool).into_rpc())?;
-			module.merge(TransactionPayment::new(client.clone()).into_rpc())?;
-			module.merge(StateMigration::new(client.clone(), backend).into_rpc())?;
-			if let Some(statement_store) = statement_store {
-				module.merge(
-					StatementStore::new(statement_store.clone(), spawn_handle.clone()).into_rpc(),
-				)?;
-				module.merge(StatementSpec::new(statement_store, spawn_handle).into_rpc())?;
-			}
-			if let Some(hop_pool) = hop_pool {
-				module.merge(HopRpcServer::new(hop_pool, client.clone()).into_rpc())?;
-			}
-			module.merge(Dev::new(client).into_rpc())?;
-
-			Ok(module)
-		};
-		build().map_err(Into::into)
-	}
 }
