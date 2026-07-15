@@ -777,10 +777,10 @@ impl<T: Config<I>, I: 'static> Pallet<T, I> {
 				}
 			})?;
 
-		Self::deposit_event(Event::<T, I>::Undelegated(who.clone(), class.clone()));
-
 		// Clean up if voting is now empty
 		Self::maybe_clean_voting(&who, &class);
+		
+		Self::deposit_event(Event::<T, I>::Undelegated(who, class));
 
 		Ok(votes)
 	}
