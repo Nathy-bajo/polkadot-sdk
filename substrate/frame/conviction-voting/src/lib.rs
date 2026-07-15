@@ -452,7 +452,7 @@ pub mod pallet {
 			// Remove the VotingFor entry only if it is truly empty.
 			let voting_cleaned = VotingFor::<T, I>::mutate_exists(&who, &class, |voting_opt| {
 				if let Some(voting) = voting_opt {
-					if Self::is_empty_voting(voting) {
+					if voting.is_empty() {
 						*voting_opt = None;
 						return true;
 					}
@@ -846,36 +846,11 @@ impl<T: Config<I>, I: 'static> Pallet<T, I> {
 		Self::maybe_clean_class_locks(who);
 	}
 
-	/// Check if a `VotingFor` entry is empty and can safely be removed from storage.
-	///
-	/// A `Casting` entry is empty when it has no active votes, no incoming delegations, and no
-	/// prior lock balance.
-	///
-	/// A `Delegating` entry is empty when the delegated balance is zero, there are no incoming
-	/// delegations, and there is no prior lock balance. In practice a live delegation always
-	/// carries a non-zero balance, so this covers only degenerate/legacy records.
-	pub(crate) fn is_empty_voting(voting: &VotingOf<T, I>) -> bool {
-		match voting {
-			Voting::Casting(Casting { votes, delegations, prior }) => {
-				votes.is_empty() &&
-					delegations.votes.is_zero() &&
-					delegations.capital.is_zero() &&
-					prior.locked().is_zero()
-			},
-			Voting::Delegating(Delegating { balance, delegations, prior, .. }) => {
-				balance.is_zero() &&
-					delegations.votes.is_zero() &&
-					delegations.capital.is_zero() &&
-					prior.locked().is_zero()
-			},
-		}
-	}
-
 	/// Clean up VotingFor storage if it's empty
 	fn maybe_clean_voting(who: &T::AccountId, class: &ClassOf<T, I>) {
 		VotingFor::<T, I>::mutate_exists(who, class, |voting_opt| {
 			if let Some(voting) = voting_opt {
-				if Self::is_empty_voting(voting) {
+				if voting.is_empty() {
 					*voting_opt = None;
 				}
 			}
