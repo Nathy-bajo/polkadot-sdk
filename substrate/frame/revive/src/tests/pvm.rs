@@ -23,8 +23,7 @@ use super::{
 };
 use crate::{
 	AccountInfo, AccountInfoOf, BalanceWithDust, Code, Config, ContractInfo, DebugSettings,
-	DeletionQueueCounter, Error, ExecConfig, ExternallyFundedEd, HoldReason, Origin, Pallet,
-	StorageDeposit,
+	DeletionQueueCounter, Error, ExecConfig, HoldReason, Origin, Pallet, StorageDeposit,
 	address::{AddressMapper, create1, create2},
 	assert_refcount, assert_return_code,
 	evm::{CallTrace, CallTracer, CallType, fees::InfoT},
@@ -5549,13 +5548,15 @@ fn terminate_at_prefunded_address_keeps_issuance_balanced() {
 		let total_before = Balances::total_issuance();
 		let inactive_before = Balances::inactive_issuance();
 
-		let Contract { addr, account_id } = builder::bare_instantiate(Code::Upload(code))
+		let Contract { addr, account_id: _ } = builder::bare_instantiate(Code::Upload(code))
 			.salt(Some(salt))
 			.build_and_unwrap_contract();
 		assert_eq!(addr, contract_addr);
+		// The externally-funded ED is recorded on the contract info so termination does not
+		// reclaim it.
 		assert!(
-			ExternallyFundedEd::<Test>::contains_key(&account_id),
-			"externally-funded ED must be recorded so termination does not reclaim it",
+			AccountInfo::<Test>::load_contract(&addr).unwrap().ed_externally_funded,
+			"externally-funded ED must be recorded on the contract info",
 		);
 
 		// Terminate, forwarding the remaining balance to EVE's fallback account.
@@ -5563,8 +5564,8 @@ fn terminate_at_prefunded_address_keeps_issuance_balanced() {
 		builder::bare_call(addr).data(EVE_ADDR.encode()).build_and_unwrap_result();
 
 		assert!(
-			!ExternallyFundedEd::<Test>::contains_key(&account_id),
-			"marker must be cleared on termination",
+			AccountInfo::<Test>::load_contract(&addr).is_none(),
+			"contract must be removed on termination",
 		);
 		// The externally-funded ED was never deactivated or reactivated, so inactive issuance is
 		// undisturbed (the bug drifted it downward).

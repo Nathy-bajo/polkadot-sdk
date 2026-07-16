@@ -17,8 +17,8 @@
 
 use crate::{
 	AccountInfo, AccountInfoOf, BalanceOf, BalanceWithDust, Code, CodeInfo, CodeInfoOf,
-	CodeRemoved, Config, ContractInfo, Error, Event, ExternallyFundedEd, ImmutableData,
-	ImmutableDataOf, LOG_TARGET, Pallet as Contracts, RuntimeCosts, TrieId,
+	CodeRemoved, Config, ContractInfo, Error, Event, ImmutableData, ImmutableDataOf, LOG_TARGET,
+	Pallet as Contracts, RuntimeCosts, TrieId,
 	access_list::{AccessEntry, AccessList, StorageAccessKind},
 	address::{self, AddressMapper},
 	deposit_payment::Deposit as _,
@@ -256,6 +256,8 @@ struct TerminateArgs<T: Config> {
 	trie_id: TrieId,
 	/// The code referenced by the contract. Will be deleted if refcount drops to zero.
 	code_hash: H256,
+	/// `true` if the ED was externally funded, so termination must not reclaim it. See #12641.
+	ed_externally_funded: bool,
 	/// Triggered by the EVM opcode.
 	only_if_same_tx: bool,
 }
@@ -1335,10 +1337,9 @@ where
 			// constructor.
 			if entry_point == ExportedFunction::Constructor {
 				if frame_system::Pallet::<T>::account_exists(&account_id) {
-					// Account already holds an ED, so the
-					// pallet mints none. Record it so termination won't reclaim an ED it never
-					// minted, which would skew `active_issuance`. See #12641.
-					<ExternallyFundedEd<T>>::insert(&account_id, ());
+					// Account already holds an ED; record it so termination won't reclaim an ED
+					// the pallet never minted (which would skew `active_issuance`).
+					frame.contract_info().ed_externally_funded = true;
 				} else {
 					T::Deposit::init_contract(account_id)?;
 				}
@@ -1810,10 +1811,9 @@ where
 			// we added this consumer manually when instantiating
 			System::<T>::dec_consumers(&contract_account);
 
-			// Only reclaim the ED if the pallet minted it at instantiation. If the account was
-			// externally funded, the ED stays in its balance (forwarded to the beneficiary
-			// below); burning/reactivating it here would skew `active_issuance`. See #12641.
-			if <ExternallyFundedEd<T>>::take(&contract_account).is_none() {
+			// Only reclaim the ED if the pallet minted it. If it was externally funded, the ED
+			// stays and is forwarded to the beneficiary below; reclaiming would skew issuance.
+			if !args.ed_externally_funded {
 				T::Deposit::destroy_contract(contract_account)?;
 			}
 
@@ -2027,6 +2027,7 @@ where
 		let info = frame.contract_info();
 		let trie_id = info.trie_id.clone();
 		let code_hash = info.code_hash;
+		let ed_externally_funded = info.ed_externally_funded;
 		let contract_address = T::AddressMapper::to_address(&frame.account_id);
 		let beneficiary = T::AddressMapper::to_account_id(beneficiary);
 
@@ -2045,7 +2046,13 @@ where
 		let account_id = frame.account_id.clone();
 		self.top_frame_mut().contracts_to_be_destroyed.insert(
 			account_id,
-			TerminateArgs { beneficiary, trie_id, code_hash, only_if_same_tx: true },
+			TerminateArgs {
+				beneficiary,
+				trie_id,
+				code_hash,
+				ed_externally_funded,
+				only_if_same_tx: true,
+			},
 		);
 		Ok(CodeRemoved::Yes)
 	}
@@ -2556,6 +2563,7 @@ where
 		let info = parent.contract_info();
 		let trie_id = info.trie_id.clone();
 		let code_hash = info.code_hash;
+		let ed_externally_funded = info.ed_externally_funded;
 		let contract_address = T::AddressMapper::to_address(&parent.account_id);
 		let beneficiary = T::AddressMapper::to_account_id(beneficiary);
 
@@ -2573,7 +2581,13 @@ where
 		)?;
 
 		// schedule for delayed deletion
-		let args = TerminateArgs { beneficiary, trie_id, code_hash, only_if_same_tx: false };
+		let args = TerminateArgs {
+			beneficiary,
+			trie_id,
+			code_hash,
+			ed_externally_funded,
+			only_if_same_tx: false,
+		};
 		self.top_frame_mut().contracts_to_be_destroyed.insert(parent_account_id, args);
 
 		Ok(())
@@ -2657,6 +2671,7 @@ pub fn bench_do_terminate<T: Config>(
 	beneficiary: T::AccountId,
 	trie_id: TrieId,
 	code_hash: H256,
+	ed_externally_funded: bool,
 	only_if_same_tx: bool,
 ) -> Result<(), DispatchError> {
 	Stack::<T, crate::ContractBlob<T>>::do_terminate(
@@ -2664,7 +2679,7 @@ pub fn bench_do_terminate<T: Config>(
 		exec_config,
 		contract_account,
 		origin,
-		&TerminateArgs { beneficiary, trie_id, code_hash, only_if_same_tx },
+		&TerminateArgs { beneficiary, trie_id, code_hash, ed_externally_funded, only_if_same_tx },
 	)
 }
 

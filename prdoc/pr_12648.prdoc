@@ -12,10 +12,14 @@ doc:
     `active_issuance` (which feeds inflation, staking rewards and OpenGov conviction) and
     burning an ED the pallet never minted.
 
-    Instantiation now records, in a new `ExternallyFundedEd` map, contracts whose ED was
-    funded externally, and termination only reclaims the ED when the pallet actually minted
-    it. Contracts whose ED was externally funded keep it in their balance and forward it to
-    the beneficiary on termination.
+    `ContractInfo` now carries an `ed_externally_funded` flag that instantiation sets when the
+    account already existed, and termination only reclaims the ED when the pallet actually
+    minted it. Contracts whose ED was externally funded keep it in their balance and forward it
+    to the beneficiary on termination.
+
+    A new multi-block migration (`pallet_revive::migrations::v5`) adds the flag to existing
+    contract entries, defaulting to pallet-minted. Runtimes must add it to their
+    `MultiBlockMigrator` migrations tuple.
 crates:
 - name: pallet-revive
-  bump: patch
+  bump: minor

@@ -186,6 +186,7 @@ pub trait WeightInfo {
 	fn v4_code_upload_step() -> Weight;
 	fn v4_contract_step() -> Weight;
 	fn v4_deletion_queue_step() -> Weight;
+	fn v5_migration_step() -> Weight;
 	fn on_finalize_per_transaction(n: u32, ) -> Weight;
 	fn on_finalize_per_transaction_data(d: u32, ) -> Weight;
 	fn on_finalize_per_event(e: u32, ) -> Weight;
@@ -1635,6 +1636,16 @@ impl<T: frame_system::Config> WeightInfo for SubstrateWeight<T> {
 		//  Estimated: `6288`
 		// Minimum execution time: 9_770_000 picoseconds.
 		Weight::from_parts(10_686_000, 6288)
+			.saturating_add(T::DbWeight::get().reads(2_u64))
+			.saturating_add(T::DbWeight::get().writes(1_u64))
+	}
+	/// Storage: `Revive::AccountInfoOf` (r:2 w:1)
+	/// Proof: `Revive::AccountInfoOf` (`max_values`: None, `max_size`: Some(248), added: 2723, mode: `MaxEncodedLen`)
+	fn v5_migration_step() -> Weight {
+		// Placeholder weights: regenerate with `polkadot-sdk bench`. Reads one contract entry
+		// and rewrites it with the added `ed_externally_funded` flag.
+		// Minimum execution time: 10_000_000 picoseconds.
+		Weight::from_parts(12_000_000, 6434)
 			.saturating_add(T::DbWeight::get().reads(2_u64))
 			.saturating_add(T::DbWeight::get().writes(1_u64))
 	}
@@ -3182,6 +3193,14 @@ impl WeightInfo for () {
 		//  Estimated: `6288`
 		// Minimum execution time: 9_770_000 picoseconds.
 		Weight::from_parts(10_686_000, 6288)
+			.saturating_add(RocksDbWeight::get().reads(2_u64))
+			.saturating_add(RocksDbWeight::get().writes(1_u64))
+	}
+	/// Storage: `Revive::AccountInfoOf` (r:2 w:1)
+	/// Proof: `Revive::AccountInfoOf` (`max_values`: None, `max_size`: Some(248), added: 2723, mode: `MaxEncodedLen`)
+	fn v5_migration_step() -> Weight {
+		// Placeholder weights: regenerate with `polkadot-sdk bench`.
+		Weight::from_parts(12_000_000, 6434)
 			.saturating_add(RocksDbWeight::get().reads(2_u64))
 			.saturating_add(RocksDbWeight::get().writes(1_u64))
 	}
