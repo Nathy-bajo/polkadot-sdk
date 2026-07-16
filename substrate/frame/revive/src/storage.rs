@@ -107,7 +107,8 @@ pub struct ContractInfo<T: Config> {
 	pub storage_base_deposit: BalanceOf<T>,
 	/// The size of the immutable data of this contract.
 	pub immutable_data_len: u32,
-	/// `true` if the account already existed at instantiation so the pallet minted no ED and termination must not reclaim one.
+	/// `true` if the account already existed at instantiation so the pallet minted no ED and
+	/// termination must not reclaim one.
 	pub ed_externally_funded: bool,
 }
 
