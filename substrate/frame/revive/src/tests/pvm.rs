@@ -5525,9 +5525,9 @@ fn existential_deposit_shall_not_be_charged_twice() {
 	});
 }
 
-/// Regression test for issue #12641: terminating a contract instantiated at a pre-funded
-/// address must not burn or reactivate an existential deposit the pallet never minted, which
-/// previously skewed `active_issuance`.
+/// Regression test: terminating a contract instantiated at a pre-funded address must not burn
+/// or reactivate an existential deposit the pallet never minted, which previously skewed
+/// `active_issuance`.
 #[test]
 fn terminate_at_prefunded_address_keeps_issuance_balanced() {
 	let (code, _) = compile_module("terminate_and_send_to_argument").unwrap();

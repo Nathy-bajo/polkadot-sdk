@@ -256,7 +256,7 @@ struct TerminateArgs<T: Config> {
 	trie_id: TrieId,
 	/// The code referenced by the contract. Will be deleted if refcount drops to zero.
 	code_hash: H256,
-	/// `true` if the ED was externally funded, so termination must not reclaim it. See #12641.
+	/// `true` if the ED was externally funded, so termination must not reclaim it.
 	ed_externally_funded: bool,
 	/// Triggered by the EVM opcode.
 	only_if_same_tx: bool,

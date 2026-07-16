@@ -19,7 +19,7 @@
 //!
 //! Re-encodes every [`crate::AccountInfoOf`] contract entry with the new `ed_externally_funded`
 //! flag defaulting to `false` (pallet-minted), preserving the historical termination behaviour
-//! for existing contracts. `EOA` entries encode identically and are left untouched. See #12641.
+//! for existing contracts. `EOA` entries encode identically and are left untouched.
 
 use super::PALLET_MIGRATIONS_ID;
 #[cfg(feature = "try-runtime")]
