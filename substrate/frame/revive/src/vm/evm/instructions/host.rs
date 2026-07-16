@@ -86,8 +86,8 @@ pub fn extcodecopy<E: Ext>(interpreter: &mut Interpreter<E>) -> ControlFlow<Halt
 		.charge_or_halt(RuntimeCosts::ExtCodeCopy(code_size.max(len as u32)))?;
 
 	let memory_offset = as_usize_or_halt::<E::T>(memory_offset)?;
-	// Out-of-range `code_offset` must zero-fill, not fault (EVM spec / `revm` / sibling copy
-	// opcodes); `copy_code_slice` zero-fills past the code length, so saturating is safe.
+	// Saturate rather than halt: an offset past the code just zero-fills, which
+	// `copy_code_slice` already handles.
 	let code_offset = as_usize_saturated(code_offset);
 
 	interpreter.memory.resize(memory_offset, len)?;

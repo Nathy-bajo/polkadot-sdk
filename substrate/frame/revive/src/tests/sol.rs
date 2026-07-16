@@ -525,8 +525,8 @@ fn upload_evm_runtime_code_works() {
 
 #[test]
 fn extcodecopy_out_of_range_offset_zero_fills() {
-	// #12643: `EXTCODECOPY` with a `code_offset` that doesn't fit in `usize` (>= 2^64) must
-	// zero-fill, not fault. Bytecode: `EXTCODECOPY(self, 0, 2^64, 32); RETURN(0, 32)`.
+	// Regression test for #12643: a `code_offset` of 2^64 overflows `usize` and used to halt.
+	// Copy 32 bytes of our own code from that offset and return them; expect all zeroes.
 	#[rustfmt::skip]
 	let runtime_code = vec![
 		PUSH1, 0x20,                                          // size = 32
@@ -545,10 +545,9 @@ fn extcodecopy_out_of_range_offset_zero_fills() {
 		let Contract { addr, .. } =
 			builder::bare_instantiate(Code::Upload(init_code)).build_and_unwrap_contract();
 
-		// The call must succeed (not trap) and return 32 zero bytes.
 		let result = builder::bare_call(addr).build_and_unwrap_result();
-		assert!(!result.did_revert(), "call must not revert");
-		assert_eq!(result.data, vec![0u8; 32], "out-of-range EXTCODECOPY must zero-fill");
+		assert!(!result.did_revert());
+		assert_eq!(result.data, vec![0u8; 32]);
 	});
 }
 
