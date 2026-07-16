@@ -120,10 +120,10 @@ pub enum ClientError {
 	#[cfg(feature = "subxt")]
 	#[error(transparent)]
 	SubxtError(#[from] subxt::Error),
-	/// A [`subxt::ext::subxt_rpcs::Error`] wrapper error.
+	/// A [`subxt::rpcs::Error`] wrapper error.
 	#[cfg(feature = "subxt")]
 	#[error(transparent)]
-	RpcError(#[from] subxt::ext::subxt_rpcs::Error),
+	RpcError(#[from] subxt::rpcs::Error),
 	/// author_submitExtrinsic failed.
 	#[error("Invalid transaction: {0}")]
 	SubmitError(SubmitError),
@@ -183,6 +183,37 @@ impl ClientError {
 		matches!(self, Self::ChainMismatch | Self::SyncBoundaryMismatch)
 	}
 }
+
+// Direct `From` impls so `?` can lift subxt 0.50 sub-error variants without an explicit
+// `subxt::Error::from`.
+#[cfg(feature = "subxt")]
+macro_rules! impl_from_subxt_subtype {
+	($($ty:ty),* $(,)?) => {
+		$(
+			impl From<$ty> for ClientError {
+				fn from(err: $ty) -> Self {
+					ClientError::SubxtError(err.into())
+				}
+			}
+		)*
+	};
+}
+
+#[cfg(feature = "subxt")]
+impl_from_subxt_subtype!(
+	subxt::error::OnlineClientAtBlockError,
+	subxt::error::OnlineClientError,
+	subxt::error::BackendError,
+	subxt::error::BlockError,
+	subxt::error::BlocksError,
+	subxt::error::RuntimeApiError,
+	subxt::error::EventsError,
+	subxt::error::ExtrinsicError,
+	subxt::error::ConstantError,
+	subxt::error::StorageError,
+	subxt::error::StorageValueError,
+	subxt::error::ExtrinsicDecodeErrorAt,
+);
 
 const LOG_TARGET: &str = "eth-rpc::client";
 

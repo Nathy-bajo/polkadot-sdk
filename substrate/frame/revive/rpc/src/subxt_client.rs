@@ -445,22 +445,25 @@ use sp_weights::Weight;
 use std::{future::Future, sync::Arc, time::Duration};
 use subxt::{
 	OnlineClient,
-	backend::{
-		StreamOf, StreamOfResults,
-		legacy::{LegacyRpcMethods, rpc_methods::TransactionStatus as SubxtTxStatus},
-		rpc::RpcClient,
+	backend::{StreamOf, StreamOfResults},
+	client::OnlineClientAtBlock,
+	config::RpcConfigFor,
+	error::OnlineClientAtBlockError,
+	rpcs::{
+		RpcClient,
+		methods::{LegacyRpcMethods, legacy::TransactionStatus as SubxtTxStatus},
+		rpc_params,
 	},
-	ext::subxt_rpcs::rpc_params,
 };
 use tokio::sync::RwLock;
 
-/// The substrate block type (subxt-backed).
-pub type SubstrateBlock = subxt::blocks::Block<SrcChainConfig, OnlineClient<SrcChainConfig>>;
+/// A handle to a substrate block at a specific height (subxt-backed).
+pub type SubstrateBlock = OnlineClientAtBlock<SrcChainConfig>;
 
 /// The substrate block header.
 pub type SubstrateBlockHeader = <SrcChainConfig as subxt::Config>::Header;
 
-fn system_health_from_subxt(h: subxt::backend::legacy::rpc_methods::SystemHealth) -> NodeHealth {
+fn system_health_from_subxt(h: subxt::rpcs::methods::legacy::SystemHealth) -> NodeHealth {
 	NodeHealth { peers: h.peers, is_syncing: h.is_syncing, should_have_peers: h.should_have_peers }
 }
 
@@ -486,17 +489,33 @@ impl BlockInfo for SubxtBlockInfo {
 	}
 }
 
+/// Materialize a lightweight [`SubxtBlockInfo`] from a subxt block handle.
+///
+/// In subxt 0.50 a [`SubstrateBlock`] (`OnlineClientAtBlock`) is a lazy handle whose header is
+/// fetched asynchronously, so we snapshot the fields the generic client needs (which are exposed
+/// synchronously through the [`BlockInfo`] trait) up-front.
+async fn block_info_from_subxt(block: &SubstrateBlock) -> Result<SubxtBlockInfo, ClientError> {
+	let header = block.block_header().await?;
+	Ok(SubxtBlockInfo {
+		hash: block.block_hash(),
+		// The source runtime uses `u32` block numbers (see the metadata substitution above); subxt
+		// exposes them as `u64`, so narrow back to the native `SubstrateBlockNumber`.
+		number: header.number as SubstrateBlockNumber,
+		parent_hash: header.parent_hash,
+	})
+}
+
 /// The subxt-backed block info provider.
 #[derive(Clone)]
 pub struct SubxtBlockInfoProvider {
 	/// The latest block.
-	latest_block: Arc<RwLock<Arc<SubstrateBlock>>>,
+	latest_block: Arc<RwLock<Arc<SubxtBlockInfo>>>,
 
 	/// The latest finalized block.
-	latest_finalized_block: Arc<RwLock<Arc<SubstrateBlock>>>,
+	latest_finalized_block: Arc<RwLock<Arc<SubxtBlockInfo>>>,
 
 	/// The rpc client, used to fetch blocks not in the cache.
-	rpc: LegacyRpcMethods<SrcChainConfig>,
+	rpc: LegacyRpcMethods<RpcConfigFor<SrcChainConfig>>,
 
 	/// The api client, used to fetch blocks not in the cache.
 	api: OnlineClient<SrcChainConfig>,
@@ -505,9 +524,10 @@ pub struct SubxtBlockInfoProvider {
 impl SubxtBlockInfoProvider {
 	pub async fn new(
 		api: OnlineClient<SrcChainConfig>,
-		rpc: LegacyRpcMethods<SrcChainConfig>,
+		rpc: LegacyRpcMethods<RpcConfigFor<SrcChainConfig>>,
 	) -> Result<Self, ClientError> {
-		let latest = Arc::new(api.blocks().at_latest().await?);
+		let block = api.at_current_block().await?;
+		let latest = Arc::new(block_info_from_subxt(&block).await?);
 		Ok(Self {
 			api,
 			rpc,
@@ -519,9 +539,9 @@ impl SubxtBlockInfoProvider {
 
 #[async_trait]
 impl BlockInfoProvider for SubxtBlockInfoProvider {
-	type Block = SubstrateBlock;
+	type Block = SubxtBlockInfo;
 
-	async fn update_latest(&self, block: Arc<SubstrateBlock>, subscription_type: SubscriptionType) {
+	async fn update_latest(&self, block: Arc<SubxtBlockInfo>, subscription_type: SubscriptionType) {
 		let mut latest = match subscription_type {
 			SubscriptionType::FinalizedBlocks => self.latest_finalized_block.write().await,
 			SubscriptionType::BestBlocks => self.latest_block.write().await,
@@ -529,18 +549,18 @@ impl BlockInfoProvider for SubxtBlockInfoProvider {
 		*latest = block;
 	}
 
-	async fn latest_block(&self) -> Arc<SubstrateBlock> {
+	async fn latest_block(&self) -> Arc<SubxtBlockInfo> {
 		self.latest_block.read().await.clone()
 	}
 
-	async fn latest_finalized_block(&self) -> Arc<SubstrateBlock> {
+	async fn latest_finalized_block(&self) -> Arc<SubxtBlockInfo> {
 		self.latest_finalized_block.read().await.clone()
 	}
 
 	async fn block_by_number(
 		&self,
 		block_number: SubstrateBlockNumber,
-	) -> Result<Option<Arc<SubstrateBlock>>, ClientError> {
+	) -> Result<Option<Arc<SubxtBlockInfo>>, ClientError> {
 		let latest = self.latest_block().await;
 		if block_number == latest.number() {
 			return Ok(Some(latest));
@@ -555,14 +575,17 @@ impl BlockInfoProvider for SubxtBlockInfoProvider {
 			return Ok(None);
 		};
 
-		match self.api.blocks().at(hash).await {
-			Ok(block) => Ok(Some(Arc::new(block))),
-			Err(subxt::Error::Block(subxt::error::BlockError::NotFound(_))) => Ok(None),
+		match self.api.at_block(hash).await {
+			Ok(block) => Ok(Some(Arc::new(block_info_from_subxt(&block).await?))),
+			Err(
+				OnlineClientAtBlockError::BlockHeaderNotFound { .. } |
+				OnlineClientAtBlockError::BlockNotFound { .. },
+			) => Ok(None),
 			Err(err) => Err(err.into()),
 		}
 	}
 
-	async fn block_by_hash(&self, hash: &H256) -> Result<Option<Arc<SubstrateBlock>>, ClientError> {
+	async fn block_by_hash(&self, hash: &H256) -> Result<Option<Arc<SubxtBlockInfo>>, ClientError> {
 		let latest = self.latest_block().await;
 		if hash == &latest.hash() {
 			return Ok(Some(latest));
@@ -573,26 +596,14 @@ impl BlockInfoProvider for SubxtBlockInfoProvider {
 			return Ok(Some(latest_finalized));
 		}
 
-		match self.api.blocks().at(*hash).await {
-			Ok(block) => Ok(Some(Arc::new(block))),
-			Err(subxt::Error::Block(subxt::error::BlockError::NotFound(_))) => Ok(None),
+		match self.api.at_block(*hash).await {
+			Ok(block) => Ok(Some(Arc::new(block_info_from_subxt(&block).await?))),
+			Err(
+				OnlineClientAtBlockError::BlockHeaderNotFound { .. } |
+				OnlineClientAtBlockError::BlockNotFound { .. },
+			) => Ok(None),
 			Err(err) => Err(err.into()),
 		}
-	}
-}
-
-// Teach the generic code about SubstrateBlock's block-info fields.
-impl BlockInfo for SubstrateBlock {
-	fn hash(&self) -> H256 {
-		SubstrateBlock::hash(self)
-	}
-
-	fn number(&self) -> SubstrateBlockNumber {
-		SubstrateBlock::number(self)
-	}
-
-	fn parent_hash(&self) -> H256 {
-		self.header().parent_hash
 	}
 }
 
@@ -601,39 +612,46 @@ impl BlockInfo for SubstrateBlock {
 pub struct SubxtClient {
 	pub(crate) api: OnlineClient<SrcChainConfig>,
 	pub(crate) rpc_client: RpcClient,
-	pub(crate) rpc: LegacyRpcMethods<SrcChainConfig>,
+	pub(crate) rpc: LegacyRpcMethods<RpcConfigFor<SrcChainConfig>>,
 	pub(crate) chain_id: u64,
 	pub(crate) max_block_weight: Weight,
+	pub(crate) pallet_revive_index: u8,
 }
 
 impl SubxtClient {
 	pub async fn new(
 		api: OnlineClient<SrcChainConfig>,
 		rpc_client: RpcClient,
-		rpc: LegacyRpcMethods<SrcChainConfig>,
+		rpc: LegacyRpcMethods<RpcConfigFor<SrcChainConfig>>,
 	) -> Result<Self, ClientError> {
+		let at_block = api.at_current_block().await?;
+
 		let chain_id = {
 			let query = constants().revive().chain_id().unvalidated();
-			api.constants().at(&query)?
+			at_block.constants().entry(query)?
 		};
 
 		let max_block_weight = {
 			let query = constants().system().block_weights().unvalidated();
-			let weights = api.constants().at(&query)?;
+			let weights = at_block.constants().entry(query)?;
 			let max_block = weights.per_class.normal.max_extrinsic.unwrap_or(weights.max_block);
 			max_block.0
 		};
 
-		Ok(Self { api, rpc_client, rpc, chain_id, max_block_weight })
-	}
+		let pallet_revive_index = at_block
+			.metadata()
+			.pallet_by_name("Revive")
+			.map(|p| p.call_index())
+			.unwrap_or_else(|| {
+				log::warn!(
+					target: crate::LOG_TARGET,
+					"Revive pallet not found in subxt metadata; \
+					 falling back to default pallet index 253."
+				);
+				253
+			});
 
-	/// Build a [`SubxtBlockInfo`] from a [`SubstrateBlock`] reference.
-	fn block_info_from_subxt(block: &SubstrateBlock) -> SubxtBlockInfo {
-		SubxtBlockInfo {
-			hash: block.hash(),
-			number: block.number(),
-			parent_hash: block.header().parent_hash,
-		}
+		Ok(Self { api, rpc_client, rpc, chain_id, max_block_weight, pallet_revive_index })
 	}
 }
 
@@ -653,9 +671,12 @@ impl SubstrateClientT for SubxtClient {
 		&self,
 		hash: &SubstrateBlockHash,
 	) -> Result<Option<SubxtBlockInfo>, ClientError> {
-		match self.api.blocks().at(*hash).await {
-			Ok(b) => Ok(Some(Self::block_info_from_subxt(&b))),
-			Err(subxt::Error::Block(subxt::error::BlockError::NotFound(_))) => Ok(None),
+		match self.api.at_block(*hash).await {
+			Ok(b) => Ok(Some(block_info_from_subxt(&b).await?)),
+			Err(
+				OnlineClientAtBlockError::BlockHeaderNotFound { .. } |
+				OnlineClientAtBlockError::BlockNotFound { .. },
+			) => Ok(None),
 			Err(e) => Err(e.into()),
 		}
 	}
@@ -671,16 +692,14 @@ impl SubstrateClientT for SubxtClient {
 	}
 
 	async fn latest_block(&self) -> Result<SubxtBlockInfo, ClientError> {
-		let block = self.api.blocks().at_latest().await?;
-		Ok(Self::block_info_from_subxt(&block))
+		let block = self.api.at_current_block().await?;
+		block_info_from_subxt(&block).await
 	}
 
 	async fn latest_finalized_block(&self) -> Result<SubxtBlockInfo, ClientError> {
 		let hash = self.rpc.chain_get_finalized_head().await?;
-		match self.api.blocks().at(hash).await {
-			Ok(b) => Ok(Self::block_info_from_subxt(&b)),
-			Err(e) => Err(e.into()),
-		}
+		let block = self.api.at_block(hash).await?;
+		block_info_from_subxt(&block).await
 	}
 
 	async fn dry_run(
@@ -691,7 +710,7 @@ impl SubstrateClientT for SubxtClient {
 		state_overrides: Option<StateOverrideSet>,
 	) -> Result<EthTransactInfo<Balance>, ClientError> {
 		use crate::client::runtime_api::RuntimeApi;
-		RuntimeApi::new(self.api.runtime_api().at(block_hash))
+		RuntimeApi::new(self.api.at_block(block_hash).await?)
 			.dry_run(tx, block, state_overrides)
 			.await
 	}
@@ -703,14 +722,14 @@ impl SubstrateClientT for SubxtClient {
 		block: BlockId,
 	) -> Result<U256, ClientError> {
 		use crate::client::runtime_api::RuntimeApi;
-		RuntimeApi::new(self.api.runtime_api().at(block_hash))
+		RuntimeApi::new(self.api.at_block(block_hash).await?)
 			.estimate_gas(tx, block)
 			.await
 	}
 
 	async fn gas_price(&self, block_hash: SubstrateBlockHash) -> Result<U256, ClientError> {
 		use crate::client::runtime_api::RuntimeApi;
-		RuntimeApi::new(self.api.runtime_api().at(block_hash)).gas_price().await
+		RuntimeApi::new(self.api.at_block(block_hash).await?).gas_price().await
 	}
 
 	async fn balance(
@@ -719,7 +738,7 @@ impl SubstrateClientT for SubxtClient {
 		address: sp_core::H160,
 	) -> Result<U256, ClientError> {
 		use crate::client::runtime_api::RuntimeApi;
-		RuntimeApi::new(self.api.runtime_api().at(block_hash)).balance(address).await
+		RuntimeApi::new(self.api.at_block(block_hash).await?).balance(address).await
 	}
 
 	async fn nonce(
@@ -728,7 +747,7 @@ impl SubstrateClientT for SubxtClient {
 		address: sp_core::H160,
 	) -> Result<U256, ClientError> {
 		use crate::client::runtime_api::RuntimeApi;
-		RuntimeApi::new(self.api.runtime_api().at(block_hash)).nonce(address).await
+		RuntimeApi::new(self.api.at_block(block_hash).await?).nonce(address).await
 	}
 
 	async fn code(
@@ -737,7 +756,7 @@ impl SubstrateClientT for SubxtClient {
 		address: sp_core::H160,
 	) -> Result<Vec<u8>, ClientError> {
 		use crate::client::runtime_api::RuntimeApi;
-		RuntimeApi::new(self.api.runtime_api().at(block_hash)).code(address).await
+		RuntimeApi::new(self.api.at_block(block_hash).await?).code(address).await
 	}
 
 	async fn get_storage(
@@ -747,14 +766,14 @@ impl SubstrateClientT for SubxtClient {
 		key: [u8; 32],
 	) -> Result<Option<Vec<u8>>, ClientError> {
 		use crate::client::runtime_api::RuntimeApi;
-		RuntimeApi::new(self.api.runtime_api().at(block_hash))
+		RuntimeApi::new(self.api.at_block(block_hash).await?)
 			.get_storage(address, key)
 			.await
 	}
 
 	async fn eth_block(&self, block_hash: SubstrateBlockHash) -> Result<EthBlock, ClientError> {
 		use crate::client::runtime_api::RuntimeApi;
-		RuntimeApi::new(self.api.runtime_api().at(block_hash)).eth_block().await
+		RuntimeApi::new(self.api.at_block(block_hash).await?).eth_block().await
 	}
 
 	async fn eth_block_hash(
@@ -763,7 +782,7 @@ impl SubstrateClientT for SubxtClient {
 		number: U256,
 	) -> Result<Option<H256>, ClientError> {
 		use crate::client::runtime_api::RuntimeApi;
-		RuntimeApi::new(self.api.runtime_api().at(block_hash))
+		RuntimeApi::new(self.api.at_block(block_hash).await?)
 			.eth_block_hash(number)
 			.await
 	}
@@ -773,7 +792,7 @@ impl SubstrateClientT for SubxtClient {
 		block_hash: SubstrateBlockHash,
 	) -> Result<Vec<ReceiptGasInfoV1>, ClientError> {
 		use crate::client::runtime_api::RuntimeApi;
-		RuntimeApi::new(self.api.runtime_api().at(block_hash)).eth_receipt_data().await
+		RuntimeApi::new(self.api.at_block(block_hash).await?).eth_receipt_data().await
 	}
 
 	async fn trace_block(
@@ -787,7 +806,7 @@ impl SubstrateClientT for SubxtClient {
 	) -> Result<Vec<(u32, TraceV1)>, ClientError> {
 		use crate::client::runtime_api::RuntimeApi;
 		let parent = block.header.parent_hash;
-		RuntimeApi::new(self.api.runtime_api().at(parent))
+		RuntimeApi::new(self.api.at_block(parent).await?)
 			.trace_block(block, config)
 			.await
 	}
@@ -804,7 +823,7 @@ impl SubstrateClientT for SubxtClient {
 	) -> Result<TraceV1, ClientError> {
 		use crate::client::runtime_api::RuntimeApi;
 		let parent = block.header.parent_hash;
-		RuntimeApi::new(self.api.runtime_api().at(parent))
+		RuntimeApi::new(self.api.at_block(parent).await?)
 			.trace_tx(block, transaction_index, config)
 			.await
 	}
@@ -817,14 +836,15 @@ impl SubstrateClientT for SubxtClient {
 		state_overrides: Option<StateOverrideSet>,
 	) -> Result<TraceV1, ClientError> {
 		use crate::client::runtime_api::RuntimeApi;
-		RuntimeApi::new(self.api.runtime_api().at(block_hash))
+		RuntimeApi::new(self.api.at_block(block_hash).await?)
 			.trace_call(transaction, config, state_overrides)
 			.await
 	}
 
 	async fn submit_extrinsic(&self, payload: Vec<u8>) -> Result<SubmitResult, ClientError> {
 		let call = tx().revive().eth_transact(payload);
-		let ext = self.api.tx().create_unsigned(&call)?;
+		let at_block = self.api.at_current_block().await?;
+		let ext = at_block.tx().create_unsigned(&call)?;
 
 		let sub = self
 			.rpc_client
@@ -888,14 +908,15 @@ impl SubstrateClientT for SubxtClient {
 		Fut: Future<Output = Result<(), ClientError>> + Send,
 	{
 		let mut block_stream = match subscription_type {
-			SubscriptionType::BestBlocks => self.api.blocks().subscribe_best().await,
-			SubscriptionType::FinalizedBlocks => self.api.blocks().subscribe_finalized().await,
+			SubscriptionType::BestBlocks => self.api.stream_best_blocks().await,
+			SubscriptionType::FinalizedBlocks => self.api.stream_blocks().await,
 		}?;
 
 		while let Some(block) = block_stream.next().await {
 			let block = match block {
 				Ok(b) => b,
 				Err(err) => {
+					let err = subxt::Error::from(err);
 					if err.is_disconnected_will_reconnect() {
 						log::warn!(
 							target: crate::LOG_TARGET,
@@ -907,7 +928,8 @@ impl SubstrateClientT for SubxtClient {
 				},
 			};
 
-			let info = Self::block_info_from_subxt(&block);
+			let block = block.at().await?;
+			let info = block_info_from_subxt(&block).await?;
 
 			if let Err(err) = callback(info).await {
 				log::error!(
@@ -942,13 +964,16 @@ impl SubstrateClientT for SubxtClient {
 		&self,
 		block_hash: SubstrateBlockHash,
 	) -> Result<Vec<RawExtrinsic>, ClientError> {
-		let block = self.api.blocks().at(block_hash).await?;
-		let extrinsics = block.extrinsics().await?;
-		Ok(extrinsics
+		let block = self.api.at_block(block_hash).await?;
+		let extrinsics = block.extrinsics().fetch().await?;
+		extrinsics
 			.iter()
 			.enumerate()
-			.map(|(index, ext)| RawExtrinsic { payload: ext.bytes().to_vec(), index })
-			.collect())
+			.map(|(index, ext)| {
+				let ext = ext?;
+				Ok(RawExtrinsic { payload: ext.bytes().to_vec(), index })
+			})
+			.collect()
 	}
 
 	async fn block_events(
@@ -956,17 +981,20 @@ impl SubstrateClientT for SubxtClient {
 		block_hash: SubstrateBlockHash,
 	) -> Result<Option<crate::receipt_extractor::BlockEvents>, ClientError> {
 		use revive::events::{ContractEmitted, EthExtrinsicRevert};
-		use subxt::events::{Phase, StaticEvent as _};
+		use subxt::events::{DecodeAsEvent as _, Phase};
 
-		let block = match self.api.blocks().at(block_hash).await {
+		let block = match self.api.at_block(block_hash).await {
 			Ok(b) => b,
-			Err(subxt::Error::Block(subxt::error::BlockError::NotFound(_))) => return Ok(None),
+			Err(
+				OnlineClientAtBlockError::BlockHeaderNotFound { .. } |
+				OnlineClientAtBlockError::BlockNotFound { .. },
+			) => return Ok(None),
 			Err(e) => return Err(e.into()),
 		};
 
-		let extrinsics = block.extrinsics().await?;
+		let extrinsics = block.extrinsics().fetch().await?;
 		let num_extrinsics = extrinsics.iter().count();
-		let events = block.events().await?;
+		let events = block.events().fetch().await?;
 
 		let mut block_events: crate::receipt_extractor::BlockEvents = (0..num_extrinsics)
 			.map(|_| crate::receipt_extractor::ExtrinsicEvents { success: true, logs: vec![] })
@@ -987,14 +1015,13 @@ impl SubstrateClientT for SubxtClient {
 				continue;
 			}
 
-			if event.pallet_name() != ContractEmitted::PALLET {
-				continue;
-			}
+			let pallet_name = event.pallet_name();
+			let event_name = event.event_name();
 
-			if event.variant_name() == EthExtrinsicRevert::EVENT {
+			if EthExtrinsicRevert::is_event(pallet_name, event_name) {
 				block_events[extrinsic_idx].success = false;
-			} else if event.variant_name() == ContractEmitted::EVENT {
-				if let Ok(Some(evt)) = event.as_event::<ContractEmitted>() {
+			} else if ContractEmitted::is_event(pallet_name, event_name) {
+				if let Some(Ok(evt)) = event.decode_fields_as::<ContractEmitted>() {
 					block_events[extrinsic_idx].logs.push((
 						evt.contract,
 						evt.topics,
@@ -1013,25 +1040,15 @@ impl SubstrateClientT for SubxtClient {
 		extrinsic_index: usize,
 	) -> Option<sp_weights::Weight> {
 		use system::events::ExtrinsicSuccess;
-		let block = self.api.blocks().at(block_hash).await.ok()?;
-		let ext = block.extrinsics().await.ok()?.iter().nth(extrinsic_index)?;
-		let event = ext.events().await.ok()?.find_first::<ExtrinsicSuccess>().ok()??;
+		let block = self.api.at_block(block_hash).await.ok()?;
+		let extrinsics = block.extrinsics().fetch().await.ok()?;
+		let ext = extrinsics.iter().nth(extrinsic_index)?.ok()?;
+		let event = ext.events().await.ok()?.find_first::<ExtrinsicSuccess>()?.ok()?;
 		Some(event.dispatch_info.weight.0)
 	}
 
 	fn pallet_revive_index(&self) -> u8 {
-		self.api
-			.metadata()
-			.pallet_by_name("Revive")
-			.map(|p| p.index())
-			.unwrap_or_else(|| {
-				log::warn!(
-					target: crate::LOG_TARGET,
-					"Revive pallet not found in subxt metadata; \
-					 falling back to default pallet index 253."
-				);
-				253
-			})
+		self.pallet_revive_index
 	}
 }
 
@@ -1055,7 +1072,7 @@ fn subxt_tx_status_to_submit_result(s: SubxtTxStatus<SubstrateBlockHash>) -> Sub
 	}
 }
 
-use subxt::backend::rpc::reconnecting_rpc_client::{
+use subxt::rpcs::client::reconnecting_rpc_client::{
 	ExponentialBackoff, RpcClient as ReconnectingRpcClient,
 };
 
@@ -1063,8 +1080,10 @@ pub async fn connect(
 	node_rpc_url: &str,
 	max_request_size: u32,
 	max_response_size: u32,
-) -> Result<(OnlineClient<SrcChainConfig>, RpcClient, LegacyRpcMethods<SrcChainConfig>), ClientError>
-{
+) -> Result<
+	(OnlineClient<SrcChainConfig>, RpcClient, LegacyRpcMethods<RpcConfigFor<SrcChainConfig>>),
+	ClientError,
+> {
 	log::info!(target: crate::LOG_TARGET, "🌐 Connecting to node at: {node_rpc_url} ...");
 	let rpc_client = ReconnectingRpcClient::builder()
 		.retry_policy(ExponentialBackoff::from_millis(100).max_delay(Duration::from_secs(10)))
@@ -1076,6 +1095,6 @@ pub async fn connect(
 	log::info!(target: crate::LOG_TARGET, "🌟 Connected to node at: {node_rpc_url}");
 
 	let api = OnlineClient::<SrcChainConfig>::from_rpc_client(rpc_client.clone()).await?;
-	let rpc = LegacyRpcMethods::<SrcChainConfig>::new(rpc_client.clone());
+	let rpc = LegacyRpcMethods::<RpcConfigFor<SrcChainConfig>>::new(rpc_client.clone());
 	Ok((api, rpc_client, rpc))
 }

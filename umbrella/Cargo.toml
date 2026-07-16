@@ -1014,6 +1014,7 @@ node = [
 	"sc-service",
 	"sc-state-db",
 	"sc-statement-store",
+	"sc-storage-chain-sync",
 	"sc-storage-monitor",
 	"sc-sync-state-rpc",
 	"sc-sysinfo",
@@ -2879,6 +2880,11 @@ path = "../substrate/client/state-db"
 default-features = false
 optional = true
 path = "../substrate/client/statement-store"
+
+[dependencies.sc-storage-chain-sync]
+default-features = false
+optional = true
+path = "../substrate/client/storage-chain-sync"
 
 [dependencies.sc-storage-monitor]
 default-features = false

@@ -203,7 +203,7 @@ where
 		};
 
 		match subxt_metadata::Metadata::decode(&mut &opaque[..]) {
-			Ok(meta) => meta.pallet_by_name("Revive").map(|p| p.index()).unwrap_or_else(|| {
+			Ok(meta) => meta.pallet_by_name("Revive").map(|p| p.call_index()).unwrap_or_else(|| {
 				log::warn!(
 					target: crate::LOG_TARGET,
 					"Revive pallet not found in runtime metadata; \
