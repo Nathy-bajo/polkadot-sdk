@@ -1094,14 +1094,8 @@ fn empty_tally_approval_is_zero() {
 fn zero_balance_vote_is_rejected() {
 	new_test_ext().execute_with(|| {
 		// Account 1 has no incoming delegations, so a zero-balance vote is meaningless.
-		assert_noop!(
-			Voting::vote(RuntimeOrigin::signed(1), 3, aye(0, 0)),
-			Error::<Test>::ZeroVote
-		);
-		assert_noop!(
-			Voting::vote(RuntimeOrigin::signed(1), 3, nay(0, 0)),
-			Error::<Test>::ZeroVote
-		);
+		assert_noop!(Voting::vote(RuntimeOrigin::signed(1), 3, aye(0, 0)), Error::<Test>::ZeroVote);
+		assert_noop!(Voting::vote(RuntimeOrigin::signed(1), 3, nay(0, 0)), Error::<Test>::ZeroVote);
 	});
 }
 
@@ -1110,7 +1104,13 @@ fn delegate_can_vote_with_zero_own_balance() {
 	new_test_ext().execute_with(|| {
 		// Poll 3 is ongoing in class 0. Account 1 delegates its class-0 voting power to
 		// account 2, giving account 2 delegated capital/votes without any own stake.
-		assert_ok!(Voting::delegate(RuntimeOrigin::signed(1), class(3), 2, Conviction::Locked1x, 5));
+		assert_ok!(Voting::delegate(
+			RuntimeOrigin::signed(1),
+			class(3),
+			2,
+			Conviction::Locked1x,
+			5
+		));
 
 		// Account 2 can now cast a vote using none of its own balance: the delegated power
 		// alone is applied to the poll.
@@ -1147,7 +1147,7 @@ fn cleanup_empty_storage_works() {
 		// Try to clean it up again — should fail since nothing remains
 		assert_noop!(
 			Voting::cleanup_empty_storage(RuntimeOrigin::signed(2), 1, class(3)),
-			Error::<Test>::NotVoter
+			Error::<Test>::NothingToClean
 		);
 	});
 }
@@ -1160,7 +1160,7 @@ fn cleanup_rejects_non_empty_storage() {
 		// Should fail because there's an active vote
 		assert_noop!(
 			Voting::cleanup_empty_storage(RuntimeOrigin::signed(2), 1, class(3)),
-			Error::<Test>::NotVoter
+			Error::<Test>::NothingToClean
 		);
 	});
 }
@@ -1175,6 +1175,19 @@ fn automatic_cleanup_on_undelegate() {
 
 		// After unlock the entry should have been automatically cleaned up
 		assert!(!VotingFor::<Test>::contains_key(&1, &0u8));
+	});
+}
+
+#[test]
+fn delegation_target_entry_is_cleaned_after_undelegate() {
+	new_test_ext().execute_with(|| {
+		assert_ok!(Voting::delegate(RuntimeOrigin::signed(1), 0, 2, Conviction::Locked1x, 5));
+		assert!(VotingFor::<Test>::contains_key(&2, &0u8));
+
+		assert_ok!(Voting::undelegate(RuntimeOrigin::signed(1), 0));
+
+		// The target's received-delegation entry is now empty and should be auto-cleaned.
+		assert!(!VotingFor::<Test>::contains_key(&2, &0u8));
 	});
 }
 

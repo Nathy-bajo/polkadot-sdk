@@ -234,8 +234,10 @@ pub mod pallet {
 		ClassNeeded,
 		/// The class ID supplied is invalid.
 		BadClass,
-		/// A vote with zero balance has no effect and is not allowed.
+		/// A vote with zero balance and no delegations to direct has no effect and is not allowed.
 		ZeroVote,
+		/// The target account has no empty or zero-balance storage entries to clean up.
+		NothingToClean,
 	}
 
 	#[pallet::call]
@@ -422,8 +424,8 @@ pub mod pallet {
 			Ok(())
 		}
 
-		/// Remove an empty/stale `VotingFor` entry and/or zero-balance `ClassLocksFor` entries
-		/// for the given account and class.
+		/// Remove an empty/stale `VotingFor` entry for the given account and class, and prune
+		/// any zero-balance `ClassLocksFor` entries for that account (across all classes).
 		///
 		/// A `VotingFor` entry is considered empty when it contains no active votes, no
 		/// delegations, and no prior lock balance. Such entries can accumulate over time and
@@ -475,7 +477,7 @@ pub mod pallet {
 				}
 			});
 
-			ensure!(voting_cleaned || locks_cleaned, Error::<T, I>::NotVoter);
+			ensure!(voting_cleaned || locks_cleaned, Error::<T, I>::NothingToClean);
 
 			// Refund the fee on success to incentivise third parties to clean up stale storage.
 			Ok(Pays::No.into())
@@ -671,7 +673,7 @@ impl<T: Config<I>, I: 'static> Pallet<T, I> {
 		class: &ClassOf<T, I>,
 		amount: Delegations<BalanceOf<T, I>>,
 	) -> u32 {
-		VotingFor::<T, I>::mutate(who, class, |voting| match voting {
+		let votes = VotingFor::<T, I>::mutate(who, class, |voting| match voting {
 			Voting::Delegating(Delegating { delegations, .. }) => {
 				// We don't support second level delegating, so we don't need to do anything more.
 				*delegations = delegations.saturating_sub(amount);
@@ -690,7 +692,13 @@ impl<T: Config<I>, I: 'static> Pallet<T, I> {
 				}
 				votes.len() as u32
 			},
-		})
+		});
+
+		// Reducing an upstream delegation can leave the target with an empty entry.
+		// `is_empty` guards live votes and prior locks, so a target still in use is preserved.
+		Self::maybe_clean_voting(who, class);
+
+		votes
 	}
 
 	/// Attempt to delegate `balance` times `conviction` of voting power from `who` to `target`.

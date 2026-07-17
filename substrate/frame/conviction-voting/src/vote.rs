@@ -287,16 +287,18 @@ where
 	/// meaning it can be safely removed from storage.
 	pub fn is_empty(&self) -> bool {
 		match self {
-			Voting::Casting(Casting { votes, delegations, prior }) =>
+			Voting::Casting(Casting { votes, delegations, prior }) => {
 				votes.is_empty() &&
 					delegations.votes.is_zero() &&
 					delegations.capital.is_zero() &&
-					prior.locked().is_zero(),
-			Voting::Delegating(Delegating { balance, delegations, prior, .. }) =>
+					prior.locked().is_zero()
+			},
+			Voting::Delegating(Delegating { balance, delegations, prior, .. }) => {
 				balance.is_zero() &&
 					delegations.votes.is_zero() &&
 					delegations.capital.is_zero() &&
-					prior.locked().is_zero(),
+					prior.locked().is_zero()
+			},
 		}
 	}
 
