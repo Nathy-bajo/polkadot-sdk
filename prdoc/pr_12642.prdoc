@@ -1,0 +1,20 @@
+title: '[pallet-revive] reject r/s out of range in the ecRecover precompile'
+
+doc:
+- audience: Runtime Dev
+  description: |
+    The `0x01` ecRecover precompile only validated `v`, leaving `r` and `s`
+    unchecked. Depending on the `sp_io` backend, an out of range `s` can be
+    reduced modulo the curve order `N` instead of being rejected, so a
+    signature that go-ethereum rejects could recover an address here. That is a
+    consensus divergence, and it lets an attacker mint a second valid signature
+    by adding `N`, defeating malleability and replay assumptions in contracts.
+
+    The precompile now rejects `r` or `s` equal to zero or greater than or equal
+    to `N` before recovery, returning the empty output (Solidity `address(0)`).
+    This matches go-ethereum `ValidateSignatureValues` with `homestead=false`, so
+    high `s` values in the range `1..N` are still accepted.
+
+crates:
+- name: pallet-revive
+  bump: patch

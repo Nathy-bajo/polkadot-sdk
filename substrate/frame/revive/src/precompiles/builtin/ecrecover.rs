@@ -22,6 +22,13 @@ use crate::{
 };
 use alloc::vec::Vec;
 use core::{marker::PhantomData, num::NonZero};
+use sp_core::U256;
+
+/// Order of the secp256k1 curve; valid `r` and `s` lie in `1..N`.
+const SECP256K1_N: [u8; 32] = [
+	0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xfe,
+	0xba, 0xae, 0xdc, 0xe6, 0xaf, 0x48, 0xa0, 0x3b, 0xbf, 0xd2, 0x5e, 0x8c, 0xd0, 0x36, 0x41, 0x41,
+];
 
 pub struct EcRecover<T>(PhantomData<T>);
 
@@ -51,6 +58,15 @@ impl<T: Config> PrimitivePrecompile for EcRecover<T> {
 		// v can only be 27 or 28 on the full 32 bytes value.
 		// https://github.com/ethereum/go-ethereum/blob/a907d7e81aaeea15d80b2d3209ad8e08e3bf49e0/core/vm/contracts.go#L177
 		if input[32..63] != [0u8; 31] || ![27, 28].contains(&input[63]) {
+			return Ok(Vec::new());
+		}
+
+		// Reject r,s outside 1..N to match go-ethereum (homestead=false); some sp_io backends
+		// reduce out-of-range s modulo N, diverging and allowing malleability.
+		let n = U256::from_big_endian(&SECP256K1_N);
+		let r = U256::from_big_endian(&sig[0..32]);
+		let s = U256::from_big_endian(&sig[32..64]);
+		if r.is_zero() || r >= n || s.is_zero() || s >= n {
 			return Ok(Vec::new());
 		}
 
