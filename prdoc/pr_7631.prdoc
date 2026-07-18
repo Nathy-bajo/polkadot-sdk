@@ -22,7 +22,7 @@ doc:
     rejected with a `ZeroVote` error to prevent new empty entries from being created.
 crates:
 - name: pallet-conviction-voting
-  bump: minor
+  bump: major
 - name: asset-hub-westend-runtime
   bump: minor
 - name: rococo-runtime
