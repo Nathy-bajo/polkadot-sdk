@@ -22,4 +22,6 @@ doc:
     `MultiBlockMigrator` migrations tuple.
 crates:
 - name: pallet-revive
-  bump: minor
+  bump: major
+- name: asset-hub-westend-runtime
+  bump: patch
