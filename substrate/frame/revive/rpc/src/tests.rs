@@ -2501,11 +2501,7 @@ async fn test_block_sync_picks_up_new_blocks() -> anyhow::Result<()> {
 
 	// The new block should have an ethereum hash mapping in client2's DB.
 	assert!(
-		client2
-			.receipt_provider()
-			.get_ethereum_hash(&finalized2.hash())
-			.await
-			.is_some(),
+		client2.receipt_provider().get_ethereum_hash(&finalized2.hash()).await.is_some(),
 		"New finalized block #{} should be synced in client2",
 		finalized2.number(),
 	);

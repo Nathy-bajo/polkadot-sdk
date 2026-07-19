@@ -92,7 +92,11 @@ impl RuntimeApi {
 					DryRunConfig::default().with_timestamp_override(timestamp_override).into(),
 				)
 				.unvalidated();
-			self.at_block.runtime_apis().call(payload).await.map(|value| value.map(|value| value.0))
+			self.at_block
+				.runtime_apis()
+				.call(payload)
+				.await
+				.map(|value| value.map(|value| value.0))
 		}))
 		.chain(stream::once(Box::pin(async {
 			let payload = subxt_client::runtime_apis()
@@ -102,12 +106,22 @@ impl RuntimeApi {
 					DryRunConfig::default().with_timestamp_override(timestamp_override).into(),
 				)
 				.unvalidated();
-			self.at_block.runtime_apis().call(payload).await.map(|value| value.map(|value| value.eth_gas))
+			self.at_block
+				.runtime_apis()
+				.call(payload)
+				.await
+				.map(|value| value.map(|value| value.eth_gas))
 		})))
 		.chain(stream::once(Box::pin(async {
-			let payload =
-				subxt_client::runtime_apis().revive_api().eth_transact(tx.clone().into()).unvalidated();
-			self.at_block.runtime_apis().call(payload).await.map(|value| value.map(|value| value.eth_gas))
+			let payload = subxt_client::runtime_apis()
+				.revive_api()
+				.eth_transact(tx.clone().into())
+				.unvalidated();
+			self.at_block
+				.runtime_apis()
+				.call(payload)
+				.await
+				.map(|value| value.map(|value| value.eth_gas))
 		})));
 
 		while let Some(result) = stream.next().await {
@@ -216,7 +230,13 @@ impl RuntimeApi {
 			.trace_tx(block.into(), transaction_index, tracer_type.into())
 			.unvalidated();
 
-		let trace = self.at_block.runtime_apis().call(payload).await?.ok_or(ClientError::EthExtrinsicNotFound)?.0;
+		let trace = self
+			.at_block
+			.runtime_apis()
+			.call(payload)
+			.await?
+			.ok_or(ClientError::EthExtrinsicNotFound)?
+			.0;
 		Ok(trace)
 	}
 
@@ -234,7 +254,14 @@ impl RuntimeApi {
 			.trace_block(block.into(), tracer_type.into())
 			.unvalidated();
 
-		let traces = self.at_block.runtime_apis().call(payload).await?.into_iter().map(|(idx, t)| (idx, t.0)).collect();
+		let traces = self
+			.at_block
+			.runtime_apis()
+			.call(payload)
+			.await?
+			.into_iter()
+			.map(|(idx, t)| (idx, t.0))
+			.collect();
 		Ok(traces)
 	}
 
@@ -288,7 +315,10 @@ impl RuntimeApi {
 
 	/// Get the Ethereum block hash for the given block number.
 	pub async fn eth_block_hash(&self, number: U256) -> Result<Option<H256>, ClientError> {
-		let payload = subxt_client::runtime_apis().revive_api().eth_block_hash(number.into()).unvalidated();
+		let payload = subxt_client::runtime_apis()
+			.revive_api()
+			.eth_block_hash(number.into())
+			.unvalidated();
 		let hash = self.at_block.runtime_apis().call(payload).await.inspect_err(|err| {
 			log::debug!(target: LOG_TARGET, "Ethereum block hash for block #{number:?} not found, err: {err:?}");
 		})?;
