@@ -256,4 +256,49 @@ mod tests {
 			assert_eq!(eoa_info.dust, 9);
 		});
 	}
+
+	#[test]
+	fn migrate_to_v5_resumes_across_blocks() {
+		ExtBuilder::default().genesis_config(None).build().execute_with(|| {
+			let hash = H256::repeat_byte(0xCC);
+			let contracts = [
+				(H160::repeat_byte(0x10), 0u32),
+				(H160::repeat_byte(0x20), 42),
+				(H160::repeat_byte(0x30), 7),
+			];
+			for (addr, immutable_data_len) in contracts {
+				seed_old_contract(addr, hash, immutable_data_len);
+			}
+
+			// Budget each step for exactly one entry, feeding the cursor back in, as the MBM
+			// runner does under a real per-block weight limit.
+			let step = <Test as Config>::WeightInfo::v5_migration_step();
+			let mut cursor: Option<H160> = None;
+			let mut steps = 0u32;
+			loop {
+				let mut meter = WeightMeter::with_limit(step);
+				match <V5 as SteppedMigration>::step(cursor, &mut meter).unwrap() {
+					Some(next) => {
+						cursor = Some(next);
+						steps += 1;
+						// A cursor that fails to advance would otherwise spin forever.
+						assert!(steps <= contracts.len() as u32, "cursor is not advancing");
+					},
+					None => break,
+				}
+			}
+			assert!(steps > 1, "migration should span multiple steps, took {steps}");
+
+			// Final state must match a one-shot `run_to_completion`.
+			for (addr, immutable_data_len) in contracts {
+				let info = AccountInfoOf::<Test>::get(addr).unwrap();
+				let AccountType::Contract(contract) = info.account_type else {
+					panic!("{addr:?} should still be a contract");
+				};
+				assert!(!contract.ed_externally_funded);
+				assert_eq!(contract.immutable_data_len, immutable_data_len);
+				assert_eq!(info.dust, 7, "dust must be preserved");
+			}
+		});
+	}
 }
