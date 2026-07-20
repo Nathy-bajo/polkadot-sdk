@@ -1091,7 +1091,7 @@ where
 						if let Some(info) = AccountInfo::<T>::load_contract(&address) {
 							CachedContract::Cached(info)
 						} else {
-							let info = ContractInfo::new(&address, 0u32.into(), H256::zero())?;
+							let info = ContractInfo::new(&address, 0u32.into(), H256::zero(), false)?;
 							CachedContract::Cached(info)
 						}
 					},
@@ -1162,6 +1162,7 @@ where
 					&address,
 					<System<T>>::account_nonce(&sender),
 					*executable.code_hash(),
+					false,
 				)?;
 				(
 					T::AddressMapper::to_fallback_account_id(&address),

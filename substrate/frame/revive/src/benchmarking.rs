@@ -3106,7 +3106,7 @@ mod benchmarks {
 	fn v1_migration_step() {
 		use crate::migrations::v1;
 		let addr = H160::from([1u8; 20]);
-		let contract_info = ContractInfo::new(&addr, 1u32.into(), Default::default()).unwrap();
+		let contract_info = ContractInfo::new(&addr, 1u32.into(), Default::default(), false).unwrap();
 
 		v1::old::ContractInfoOf::<T>::insert(addr, contract_info.clone());
 		let mut meter = WeightMeter::new();
@@ -3240,7 +3240,7 @@ mod benchmarks {
 			let addr = H160::from([byte; 20]);
 			let contract_account = T::AddressMapper::to_account_id(&addr);
 			let info =
-				ContractInfo::<T>::new(&addr, 1u32.into(), code_hash).expect("fresh contract info");
+				ContractInfo::<T>::new(&addr, 1u32.into(), code_hash, false).expect("fresh contract info");
 			AccountInfoOf::<T>::insert(
 				addr,
 				crate::storage::AccountInfo::<T> {
