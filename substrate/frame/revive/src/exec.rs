@@ -1091,7 +1091,8 @@ where
 						if let Some(info) = AccountInfo::<T>::load_contract(&address) {
 							CachedContract::Cached(info)
 						} else {
-							let info = ContractInfo::new(&address, 0u32.into(), H256::zero(), false)?;
+							let info =
+								ContractInfo::new(&address, 0u32.into(), H256::zero(), false)?;
 							CachedContract::Cached(info)
 						}
 					},
