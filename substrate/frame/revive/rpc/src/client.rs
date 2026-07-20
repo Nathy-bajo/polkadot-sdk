@@ -560,16 +560,16 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 				let number = block.number();
 				let evm_block = backend.eth_block(hash).await?;
 
+				// Advance `latest` before receipts land, so a visible receipt always implies
+				// `latest` reflects its block. Otherwise `getBlock` and a following `eth_call`
+				// at `latest` can straddle the update and disagree on the block number.
+				block_provider_update.update_latest(Arc::clone(&block), subscription_type).await;
+
 				let (_, receipts): (Vec<_>, Vec<_>) = receipt_provider
 					.insert_block_receipts_by_hash(hash, number, &evm_block.hash)
 					.await?
 					.into_iter()
 					.unzip();
-
-				// Advance `latest` only after receipts land: the tx list comes from the runtime,
-				// so a block visible at `latest` with a not-yet-inserted receipt makes alloy's
-				// `get_receipt` see a confirmed tx with a null receipt and error.
-				block_provider_update.update_latest(Arc::clone(&block), subscription_type).await;
 
 				fee_history_provider.update_fee_history(&evm_block, &receipts).await;
 

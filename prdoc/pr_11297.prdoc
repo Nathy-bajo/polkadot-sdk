@@ -15,3 +15,5 @@ crates:
   bump: major
 - name: pallet-revive
   bump: minor
+- name: sc-service
+  bump: major
