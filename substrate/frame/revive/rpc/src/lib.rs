@@ -537,7 +537,6 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> EthRpcServer for EthRpcServerIm
 		reward_percentiles: Option<Vec<f64>>,
 	) -> RpcResult<FeeHistoryResult> {
 		let block_count: u32 = block_count.try_into().map_err(|_| EthRpcError::ConversionError)?;
-		Ok(self.client.fee_history(block_count, newest_block, reward_percentiles).await?)
 
 		// As in go-ethereum, a request for fewer than one block returns an empty result rather
 		// than an error, before any percentile validation.
