@@ -17,7 +17,7 @@
 
 //! Substrate client trait and shared types for the ETH RPC server.
 //!
-//! This module provides a [`SubstrateClientT`] trait that abstracts over the
+//! This module provides a [`SubstrateClient`] trait that abstracts over the
 //! Substrate node client, allowing the ETH RPC server to be integrated directly
 //! into a parachain node (e.g. Asset Hub) without requiring a separate `subxt`
 //! connection.
@@ -27,11 +27,12 @@ use crate::{
 	client::{Balance, SubscriptionType, SubstrateBlockHash, SubstrateBlockNumber},
 };
 use jsonrpsee::core::async_trait;
-use pallet_revive::{
-	EthTransactInfo,
-	evm::{Block as EthBlock, GenericTransaction, StateOverrideSet, U256},
+use pallet_revive::evm::U256;
+use pallet_revive_types::runtime_api::{
+	BlockV1 as EthBlock, EthTransactInfoV1 as EthTransactInfo,
+	GenericTransactionV1 as GenericTransaction, ReceiptGasInfoV1,
+	StateOverrideSetV1 as StateOverrideSet, TraceV1, TracerTypeV1,
 };
-use pallet_revive_types::runtime_api::{ReceiptGasInfoV1, TraceV1, TracerTypeV1};
 use sc_transaction_pool_api::TransactionStatus;
 use sp_core::H256;
 use sp_weights::Weight;
@@ -58,7 +59,7 @@ pub type SubmitResult = TransactionStatus<SubstrateBlockHash, SubstrateBlockHash
 
 /// The core trait that the ETH RPC server requires from the underlying Substrate node.
 #[async_trait]
-pub trait SubstrateClientT: Send + Sync + Clone + 'static {
+pub trait SubstrateClient: Send + Sync + Clone + 'static {
 	/// The concrete block-info type returned by this client.
 	type BlockInfo: BlockInfo + Clone + Send + Sync + 'static;
 
@@ -186,7 +187,7 @@ pub trait SubstrateClientT: Send + Sync + Clone + 'static {
 		block_hash: SubstrateBlockHash,
 		transaction: GenericTransaction,
 		config: TracerTypeV1,
-		state_overrides: Option<pallet_revive::evm::StateOverrideSet>,
+		state_overrides: Option<StateOverrideSet>,
 	) -> Result<TraceV1, crate::client::ClientError>;
 
 	/// Submit an unsigned `eth_transact` extrinsic and return the first

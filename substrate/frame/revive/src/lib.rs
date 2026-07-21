@@ -105,10 +105,6 @@ pub use crate::{
 	address::{AccountId32Mapper, AddressMapper, AutoMapper, TestAccountMapper, create1, create2},
 	debug::DebugSettings,
 	deposit_payment::{Deposit, PGasDeposit},
-	evm::{
-		Address as EthAddress, Block as EthBlock, DryRunConfig, TracingConfig,
-		block_hash::{EthExtrinsicEvents, ReceiptGasInfo},
-	},
 	evm::{Address as EthAddress, Block as EthBlock, block_hash::ReceiptGasInfo},
 	exec::{CallResources, DelegateInfo, Executable, Key, MomentOf, Origin as ExecOrigin},
 	limits::TRANSIENT_STORAGE_BYTES as TRANSIENT_STORAGE_LIMIT,
@@ -2466,48 +2462,6 @@ impl<T: Config> Pallet<T> {
 		ReceiptInfoData::<T>::get()
 	}
 
-	/// Read `pallet-revive` events from the current block and group them by
-	/// extrinsic index for ETH RPC receipt reconstruction. Only extrinsics that
-	/// emitted at least one revive event are returned.
-	///
-	/// Used by the embedded native ETH RPC server to populate transaction
-	/// receipts with the correct success flag and event logs without needing a
-	/// separate subxt connection.
-	pub fn eth_block_events() -> alloc::vec::Vec<EthExtrinsicEvents>
-	where
-		<T as frame_system::Config>::RuntimeEvent: TryInto<Event<T>>,
-	{
-		use alloc::collections::BTreeMap;
-		use frame_system::Phase;
-
-		let mut by_ext: BTreeMap<u32, EthExtrinsicEvents> = BTreeMap::new();
-		for record in frame_system::Pallet::<T>::read_events_no_consensus() {
-			let extrinsic_index = match record.phase {
-				Phase::ApplyExtrinsic(idx) => idx,
-				_ => continue,
-			};
-			let revive_event: Event<T> = match record.event.clone().try_into() {
-				Ok(e) => e,
-				Err(_) => continue,
-			};
-			let entry = by_ext.entry(extrinsic_index).or_insert_with(|| EthExtrinsicEvents {
-				extrinsic_index,
-				success: true,
-				logs: alloc::vec::Vec::new(),
-			});
-			match revive_event {
-				Event::ContractEmitted { contract, data, topics } => {
-					entry.logs.push((contract, topics, data));
-				},
-				Event::EthExtrinsicRevert { .. } => {
-					entry.success = false;
-				},
-				_ => {},
-			}
-		}
-		by_ext.into_values().collect()
-	}
-
 	/// Set the EVM balance of an account.
 	///
 	/// The account's total balance becomes the EVM value plus the existential deposit,
@@ -2974,11 +2928,6 @@ sp_api::decl_runtime_apis! {
 		#[deprecated(note = "Use the versioned equivalent `eth_receipt_data_versioned` if available on your runtime")]
 		fn eth_receipt_data() -> Vec<ReceiptGasInfoV1>;
 
-		/// Returns per-extrinsic `pallet-revive` events for the current block,
-		/// used by the embedded native ETH RPC server to populate receipts with
-		/// the correct `status` and `logs` without scanning events via subxt.
-		fn eth_block_events() -> Vec<EthExtrinsicEvents>;
-
 		/// Returns the block gas limit.
 		#[deprecated(note = "Use the versioned equivalent `block_gas_limit_versioned` if available on your runtime")]
 		fn block_gas_limit() -> U256;
@@ -3330,10 +3279,6 @@ macro_rules! impl_runtime_apis_plus_revive_traits {
 					ReceiptDataOutputPayloadV1::try_from(output)
 						.expect("v1 input must produce v1 output; qed")
 						.receipt_data
-				}
-
-				fn eth_block_events() -> Vec<$crate::EthExtrinsicEvents> {
-					$crate::Pallet::<Self>::eth_block_events()
 				}
 
 				fn balance(address: $crate::H160) -> $crate::U256 {

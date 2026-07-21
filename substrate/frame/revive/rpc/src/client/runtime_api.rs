@@ -67,10 +67,13 @@ impl RuntimeApi {
 			.revive_api()
 			.get_storage(contract_address, key)
 			.unvalidated();
-		match self.at_block.runtime_apis().call(payload).await? {
-			Err(_) => Ok(None),
-			Ok(value) => Ok(value),
-		}
+		let result = self
+			.at_block
+			.runtime_apis()
+			.call(payload)
+			.await?
+			.map_err(|_| ClientError::ContractNotFound)?;
+		Ok(result)
 	}
 
 	/// Estimate the gas for the given transaction.
@@ -81,45 +84,6 @@ impl RuntimeApi {
 	) -> Result<U256, ClientError> {
 		let timestamp_override = block.is_pending().then(|| Timestamp::current().as_millis());
 
-		let mut stream = stream::once(Box::pin(async {
-			let payload = subxt_client::runtime_apis()
-				.revive_api()
-				.eth_estimate_gas(
-					tx.clone().into(),
-					DryRunConfig::default().with_timestamp_override(timestamp_override).into(),
-				)
-				.unvalidated();
-			self.at_block
-				.runtime_apis()
-				.call(payload)
-				.await
-				.map(|value| value.map(|value| value.0))
-		}))
-		.chain(stream::once(Box::pin(async {
-			let payload = subxt_client::runtime_apis()
-				.revive_api()
-				.eth_transact_with_config(
-					tx.clone().into(),
-					DryRunConfig::default().with_timestamp_override(timestamp_override).into(),
-				)
-				.unvalidated();
-			self.at_block
-				.runtime_apis()
-				.call(payload)
-				.await
-				.map(|value| value.map(|value| value.eth_gas))
-		})))
-		.chain(stream::once(Box::pin(async {
-			let payload = subxt_client::runtime_apis()
-				.revive_api()
-				.eth_transact(tx.clone().into())
-				.unvalidated();
-			self.at_block
-				.runtime_apis()
-				.call(payload)
-				.await
-				.map(|value| value.map(|value| value.eth_gas))
-		})));
 		// Not all versions of pallet-revive have all of the runtime functions that we require.
 		// Thus we need to be able to perform the gas estimation through any of the runtime
 		// functions that the pallet may have available which is why we make use of this stream.
@@ -182,7 +146,7 @@ impl RuntimeApi {
 			}
 		}
 
-		Err(ClientError::NativeClientError("No gas estimation method succeeded".to_string()))
+		Err(ClientError::NoEstimationMethodSucceeded)
 	}
 
 	/// Dry run a transaction and returns the [`EthTransactInfoV1`] for the transaction.

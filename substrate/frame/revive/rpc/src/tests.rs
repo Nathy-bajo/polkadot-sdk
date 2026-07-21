@@ -26,11 +26,7 @@ use crate::{
 	cli::{self, CliCommand},
 	client::{Client, GapFillRequest, SubscriptionGapQueue},
 	example::TransactionBuilder,
-	subxt_client::{
-		self, SrcChainConfig, SubxtClient, connect,
-		src_chain::runtime_types::pallet_revive::primitives::Code,
-	},
-	subxt_client::{self, SrcChainConfig},
+	subxt_client::{self, SrcChainConfig, SubxtClient, connect},
 };
 use alloy_network::EthereumWallet;
 use alloy_primitives::{Address as AlloyAddress, B256, Bytes as AlloyBytes, U256 as AlloyU256};

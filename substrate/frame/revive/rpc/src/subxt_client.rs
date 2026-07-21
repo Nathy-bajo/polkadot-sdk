@@ -635,15 +635,16 @@ use crate::{
 	BlockId,
 	block_info_provider::{BlockInfo, BlockInfoProvider},
 	client::{Balance, ClientError, SubscriptionType, SubstrateBlockHash, SubstrateBlockNumber},
-	substrate_client::{NodeHealth, RawExtrinsic, SubmitResult, SubstrateClientT},
+	substrate_client::{NodeHealth, RawExtrinsic, SubmitResult, SubstrateClient},
 };
 use futures::TryStreamExt;
 use jsonrpsee::core::async_trait;
-use pallet_revive::{
-	EthTransactInfo,
-	evm::{Block as EthBlock, GenericTransaction, StateOverrideSet, U256},
+use pallet_revive::evm::U256;
+use pallet_revive_types::runtime_api::{
+	BlockV1 as EthBlock, EthTransactInfoV1 as EthTransactInfo,
+	GenericTransactionV1 as GenericTransaction, ReceiptGasInfoV1,
+	StateOverrideSetV1 as StateOverrideSet, TraceV1, TracerTypeV1,
 };
-use pallet_revive_types::runtime_api::{ReceiptGasInfoV1, TraceV1, TracerTypeV1};
 use sp_core::H256;
 use sp_weights::Weight;
 use std::{future::Future, sync::Arc, time::Duration};
@@ -811,7 +812,7 @@ impl BlockInfoProvider for SubxtBlockInfoProvider {
 	}
 }
 
-/// [`SubstrateClientT`] implementation backed by a `subxt` WebSocket connection.
+/// [`SubstrateClient`] implementation backed by a `subxt` WebSocket connection.
 #[derive(Clone)]
 pub struct SubxtClient {
 	pub(crate) api: OnlineClient<SrcChainConfig>,
@@ -860,7 +861,7 @@ impl SubxtClient {
 }
 
 #[async_trait]
-impl SubstrateClientT for SubxtClient {
+impl SubstrateClient for SubxtClient {
 	type BlockInfo = SubxtBlockInfo;
 
 	fn chain_id(&self) -> u64 {

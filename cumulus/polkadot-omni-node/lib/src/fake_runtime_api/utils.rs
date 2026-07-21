@@ -252,10 +252,9 @@ macro_rules! impl_node_runtime_apis {
 			}
 
 			impl pallet_revive::ReviveApi<$block, sp_core::H160, Balance, Nonce, u128, u64> for $runtime {
-				fn eth_block() -> pallet_revive::evm::Block { unimplemented!() }
+				fn eth_block() -> pallet_revive_types::runtime_api::BlockV1 { unimplemented!() }
 				fn eth_block_hash(_: pallet_revive::evm::U256) -> Option<sp_core::H256> { unimplemented!() }
 				fn eth_receipt_data() -> Vec<pallet_revive_types::runtime_api::ReceiptGasInfoV1> { unimplemented!() }
-				fn eth_block_events() -> Vec<pallet_revive::evm::EthExtrinsicEvents> { unimplemented!() }
 				fn block_gas_limit() -> pallet_revive::evm::U256 { unimplemented!() }
 				fn max_extrinsic_weight_in_gas() -> pallet_revive::evm::U256 { unimplemented!() }
 				fn balance(_: sp_core::H160) -> pallet_revive::evm::U256 { unimplemented!() }
@@ -268,26 +267,26 @@ macro_rules! impl_node_runtime_apis {
 					_: Option<Weight>,
 					_: Option<Balance>,
 					_: Vec<u8>,
-				) -> pallet_revive::ContractResult<pallet_revive::ExecReturnValue, Balance> { unimplemented!() }
+				) -> pallet_revive_types::runtime_api::ContractResultV1<pallet_revive_types::runtime_api::ExecReturnValueV1, Balance> { unimplemented!() }
 				fn instantiate(
 					_: sp_core::H160,
 					_: Balance,
 					_: Option<Weight>,
 					_: Option<Balance>,
-					_: pallet_revive::Code,
+					_: pallet_revive_types::runtime_api::CodeV1,
 					_: Vec<u8>,
 					_: Option<[u8; 32]>,
-				) -> pallet_revive::ContractResult<pallet_revive::InstantiateReturnValue, Balance> { unimplemented!() }
+				) -> pallet_revive_types::runtime_api::ContractResultV1<pallet_revive_types::runtime_api::InstantiateReturnValueV1, Balance> { unimplemented!() }
 				fn eth_transact(
-					_: pallet_revive::evm::GenericTransaction,
-				) -> Result<pallet_revive::EthTransactInfo<Balance>, pallet_revive::EthTransactError> { unimplemented!() }
+					_: pallet_revive_types::runtime_api::GenericTransactionV1,
+				) -> Result<pallet_revive_types::runtime_api::EthTransactInfoV1<Balance>, pallet_revive::EthTransactError> { unimplemented!() }
 				fn eth_transact_with_config(
-					_: pallet_revive::evm::GenericTransaction,
-					_: pallet_revive::DryRunConfig<u64>,
-				) -> Result<pallet_revive::EthTransactInfo<Balance>, pallet_revive::EthTransactError> { unimplemented!() }
+					_: pallet_revive_types::runtime_api::GenericTransactionV1,
+					_: pallet_revive_types::runtime_api::DryRunConfigV1<u64>,
+				) -> Result<pallet_revive_types::runtime_api::EthTransactInfoV1<Balance>, pallet_revive::EthTransactError> { unimplemented!() }
 				fn eth_estimate_gas(
-					_: pallet_revive::evm::GenericTransaction,
-					_: pallet_revive::DryRunConfig<u64>,
+					_: pallet_revive_types::runtime_api::GenericTransactionV1,
+					_: pallet_revive_types::runtime_api::DryRunConfigV1<u64>,
 				) -> Result<pallet_revive::evm::U256, pallet_revive::EthTransactError> { unimplemented!() }
 				fn upload_code(
 					_: sp_core::H160,
@@ -306,13 +305,13 @@ macro_rules! impl_node_runtime_apis {
 					_: pallet_revive_types::runtime_api::TracerTypeV1,
 				) -> Option<pallet_revive_types::runtime_api::TraceV1> { unimplemented!() }
 				fn trace_call(
-					_: pallet_revive::evm::GenericTransaction,
+					_: pallet_revive_types::runtime_api::GenericTransactionV1,
 					_: pallet_revive_types::runtime_api::TracerTypeV1,
 				) -> Result<pallet_revive_types::runtime_api::TraceV1, pallet_revive::EthTransactError> { unimplemented!() }
 				fn trace_call_with_config(
-					_: pallet_revive::evm::GenericTransaction,
+					_: pallet_revive_types::runtime_api::GenericTransactionV1,
 					_: pallet_revive_types::runtime_api::TracerTypeV1,
-					_: pallet_revive::evm::TracingConfig,
+					_: pallet_revive_types::runtime_api::TracingConfigV1,
 				) -> Result<pallet_revive_types::runtime_api::TraceV1, pallet_revive::EthTransactError> { unimplemented!() }
 				fn eth_pre_dispatch_weight(
 					_: Vec<u8>,
@@ -328,6 +327,24 @@ macro_rules! impl_node_runtime_apis {
 				// Versioned API methods (api_version = 2)
 				fn version_declarations(
 				) -> pallet_revive_types::runtime_api::ReviveRuntimeApiVersionDeclarations { unimplemented!() }
+				fn eth_block_versioned(
+					_: pallet_revive_types::runtime_api::BlockVersionedInputPayload,
+				) -> pallet_revive_types::runtime_api::BlockVersionedOutputPayload { unimplemented!() }
+				fn call_versioned(
+					_: pallet_revive_types::runtime_api::CallVersionedInputPayload<sp_core::H160, Balance>,
+				) -> pallet_revive_types::runtime_api::CallVersionedOutputPayload<Balance> { unimplemented!() }
+				fn instantiate_versioned(
+					_: pallet_revive_types::runtime_api::InstantiateVersionedInputPayload<sp_core::H160, Balance>,
+				) -> pallet_revive_types::runtime_api::InstantiateVersionedOutputPayload<Balance> { unimplemented!() }
+				fn eth_transact_versioned(
+					_: pallet_revive_types::runtime_api::TransactVersionedInputPayload<u64>,
+				) -> Result<pallet_revive_types::runtime_api::TransactVersionedOutputPayload<Balance>, pallet_revive::EthTransactError> { unimplemented!() }
+				fn eth_estimate_gas_versioned(
+					_: pallet_revive_types::runtime_api::EstimateGasVersionedInputPayload<u64>,
+				) -> Result<pallet_revive_types::runtime_api::EstimateGasVersionedOutputPayload, pallet_revive::EthTransactError> { unimplemented!() }
+				fn trace_call_versioned(
+					_: pallet_revive_types::runtime_api::TraceCallVersionedInputPayload,
+				) -> Result<pallet_revive_types::runtime_api::TraceCallVersionedOutputPayload, pallet_revive::EthTransactError> { unimplemented!() }
 				fn eth_block_hash_versioned(
 					_: pallet_revive_types::runtime_api::BlockHashVersionedInputPayload,
 				) -> pallet_revive_types::runtime_api::BlockHashVersionedOutputPayload { unimplemented!() }

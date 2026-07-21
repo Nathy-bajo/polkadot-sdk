@@ -15,10 +15,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#[cfg(feature = "std")]
 fn main() {
-	substrate_wasm_builder::WasmBuilder::build_using_defaults();
+	#[cfg(feature = "std")]
+	{
+		substrate_wasm_builder::WasmBuilder::build_using_defaults();
+	}
 }
-
-#[cfg(not(feature = "std"))]
-fn main() {}

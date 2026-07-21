@@ -254,13 +254,13 @@ impl ReceiptExtractor {
 		)
 	}
 
-	/// Create a `ReceiptExtractor` from a [`crate::SubstrateClientT`] implementation.
+	/// Create a `ReceiptExtractor` from a [`crate::SubstrateClient`] implementation.
 	pub fn new_from_substrate_client<C>(
 		client: C,
 		earliest_receipt_block: Option<SubstrateBlockNumber>,
 	) -> Self
 	where
-		C: crate::SubstrateClientT + Clone + 'static,
+		C: crate::SubstrateClient + Clone + 'static,
 	{
 		let pallet_index = client.pallet_revive_index();
 

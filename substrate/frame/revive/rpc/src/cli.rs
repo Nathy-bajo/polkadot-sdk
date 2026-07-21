@@ -18,7 +18,7 @@
 use crate::{
 	BlockInfoProvider, DbContext, DebugRpcServer, DebugRpcServerImpl, EthRpcServer,
 	EthRpcServerImpl, LOG_TARGET, PolkadotRpcServer, PolkadotRpcServerImpl, ReceiptExtractor,
-	ReceiptProvider, SubstrateClientT, SystemHealthRpcServer, SystemHealthRpcServerImpl,
+	ReceiptProvider, SubstrateClient, SystemHealthRpcServer, SystemHealthRpcServerImpl,
 	client::{Client, ClientError, SubscriptionGapQueue, SubscriptionType, SubstrateBlockNumber},
 };
 use clap::{CommandFactory, FromArgMatches, Parser};
@@ -307,7 +307,7 @@ pub fn build_eth_rpc_module<C, BP>(
 	include_system_health: bool,
 ) -> Result<RpcModule<()>, sc_service::Error>
 where
-	C: SubstrateClientT,
+	C: SubstrateClient,
 	BP: BlockInfoProvider,
 {
 	let eth_api = EthRpcServerImpl::new(client.clone())
@@ -341,7 +341,7 @@ pub async fn build_native_inmemory_client<C, BP>(
 	automine: bool,
 ) -> anyhow::Result<Client<C, BP>>
 where
-	C: SubstrateClientT,
+	C: SubstrateClient,
 	BP: BlockInfoProvider,
 {
 	let db_options = SqliteConnectOptions::new().in_memory(true);
@@ -367,7 +367,7 @@ pub async fn build_client_from_backend<C, BP>(
 	subscription_gap_queue: SubscriptionGapQueue,
 ) -> anyhow::Result<Client<C, BP>>
 where
-	C: SubstrateClientT,
+	C: SubstrateClient,
 	BP: BlockInfoProvider,
 {
 	let earliest_receipt_block: Option<SubstrateBlockNumber> = None;
@@ -418,7 +418,7 @@ pub fn run_with_native_client<C, BP>(
 	block_provider: BP,
 ) -> anyhow::Result<()>
 where
-	C: SubstrateClientT,
+	C: SubstrateClient,
 	BP: BlockInfoProvider,
 {
 	let CliCommand {

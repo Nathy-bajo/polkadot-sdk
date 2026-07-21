@@ -21,7 +21,7 @@ use crate::{
 	BlockInfoProvider,
 	block_info_provider::BlockInfo,
 	client::{Client, ClientError, GapFillRequest, SubstrateBlockNumber},
-	substrate_client::SubstrateClientT,
+	substrate_client::SubstrateClient,
 };
 use pallet_revive::evm::H256;
 use std::sync::Arc;
@@ -93,7 +93,7 @@ struct BackwardSyncRange {
 	persist_first_evm_block: bool,
 }
 
-impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
+impl<C: SubstrateClient, BP: BlockInfoProvider> Client<C, BP> {
 	/// Verify that the stored genesis hash matches the connected chain.
 	pub(crate) async fn validate_chain_identity(&self) -> Result<H256, ClientError> {
 		// Fetch block 0 (genesis) to use as the chain identity fingerprint.

@@ -15,26 +15,27 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-//! Native in-process [`SubstrateClientT`] implementation.
+//! Native in-process [`SubstrateClient`] implementation.
 //!
 //! [`NativeSubstrateClient`] drives the ETH-RPC server directly through the
 //! Substrate node's in-memory client APIs (`sc_client_api`, `sp_api`, etc.),
 //! removing the need for a separate `subxt`/WebSocket connection when the RPC
 //! server is embedded inside the node binary.
 use crate::{
-	BlockId, ClientError, SubstrateClientT,
+	BlockId, ClientError, SubstrateClient,
 	client::{Balance, SubscriptionType, SubstrateBlockHash, SubstrateBlockNumber},
-	native_block_info_provider::NativeCachedBlock,
+	native_block_info_provider::NativeNormalizedBlock,
 	substrate_client::{NodeHealth, RawExtrinsic, SubmitResult},
 };
 use codec::{Decode, Encode};
 use futures::StreamExt;
 use jsonrpsee::core::async_trait;
-use pallet_revive::{
-	DryRunConfig, EthExtrinsicEvents, EthTransactInfo, ReviveApi,
-	evm::{Block as EthBlock, GenericTransaction, StateOverrideSet, U256},
+use pallet_revive::{ReviveApi, evm::U256};
+use pallet_revive_types::runtime_api::{
+	BlockV1 as EthBlock, DryRunConfigV1, EthTransactInfoV1 as EthTransactInfo,
+	GenericTransactionV1 as GenericTransaction, ReceiptGasInfoV1,
+	StateOverrideSetV1 as StateOverrideSet, TraceV1, TracerTypeV1, TracingConfigV1,
 };
-use pallet_revive_types::runtime_api::{ReceiptGasInfoV1, TraceV1, TracerTypeV1};
 use sc_client_api::{BlockBackend, BlockchainEvents, HeaderBackend};
 use sc_network::NetworkStatusProvider;
 use sc_transaction_pool_api::TransactionPool;
@@ -79,7 +80,7 @@ fn native_err(e: impl std::fmt::Display) -> ClientError {
 type FetchExtrinsicWeightFn =
 	Arc<dyn Fn(SubstrateBlockHash, usize) -> Option<Weight> + Send + Sync>;
 
-/// A [`SubstrateClientT`] backed by the node's native in-process Substrate client.
+/// A [`SubstrateClient`] backed by the node's native in-process Substrate client.
 pub struct NativeSubstrateClient<Client, Pool, Block = OpaqueBlock, Moment = u64>
 where
 	Block: BlockT,
@@ -107,8 +108,8 @@ where
 {
 	fn clone(&self) -> Self {
 		Self {
-			client: Arc::clone(&self.client),
-			pool: Arc::clone(&self.pool),
+			client: self.client.clone(),
+			pool: self.pool.clone(),
 			chain_id: self.chain_id,
 			max_block_weight: self.max_block_weight,
 			automine: self.automine,
@@ -153,7 +154,7 @@ where
 			.map(|v: U256| v.min(U256::from(u64::MAX)).as_u64())
 			.unwrap_or(u64::MAX);
 
-		let pallet_revive_index = Self::discover_pallet_index(&client, best_hash);
+		let pallet_revive_index = Self::discover_pallet_index(&client, best_hash)?;
 
 		Ok(Self {
 			client,
@@ -188,56 +189,32 @@ where
 		self
 	}
 
-	/// Attempt to read the pallet index of `pallet-revive` from the runtime metadata.
-	fn discover_pallet_index(client: &Arc<Client>, best_hash: Block::Hash) -> u8 {
-		let opaque = match client.runtime_api().metadata(best_hash) {
-			Ok(m) => m,
-			Err(e) => {
-				log::warn!(
-					target: crate::LOG_TARGET,
-					"Failed to fetch runtime metadata for pallet index discovery: {e:?}. \
-					 Falling back to default index 253."
-				);
-				return 253;
-			},
-		};
-
-		match subxt_metadata::Metadata::decode(&mut &opaque[..]) {
-			Ok(meta) => {
-				meta.pallet_by_name("Revive").map(|p| p.call_index()).unwrap_or_else(|| {
-					log::warn!(
-						target: crate::LOG_TARGET,
-						"Revive pallet not found in runtime metadata; \
-						 falling back to default pallet index 253."
-					);
-					253
-				})
-			},
-			Err(e) => {
-				log::warn!(
-					target: crate::LOG_TARGET,
-					"Failed to decode runtime metadata for pallet index discovery: {e:?}. \
-					 Falling back to default index 253."
-				);
-				253
-			},
-		}
+	/// Read the pallet index of `pallet-revive` from the runtime metadata.
+	fn discover_pallet_index(
+		client: &Arc<Client>,
+		best_hash: Block::Hash,
+	) -> Result<u8, ClientError> {
+		let opaque = client.runtime_api().metadata(best_hash).map_err(native_err)?;
+		let meta = subxt_metadata::Metadata::decode(&mut &opaque[..])?;
+		meta.pallet_by_name("Revive")
+			.map(|p| p.call_index())
+			.ok_or_else(|| native_err("`pallet-revive` not found in the runtime metadata"))
 	}
 
-	/// Build a [`NativeCachedBlock`] from a block hash by querying the in-process client.
+	/// Build a [`NativeNormalizedBlock`] from a block hash by querying the in-process client.
 	fn block_info_from_hash(
 		&self,
 		block_hash: H256,
-	) -> Result<Option<NativeCachedBlock>, ClientError> {
+	) -> Result<Option<NativeNormalizedBlock>, ClientError> {
 		let Some(signed) = self.client.block(block_hash).map_err(native_err)? else {
 			return Ok(None);
 		};
 
 		let encoded = signed.block.encode();
-		let opaque = OpaqueBlock::decode(&mut &encoded[..]).map_err(native_err)?;
+		let opaque = OpaqueBlock::decode(&mut &encoded[..])?;
 
 		let number: u32 = (*signed.block.header().number()).into();
-		Ok(Some(NativeCachedBlock {
+		Ok(Some(NativeNormalizedBlock {
 			hash: block_hash,
 			number,
 			parent_hash: *signed.block.header().parent_hash(),
@@ -248,7 +225,7 @@ where
 
 #[async_trait]
 #[allow(deprecated)]
-impl<Client, Pool, Block, Moment> SubstrateClientT
+impl<Client, Pool, Block, Moment> SubstrateClient
 	for NativeSubstrateClient<Client, Pool, Block, Moment>
 where
 	Block: BlockT<Hash = H256, Extrinsic = OpaqueExtrinsic> + Send + Sync + 'static,
@@ -264,7 +241,7 @@ where
 	Client::Api: ReviveRuntimeApiT<Block, Moment>,
 	Pool: TransactionPool<Block = Block> + Send + Sync + 'static,
 {
-	type BlockInfo = NativeCachedBlock;
+	type BlockInfo = NativeNormalizedBlock;
 
 	fn chain_id(&self) -> u64 {
 		self.chain_id
@@ -277,14 +254,14 @@ where
 	async fn block_by_hash(
 		&self,
 		hash: &SubstrateBlockHash,
-	) -> Result<Option<NativeCachedBlock>, ClientError> {
+	) -> Result<Option<NativeNormalizedBlock>, ClientError> {
 		self.block_info_from_hash(*hash)
 	}
 
 	async fn block_by_number(
 		&self,
 		number: SubstrateBlockNumber,
-	) -> Result<Option<NativeCachedBlock>, ClientError> {
+	) -> Result<Option<NativeNormalizedBlock>, ClientError> {
 		let hash = self.client.block_hash(number.into()).map_err(native_err)?;
 		match hash {
 			Some(h) => self.block_info_from_hash(h),
@@ -292,12 +269,12 @@ where
 		}
 	}
 
-	async fn latest_block(&self) -> Result<NativeCachedBlock, ClientError> {
+	async fn latest_block(&self) -> Result<NativeNormalizedBlock, ClientError> {
 		let info = self.client.info();
 		self.block_info_from_hash(info.best_hash)?.ok_or(ClientError::BlockNotFound)
 	}
 
-	async fn latest_finalized_block(&self) -> Result<NativeCachedBlock, ClientError> {
+	async fn latest_finalized_block(&self) -> Result<NativeNormalizedBlock, ClientError> {
 		let info = self.client.info();
 		self.block_info_from_hash(info.finalized_hash)?
 			.ok_or(ClientError::BlockNotFound)
@@ -314,9 +291,7 @@ where
 			.is_pending()
 			.then(|| Moment::from(sp_timestamp::Timestamp::current().as_millis()));
 
-		let config = DryRunConfig::<Moment>::default()
-			.with_timestamp_override(timestamp_override)
-			.with_state_overrides(state_overrides);
+		let config = DryRunConfigV1 { timestamp_override, state_overrides, ..Default::default() };
 
 		self.client
 			.runtime_api()
@@ -335,7 +310,7 @@ where
 			.is_pending()
 			.then(|| Moment::from(sp_timestamp::Timestamp::current().as_millis()));
 
-		let config = DryRunConfig::<Moment>::default().with_timestamp_override(timestamp_override);
+		let config = DryRunConfigV1 { timestamp_override, ..Default::default() };
 
 		self.client
 			.runtime_api()
@@ -382,15 +357,11 @@ where
 		address: H160,
 		key: [u8; 32],
 	) -> Result<Option<Vec<u8>>, ClientError> {
-		match self
-			.client
+		self.client
 			.runtime_api()
 			.get_storage(block_hash, address, key)
 			.map_err(native_err)?
-		{
-			Err(_) => Ok(None),
-			Ok(value) => Ok(value),
-		}
+			.map_err(|_| ClientError::ContractNotFound)
 	}
 
 	async fn eth_block(&self, block_hash: SubstrateBlockHash) -> Result<EthBlock, ClientError> {
@@ -419,7 +390,7 @@ where
 		config: TracerTypeV1,
 	) -> Result<Vec<(u32, TraceV1)>, ClientError> {
 		let parent = *block.header().parent_hash();
-		let block_generic: Block = Block::decode(&mut &block.encode()[..]).map_err(native_err)?;
+		let block_generic: Block = Block::decode(&mut &block.encode()[..])?;
 		self.client
 			.runtime_api()
 			.trace_block(parent, block_generic, config)
@@ -434,7 +405,7 @@ where
 		config: TracerTypeV1,
 	) -> Result<TraceV1, ClientError> {
 		let parent = *block.header().parent_hash();
-		let block_generic: Block = Block::decode(&mut &block.encode()[..]).map_err(native_err)?;
+		let block_generic: Block = Block::decode(&mut &block.encode()[..])?;
 		self.client
 			.runtime_api()
 			.trace_tx(parent, block_generic, transaction_index, config)
@@ -447,11 +418,10 @@ where
 		block_hash: SubstrateBlockHash,
 		transaction: GenericTransaction,
 		config: TracerTypeV1,
-		state_overrides: Option<pallet_revive::evm::StateOverrideSet>,
+		state_overrides: Option<StateOverrideSet>,
 	) -> Result<TraceV1, ClientError> {
 		if let Some(overrides) = state_overrides {
-			use pallet_revive::evm::TracingConfig;
-			let tracing_config = TracingConfig::new().with_state_overrides(overrides);
+			let tracing_config = TracingConfigV1 { state_overrides: Some(overrides) };
 			self.client
 				.runtime_api()
 				.trace_call_with_config(block_hash, transaction, config, tracing_config)
@@ -524,7 +494,7 @@ where
 		callback: F,
 	) -> Result<(), ClientError>
 	where
-		F: Fn(NativeCachedBlock) -> Fut + Send + Sync,
+		F: Fn(NativeNormalizedBlock) -> Fut + Send + Sync,
 		Fut: Future<Output = Result<(), ClientError>> + Send,
 	{
 		log::debug!(
@@ -630,7 +600,7 @@ where
 			.ok_or(ClientError::BlockNotFound)?;
 
 		let encoded = signed.block.encode();
-		OpaqueBlock::decode(&mut &encoded[..]).map_err(native_err)
+		OpaqueBlock::decode(&mut &encoded[..]).map_err(ClientError::CodecError)
 	}
 
 	async fn extrinsic_post_dispatch_weight(
@@ -658,50 +628,5 @@ where
 			.enumerate()
 			.map(|(index, ext)| RawExtrinsic { payload: ext.encode(), index })
 			.collect())
-	}
-
-	async fn block_events(
-		&self,
-		block_hash: SubstrateBlockHash,
-	) -> Result<Option<crate::receipt_extractor::BlockEvents>, ClientError> {
-		use crate::receipt_extractor::ExtrinsicEvents;
-
-		let num_extrinsics = match self.client.block_body(block_hash).map_err(native_err)? {
-			Some(body) => body.len(),
-			None => return Ok(None),
-		};
-
-		let runtime_events: Vec<EthExtrinsicEvents> =
-			match self.client.runtime_api().eth_block_events(block_hash) {
-				Ok(events) => events,
-				Err(err) => {
-					log::debug!(
-						target: crate::LOG_TARGET,
-						"NativeSubstrateClient: eth_block_events unavailable at {:?} ({err:?}); \
-						 falling back to no-events",
-						block_hash,
-					);
-					return Ok(None);
-				},
-			};
-
-		let mut block_events: crate::receipt_extractor::BlockEvents = (0..num_extrinsics)
-			.map(|_| ExtrinsicEvents { success: true, logs: Vec::new() })
-			.collect();
-
-		for ext_events in runtime_events {
-			let idx = ext_events.extrinsic_index as usize;
-			if idx >= block_events.len() {
-				continue;
-			}
-			block_events[idx].success = ext_events.success;
-			block_events[idx].logs = ext_events
-				.logs
-				.into_iter()
-				.map(|(addr, topics, data)| (addr, topics, Some(data)))
-				.collect();
-		}
-
-		Ok(Some(block_events))
 	}
 }

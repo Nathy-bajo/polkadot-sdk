@@ -34,14 +34,14 @@ use tokio::sync::RwLock;
 
 /// A lightweight cached block record produced by the native client.
 #[derive(Clone, Debug)]
-pub struct NativeCachedBlock {
+pub struct NativeNormalizedBlock {
 	pub hash: H256,
 	pub number: SubstrateBlockNumber,
 	pub parent_hash: H256,
 	pub opaque: OpaqueBlock,
 }
 
-impl NativeCachedBlock {
+impl NativeNormalizedBlock {
 	pub fn hash(&self) -> H256 {
 		self.hash
 	}
@@ -53,7 +53,7 @@ impl NativeCachedBlock {
 	}
 }
 
-impl BlockInfo for NativeCachedBlock {
+impl BlockInfo for NativeNormalizedBlock {
 	fn hash(&self) -> H256 {
 		self.hash
 	}
@@ -70,8 +70,8 @@ impl BlockInfo for NativeCachedBlock {
 /// A [`BlockInfoProvider`] that fetches blocks directly from the in-process Substrate client.
 pub struct NativeClientBlockInfoProvider<Client, Block = OpaqueBlock> {
 	client: Arc<Client>,
-	latest_block: Arc<RwLock<Arc<NativeCachedBlock>>>,
-	latest_finalized_block: Arc<RwLock<Arc<NativeCachedBlock>>>,
+	latest_block: Arc<RwLock<Arc<NativeNormalizedBlock>>>,
+	latest_finalized_block: Arc<RwLock<Arc<NativeNormalizedBlock>>>,
 	_block: std::marker::PhantomData<Block>,
 }
 
@@ -111,7 +111,7 @@ where
 	fn fetch_block_inner(
 		client: &Arc<Client>,
 		hash: H256,
-	) -> Result<Option<Arc<NativeCachedBlock>>, ClientError> {
+	) -> Result<Option<Arc<NativeNormalizedBlock>>, ClientError> {
 		let Some(signed) =
 			client.block(hash).map_err(|e| ClientError::NativeClientError(e.to_string()))?
 		else {
@@ -123,7 +123,7 @@ where
 			.map_err(|e| ClientError::NativeClientError(e.to_string()))?;
 
 		let number: u32 = (*signed.block.header().number()).into();
-		Ok(Some(Arc::new(NativeCachedBlock {
+		Ok(Some(Arc::new(NativeNormalizedBlock {
 			hash,
 			number,
 			parent_hash: *signed.block.header().parent_hash(),
@@ -139,11 +139,11 @@ where
 	Block::Header: HeaderT<Number = u32, Hash = H256> + Send + Sync,
 	Client: HeaderBackend<Block> + BlockBackend<Block> + Send + Sync + 'static,
 {
-	type Block = NativeCachedBlock;
+	type Block = NativeNormalizedBlock;
 
 	async fn update_latest(
 		&self,
-		block: Arc<NativeCachedBlock>,
+		block: Arc<NativeNormalizedBlock>,
 		subscription_type: SubscriptionType,
 	) {
 		let mut slot = match subscription_type {
@@ -153,18 +153,18 @@ where
 		*slot = block;
 	}
 
-	async fn latest_block(&self) -> Arc<NativeCachedBlock> {
+	async fn latest_block(&self) -> Arc<NativeNormalizedBlock> {
 		self.latest_block.read().await.clone()
 	}
 
-	async fn latest_finalized_block(&self) -> Arc<NativeCachedBlock> {
+	async fn latest_finalized_block(&self) -> Arc<NativeNormalizedBlock> {
 		self.latest_finalized_block.read().await.clone()
 	}
 
 	async fn block_by_number(
 		&self,
 		block_number: SubstrateBlockNumber,
-	) -> Result<Option<Arc<NativeCachedBlock>>, ClientError> {
+	) -> Result<Option<Arc<NativeNormalizedBlock>>, ClientError> {
 		let latest = self.latest_block.read().await.clone();
 		if latest.number() == block_number {
 			return Ok(Some(latest));
@@ -188,7 +188,7 @@ where
 	async fn block_by_hash(
 		&self,
 		hash: &H256,
-	) -> Result<Option<Arc<NativeCachedBlock>>, ClientError> {
+	) -> Result<Option<Arc<NativeNormalizedBlock>>, ClientError> {
 		let latest = self.latest_block.read().await.clone();
 		if &latest.hash() == hash {
 			return Ok(Some(latest));

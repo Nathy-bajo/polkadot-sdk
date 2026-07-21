@@ -51,7 +51,7 @@ use frame_support::{
 };
 use pallet_revive_fixtures::compile_module;
 use pallet_transaction_payment::{ChargeTransactionPayment, ConstFeeMultiplier, Multiplier};
-use sp_core::{H160, H256, U256};
+use sp_core::{H160, U256};
 use sp_keystore::{KeystoreExt, testing::MemoryKeystore};
 use sp_runtime::{
 	AccountId32, BuildStorage, FixedU128, MultiAddress, MultiSignature, Perbill, Storage,
@@ -732,66 +732,5 @@ fn ext_builder_with_genesis_config_works() {
 			let result = builder::bare_call(contract.address).build_and_unwrap_result();
 			assert!(!result.did_revert());
 		}
-	});
-}
-
-#[test]
-fn eth_block_events_groups_revive_events_by_extrinsic() {
-	use crate::EthExtrinsicEvents;
-	use frame_support::dispatch::DispatchInfo;
-
-	ExtBuilder::default().build().execute_with(|| {
-		// Move to non-genesis block so deposit_event actually persists.
-		frame_system::Pallet::<Test>::set_block_number(1);
-		frame_system::Pallet::<Test>::note_finished_initialize();
-
-		let c0 = H160::repeat_byte(0xA0);
-		Pallet::<Test>::deposit_event(crate::Event::<Test>::ContractEmitted {
-			contract: c0,
-			data: vec![1, 2, 3],
-			topics: vec![H256::repeat_byte(0x11)],
-		});
-		Pallet::<Test>::deposit_event(crate::Event::<Test>::ContractEmitted {
-			contract: c0,
-			data: vec![4, 5],
-			topics: vec![H256::repeat_byte(0x22), H256::repeat_byte(0x33)],
-		});
-		frame_system::Pallet::<Test>::note_applied_extrinsic(
-			&Ok(().into()),
-			DispatchInfo::default(),
-		);
-
-		Pallet::<Test>::deposit_event(crate::Event::<Test>::EthExtrinsicRevert {
-			dispatch_error: sp_runtime::DispatchError::Other("revert"),
-		});
-		frame_system::Pallet::<Test>::note_applied_extrinsic(
-			&Ok(().into()),
-			DispatchInfo::default(),
-		);
-
-		frame_system::Pallet::<Test>::note_applied_extrinsic(
-			&Ok(().into()),
-			DispatchInfo::default(),
-		);
-
-		let events: Vec<EthExtrinsicEvents> = Pallet::<Test>::eth_block_events();
-
-		// Only extrinsics that emitted revive events are returned (ext 0 and 1).
-		assert_eq!(events.len(), 2, "expected 2 entries, got {events:?}");
-
-		let ext0 = &events[0];
-		assert_eq!(ext0.extrinsic_index, 0);
-		assert!(ext0.success, "extrinsic 0 should be successful");
-		assert_eq!(ext0.logs.len(), 2);
-		assert_eq!(ext0.logs[0], (c0, vec![H256::repeat_byte(0x11)], vec![1, 2, 3]));
-		assert_eq!(
-			ext0.logs[1],
-			(c0, vec![H256::repeat_byte(0x22), H256::repeat_byte(0x33)], vec![4, 5]),
-		);
-
-		let ext1 = &events[1];
-		assert_eq!(ext1.extrinsic_index, 1);
-		assert!(!ext1.success, "extrinsic 1 should be marked reverted");
-		assert!(ext1.logs.is_empty(), "ext 1 has no logs, only a revert marker");
 	});
 }

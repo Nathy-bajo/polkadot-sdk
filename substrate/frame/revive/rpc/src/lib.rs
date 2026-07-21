@@ -26,10 +26,9 @@ use jsonrpsee::{
 	types::{ErrorCode, ErrorObjectOwned},
 };
 use pallet_revive::evm::*;
-use pallet_revive_types::runtime_api::{ExecutionTracerConfigV1, TraceV1, TracerTypeV1};
 use pallet_revive_types::runtime_api::{
-	BlockV1, ExecutionTracerConfigV1, GenericTransactionV1, ReceiptGasInfoV1, StateOverrideSetV1,
-	TraceV1, TracerTypeV1, TransactionInfoV1,
+	BlockV1, ExecutionTracerConfigV1, GenericTransactionV1, StateOverrideSetV1, TraceV1,
+	TracerTypeV1, TransactionInfoV1,
 };
 use sp_core::{H160, H256, U256};
 use sp_crypto_hashing::keccak_256;
@@ -68,7 +67,7 @@ pub use apis::*;
 
 pub use native_block_info_provider::NativeClientBlockInfoProvider;
 pub use native_client::NativeSubstrateClient;
-pub use substrate_client::SubstrateClientT;
+pub use substrate_client::SubstrateClient;
 
 #[cfg(feature = "subxt")]
 pub use subxt_client::SubxtClient;
@@ -78,7 +77,7 @@ pub use types::*;
 pub const LOG_TARGET: &str = "eth-rpc";
 
 /// An EVM RPC server implementation.
-pub struct EthRpcServerImpl<C: SubstrateClientT, BP: BlockInfoProvider> {
+pub struct EthRpcServerImpl<C: SubstrateClient, BP: BlockInfoProvider> {
 	/// The client used to interact with the substrate node.
 	client: client::Client<C, BP>,
 
@@ -92,7 +91,7 @@ pub struct EthRpcServerImpl<C: SubstrateClientT, BP: BlockInfoProvider> {
 	use_pending_for_estimate_gas: bool,
 }
 
-impl<C: SubstrateClientT, BP: BlockInfoProvider> EthRpcServerImpl<C, BP> {
+impl<C: SubstrateClient, BP: BlockInfoProvider> EthRpcServerImpl<C, BP> {
 	/// Creates a new [`EthRpcServerImpl`].
 	pub fn new(client: client::Client<C, BP>) -> Self {
 		Self {
@@ -172,7 +171,7 @@ impl From<EthRpcError> for ErrorObjectOwned {
 }
 
 #[async_trait]
-impl<C: SubstrateClientT, BP: BlockInfoProvider> EthRpcServer for EthRpcServerImpl<C, BP> {
+impl<C: SubstrateClient, BP: BlockInfoProvider> EthRpcServer for EthRpcServerImpl<C, BP> {
 	async fn net_version(&self) -> RpcResult<String> {
 		Ok(self.client.chain_id().to_string())
 	}
@@ -602,7 +601,7 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> EthRpcServer for EthRpcServerIm
 	}
 }
 
-impl<C: SubstrateClientT, BP: BlockInfoProvider> EthRpcServerImpl<C, BP> {
+impl<C: SubstrateClient, BP: BlockInfoProvider> EthRpcServerImpl<C, BP> {
 	async fn get_transaction_by_substrate_block_hash_and_index(
 		&self,
 		substrate_block_hash: H256,
