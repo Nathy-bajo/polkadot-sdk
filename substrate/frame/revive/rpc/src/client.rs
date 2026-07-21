@@ -30,10 +30,7 @@ use crate::{
 use jsonrpsee::types::{ErrorObjectOwned, error::CALL_EXECUTION_FAILED_CODE};
 use pallet_revive::{
 	EthTransactError,
-	evm::{
-		Block, GenericTransaction, H256, HashesOrTransactionInfos, StateOverrideSet,
-		TransactionSigned, U256, decode_revert_reason,
-	},
+	evm::{H256, TransactionSigned, U256, decode_revert_reason},
 };
 use pallet_revive_types::runtime_api::TracerTypeV1;
 use sp_weights::Weight;
@@ -272,7 +269,7 @@ pub struct Client<C: SubstrateClientT, BP: BlockInfoProvider> {
 	subscription_lock: Arc<Mutex<()>>,
 
 	/// Block subscription sender side.
-	block_subscription_tx: tokio::sync::broadcast::Sender<Block>,
+	block_subscription_tx: tokio::sync::broadcast::Sender<BlockV1>,
 	/// Log subscription sender side.
 	log_subscription_tx: tokio::sync::broadcast::Sender<Log>,
 	/// Whether historic backfill has completed. `false` if not started or in progress.
@@ -516,6 +513,37 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 						}
 						last_finalized_seen.store(block_number, Ordering::Release);
 					}
+		block: &SubstrateBlock,
+	) -> Result<(BlockV1, Vec<ReceiptInfo>), ClientError> {
+		let block_number = block.block_number();
+
+		macro_rules! time {
+			($label:expr, $expr:expr) => {{
+				let t = std::time::Instant::now();
+				let r = $expr;
+				log::trace!(
+					target: LOG_TARGET,
+					"⏱️ #{block_number} {}: {:?}",
+					$label, t.elapsed(),
+				);
+				r
+			}};
+		}
+
+		let eth_block = time!("eth_block", RuntimeApi::new(block.clone()).eth_block().await?);
+		let receipts = time!(
+			"receipts_from_block",
+			self.receipt_provider.receipts_from_block(block, eth_block.hash).await?
+		);
+		time!(
+			"insert_block_receipts",
+			self.receipt_provider
+				.insert_block_receipts(block, &receipts, &eth_block.hash)
+				.await?
+		);
+
+		let (_, receipt_infos): (Vec<_>, Vec<_>) = receipts.into_iter().unzip();
+		self.fee_history_provider.update_fee_history(&eth_block, &receipt_infos).await;
 
 					callback(block).await
 				}
@@ -1017,13 +1045,75 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 	/// Dry-run a call and return its trace.
 	pub async fn trace_call(
 		&self,
-		transaction: GenericTransaction,
+		transaction: GenericTransactionV1,
 		block: BlockId,
 		config: TracerTypeV1,
-		state_overrides: Option<StateOverrideSet>,
+		state_overrides: Option<StateOverrideSetV1>,
 	) -> Result<TraceV1, ClientError> {
 		let block_hash = self.block_hash_for_tag(block).await?;
 		self.backend.trace_call(block_hash, transaction, config, state_overrides).await
+		let runtime_api = self.runtime_api(block_hash).await?;
+		runtime_api.trace_call(transaction, config, state_overrides).await
+	}
+
+	/// Get the EVM block for the given Substrate block.
+	pub async fn evm_block(
+		&self,
+		block: Arc<SubstrateBlock>,
+		hydrated_transactions: bool,
+	) -> Option<BlockV1> {
+		log::trace!(target: LOG_TARGET, "Get Ethereum block for hash {:?}", block.block_hash());
+
+		if self
+			.receipt_provider
+			.is_before_earliest_block(&BlockNumberOrTag::Number(block.block_number().into()))
+		{
+			log::trace!(target: LOG_TARGET,
+				"Block #{} is before receipt floor, skipping", block.block_number());
+			return None;
+		}
+
+		// This could potentially fail under below circumstances:
+		//  - state has been pruned
+		//  - the block author cannot be obtained from the digest logs (highly unlikely)
+		//  - the node we are targeting has an outdated revive pallet (or ETH block functionality is
+		//    disabled)
+		let runtime_api = RuntimeApi::new((*block).clone());
+		match runtime_api.eth_block().await {
+			Ok(mut eth_block) => {
+				log::trace!(target: LOG_TARGET, "Ethereum block from runtime API hash {:?}", eth_block.hash);
+
+				if hydrated_transactions {
+					// Hydrate the block.
+					let tx_infos = self
+						.receipt_provider
+						.receipts_from_block(&block, eth_block.hash)
+						.await
+						.inspect_err(|err| {
+							log::trace!(target: LOG_TARGET,
+								"Failed to extract receipts for block #{}: {err:?}",
+								block.block_number());
+						})
+						.unwrap_or_default()
+						.into_iter()
+						.map(|(signed_tx, receipt)| receipt.transaction_info(signed_tx))
+						.collect::<Vec<_>>();
+
+					eth_block.transactions = HashesOrTransactionInfosV1::TransactionInfos(tx_infos);
+				}
+
+				Some(eth_block)
+			},
+			Err(err) => {
+				log::error!(target: LOG_TARGET, "Failed to get Ethereum block for hash {:?}: {err:?}", block.block_hash());
+				None
+			},
+		}
+	}
+
+	/// Get the chain ID.
+	pub fn chain_id(&self) -> u64 {
+		self.chain_id
 	}
 
 	/// Get the post-dispatch weight associated with this Ethereum transaction hash.
@@ -1061,6 +1151,26 @@ impl<C: SubstrateClientT, BP: BlockInfoProvider> Client<C, BP> {
 		self.fee_history_provider
 			.fee_history(block_count, latest_block.number(), reward_percentiles)
 			.await
+	}
+
+	/// Check if automine is enabled.
+	pub fn is_automine(&self) -> bool {
+		self.automine
+	}
+
+	/// Get the automine status from the node.
+	pub async fn get_automine(&self) -> bool {
+		get_automine(&self.rpc_client).await
+	}
+
+	/// Gets the block subscription rx side of the channel.
+	pub fn get_block_subscription_rx(&self) -> tokio::sync::broadcast::Receiver<BlockV1> {
+		self.block_subscription_tx.subscribe()
+	}
+
+	/// Gets the log subscription rx side of the channel.
+	pub fn get_log_subscription_rx(&self) -> tokio::sync::broadcast::Receiver<Log> {
+		self.log_subscription_tx.subscribe()
 	}
 }
 
