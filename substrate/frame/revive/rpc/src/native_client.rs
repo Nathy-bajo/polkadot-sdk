@@ -196,9 +196,7 @@ where
 		self
 	}
 
-	/// Whether the runtime at the given block exposes the versioned revive runtime
-	/// API (`ReviveApi` api version 2 or newer). Used to decide, per block, whether
-	/// the versioned or the deprecated unversioned runtime API functions are called.
+	/// Whether the runtime at `at` exposes the versioned revive runtime API.
 	fn versioned_api_available(client: &Arc<Client>, at: Block::Hash) -> bool {
 		client
 			.runtime_api()
@@ -605,8 +603,7 @@ where
 			.await
 			.map_err(native_err)?;
 
-		// Mirror the subxt client: wait for the first pool status and reject
-		// transactions the pool reports as failed.
+		// Mirrors the subxt client: first pool status wins, failed statuses reject.
 		tokio::time::timeout(std::time::Duration::from_secs(5), async {
 			match status_stream.next().await {
 				Some(
@@ -801,9 +798,7 @@ where
 		&self,
 		_block_hash: SubstrateBlockHash,
 	) -> Result<Option<crate::receipt_extractor::BlockEvents>, ClientError> {
-		// The native client does not decode per-extrinsic events yet; receipts are
-		// built without contract logs until in-process event scanning is added in a
-		// follow up. Returning `Ok(None)` keeps that explicit at the call site.
+		// In-process event scanning is a follow up; receipts carry no logs until then.
 		Ok(None)
 	}
 }

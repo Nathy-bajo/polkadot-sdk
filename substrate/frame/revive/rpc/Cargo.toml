@@ -43,21 +43,12 @@ subxt = [
 	"dep:subxt",
 	"dep:subxt-signer",
 ]
-# Passthrough so that when the workspace is built with `--features try-runtime`,
-# `pallet-revive` (including the copy pulled into the build script via the
-# optional `revive-dev-runtime` build-dependency) is compiled with `try-runtime`
-# too. Without this the build-graph `pallet-revive` would miss the
-# `try-runtime`-gated `Checkable` method while linking a `try-runtime` `sp-runtime`.
 try-runtime = [
 	"frame-system/try-runtime",
 	"pallet-revive/try-runtime",
 	"revive-dev-runtime?/try-runtime",
 	"sp-runtime/try-runtime",
 ]
-# Same rationale as `try-runtime`: keep the build-script copy of the runtime (and
-# thus every pallet it pulls in, e.g. `pallet-xcm`) in sync with the workspace so
-# the `runtime-benchmarks`-gated trait items are present when the linked frame
-# crates require them.
 runtime-benchmarks = [
 	"frame-system/runtime-benchmarks",
 	"pallet-revive/runtime-benchmarks",

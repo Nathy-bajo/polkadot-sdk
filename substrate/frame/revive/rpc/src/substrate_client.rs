@@ -210,8 +210,7 @@ pub trait SubstrateClient: Send + Sync + Clone + 'static {
 	/// Return the pallet index of `pallet-revive` in the runtime.
 	fn pallet_revive_index(&self) -> u8;
 
-	/// Subscribe to new best or finalized blocks, returning the receiver side of a
-	/// channel that yields each new block as it arrives.
+	/// Subscribe to new best or finalized blocks, returning the receiver side of a channel.
 	async fn subscribe_blocks(
 		&self,
 		subscription_type: SubscriptionType,
@@ -229,15 +228,14 @@ pub trait SubstrateClient: Send + Sync + Clone + 'static {
 		block_hash: SubstrateBlockHash,
 	) -> Result<Vec<RawExtrinsic>, crate::client::ClientError>;
 
-	/// Return per-extrinsic event data (success flag + EVM logs) for the given block,
-	/// or `Ok(None)` when this client cannot source events for that block.
+	/// Return per-extrinsic event data for the given block, or `Ok(None)` when this
+	/// client cannot source events for it.
 	async fn block_events(
 		&self,
 		block_hash: SubstrateBlockHash,
 	) -> Result<Option<crate::receipt_extractor::BlockEvents>, crate::client::ClientError>;
 
-	/// Return the post-dispatch weight for the given extrinsic, or `None` when the
-	/// client cannot determine it.
+	/// Return the post-dispatch weight for the given extrinsic, if determinable.
 	async fn extrinsic_post_dispatch_weight(
 		&self,
 		block_hash: SubstrateBlockHash,
