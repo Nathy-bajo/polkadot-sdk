@@ -42,7 +42,7 @@ use std::{
 	ops::Range,
 	sync::{
 		Arc,
-		atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering},
+		atomic::{AtomicBool, AtomicUsize, Ordering},
 	},
 };
 use thiserror::Error;
@@ -220,7 +220,7 @@ const LOG_TARGET: &str = "eth-rpc::client";
 
 const REVERT_CODE: i32 = 3;
 
-const NOTIFIER_CAPACITY: usize = 16;
+pub(crate) const NOTIFIER_CAPACITY: usize = 16;
 
 impl From<ClientError> for ErrorObjectOwned {
 	fn from(err: ClientError) -> Self {
@@ -486,42 +486,48 @@ impl<C: SubstrateClient, BP: BlockInfoProvider> Client<C, BP> {
 		F: Fn(Arc<BP::Block>) -> Fut + Send + Sync + 'static,
 		Fut: std::future::Future<Output = Result<(), ClientError>> + Send,
 	{
-		let callback = Arc::new(callback);
-		let lock = self.subscription_lock.clone();
-		let block_provider = self.block_provider.clone();
-		let subscription_gap_queue = self.subscription_gap_queue.clone();
-		let last_finalized_seen = Arc::new(AtomicU32::new(u32::MAX));
+		let mut last_finalized_seen = u32::MAX;
+		let mut block_rx = self.backend.subscribe_blocks(subscription_type).await?;
 
-		self.backend
-			.subscribe_blocks(subscription_type, move |info: C::BlockInfo| {
-				let callback = Arc::clone(&callback);
-				let lock_ref = Arc::clone(&lock);
-				let block_provider = block_provider.clone();
-				let subscription_gap_queue = subscription_gap_queue.clone();
-				let last_finalized_seen = last_finalized_seen.clone();
+		while let Some(info) = block_rx.recv().await {
+			let block = match self.block_provider.block_by_hash(&info.hash()).await {
+				Ok(Some(block)) => block,
+				Ok(None) => {
+					log::warn!(
+						target: LOG_TARGET,
+						"Notified block {:?} not found ({subscription_type:?})",
+						info.hash()
+					);
+					continue;
+				},
+				Err(err) => {
+					log::error!(
+						target: LOG_TARGET,
+						"Failed to fetch notified block ({subscription_type:?}): {err:?}"
+					);
+					continue;
+				},
+			};
 
-				async move {
-					let block = block_provider
-						.block_by_hash(&info.hash())
-						.await?
-						.ok_or(ClientError::BlockNotFound)?;
+			let _guard = self.subscription_lock.lock().await;
 
-					let _guard = lock_ref.lock().await;
-
-					// Detect and queue gap-fills for missed finalized blocks.
-					if subscription_type == SubscriptionType::FinalizedBlocks {
-						let block_number = block.number();
-						let last = last_finalized_seen.load(Ordering::Acquire);
-						if last != u32::MAX {
-							subscription_gap_queue.detect_and_queue(block_number, last);
-						}
-						last_finalized_seen.store(block_number, Ordering::Release);
-					}
-
-					callback(block).await
+			// Detect and queue gap-fills for missed finalized blocks.
+			if subscription_type == SubscriptionType::FinalizedBlocks {
+				let block_number = block.number();
+				if last_finalized_seen != u32::MAX {
+					self.subscription_gap_queue.detect_and_queue(block_number, last_finalized_seen);
 				}
-			})
-			.await
+				last_finalized_seen = block_number;
+			}
+
+			if let Err(err) = callback(block).await {
+				log::error!(
+					target: LOG_TARGET,
+					"block callback failed ({subscription_type:?}): {err:?}"
+				);
+			}
+		}
+		Ok(())
 	}
 
 	/// Start the block subscription, and populate the block cache.

@@ -36,7 +36,12 @@ use pallet_revive_types::runtime_api::{
 use sc_transaction_pool_api::TransactionStatus;
 use sp_core::H256;
 use sp_weights::Weight;
-use std::future::Future;
+
+/// Opaque block type shared by the tracing and block-fetch APIs.
+pub type OpaqueBlock = sp_runtime::generic::Block<
+	sp_runtime::generic::Header<u32, sp_runtime::traits::BlakeTwo256>,
+	sp_runtime::OpaqueExtrinsic,
+>;
 
 /// A raw extrinsic payload with its index in the block.
 #[derive(Clone, Debug)]
@@ -162,10 +167,7 @@ pub trait SubstrateClient: Send + Sync + Clone + 'static {
 	async fn trace_block(
 		&self,
 		block_hash: SubstrateBlockHash,
-		block: sp_runtime::generic::Block<
-			sp_runtime::generic::Header<u32, sp_runtime::traits::BlakeTwo256>,
-			sp_runtime::OpaqueExtrinsic,
-		>,
+		block: OpaqueBlock,
 		config: TracerTypeV1,
 	) -> Result<Vec<(u32, TraceV1)>, crate::client::ClientError>;
 
@@ -173,10 +175,7 @@ pub trait SubstrateClient: Send + Sync + Clone + 'static {
 	async fn trace_tx(
 		&self,
 		block_hash: SubstrateBlockHash,
-		block: sp_runtime::generic::Block<
-			sp_runtime::generic::Header<u32, sp_runtime::traits::BlakeTwo256>,
-			sp_runtime::OpaqueExtrinsic,
-		>,
+		block: OpaqueBlock,
 		transaction_index: u32,
 		config: TracerTypeV1,
 	) -> Result<TraceV1, crate::client::ClientError>;
@@ -211,27 +210,18 @@ pub trait SubstrateClient: Send + Sync + Clone + 'static {
 	/// Return the pallet index of `pallet-revive` in the runtime.
 	fn pallet_revive_index(&self) -> u8;
 
-	/// Subscribe to new best or finalized blocks.
-	async fn subscribe_blocks<F, Fut>(
+	/// Subscribe to new best or finalized blocks, returning the receiver side of a
+	/// channel that yields each new block as it arrives.
+	async fn subscribe_blocks(
 		&self,
 		subscription_type: SubscriptionType,
-		callback: F,
-	) -> Result<(), crate::client::ClientError>
-	where
-		F: Fn(Self::BlockInfo) -> Fut + Send + Sync,
-		Fut: Future<Output = Result<(), crate::client::ClientError>> + Send;
+	) -> Result<tokio::sync::mpsc::Receiver<Self::BlockInfo>, crate::client::ClientError>;
 
 	/// Fetch an opaque signed block (used for tracing).
 	async fn signed_block(
 		&self,
 		block_hash: SubstrateBlockHash,
-	) -> Result<
-		sp_runtime::generic::Block<
-			sp_runtime::generic::Header<u32, sp_runtime::traits::BlakeTwo256>,
-			sp_runtime::OpaqueExtrinsic,
-		>,
-		crate::client::ClientError,
-	>;
+	) -> Result<OpaqueBlock, crate::client::ClientError>;
 
 	/// Return all raw extrinsics in the given block.
 	async fn block_extrinsics(
@@ -239,22 +229,18 @@ pub trait SubstrateClient: Send + Sync + Clone + 'static {
 		block_hash: SubstrateBlockHash,
 	) -> Result<Vec<RawExtrinsic>, crate::client::ClientError>;
 
-	/// Return per-extrinsic event data (success flag + EVM logs) for the given block.
-	/// Returns `Ok(None)` when event scanning is not supported by this client.
+	/// Return per-extrinsic event data (success flag + EVM logs) for the given block,
+	/// or `Ok(None)` when this client cannot source events for that block.
 	async fn block_events(
 		&self,
-		_block_hash: SubstrateBlockHash,
-	) -> Result<Option<crate::receipt_extractor::BlockEvents>, crate::client::ClientError> {
-		Ok(None)
-	}
+		block_hash: SubstrateBlockHash,
+	) -> Result<Option<crate::receipt_extractor::BlockEvents>, crate::client::ClientError>;
 
-	/// Scan block events for the given extrinsic index and return its
-	/// post-dispatch weight (if available).
+	/// Return the post-dispatch weight for the given extrinsic, or `None` when the
+	/// client cannot determine it.
 	async fn extrinsic_post_dispatch_weight(
 		&self,
-		_block_hash: SubstrateBlockHash,
-		_extrinsic_index: usize,
-	) -> Option<sp_weights::Weight> {
-		None
-	}
+		block_hash: SubstrateBlockHash,
+		extrinsic_index: usize,
+	) -> Option<sp_weights::Weight>;
 }

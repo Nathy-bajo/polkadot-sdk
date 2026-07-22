@@ -32,14 +32,13 @@ use futures::StreamExt;
 use jsonrpsee::core::async_trait;
 use pallet_revive::{ReviveApi, evm::U256};
 use pallet_revive_types::runtime_api::{
-	BlockV1 as EthBlock, DryRunConfigV1, EthTransactInfoV1 as EthTransactInfo,
-	GenericTransactionV1 as GenericTransaction, ReceiptGasInfoV1,
-	StateOverrideSetV1 as StateOverrideSet, TraceV1, TracerTypeV1, TracingConfigV1,
+	BlockV1 as EthBlock, EthTransactInfoV1 as EthTransactInfo,
+	GenericTransactionV1 as GenericTransaction, StateOverrideSetV1 as StateOverrideSet, *,
 };
 use sc_client_api::{BlockBackend, BlockchainEvents, HeaderBackend};
 use sc_network::NetworkStatusProvider;
 use sc_transaction_pool_api::TransactionPool;
-use sp_api::{Metadata, ProvideRuntimeApi};
+use sp_api::{ApiExt, Metadata, ProvideRuntimeApi};
 use sp_consensus::SyncOracle;
 use sp_core::{H160, H256};
 use sp_runtime::{
@@ -47,7 +46,7 @@ use sp_runtime::{
 	traits::{Block as BlockT, Header as HeaderT},
 };
 use sp_weights::Weight;
-use std::{future::Future, marker::PhantomData, sync::Arc};
+use std::{marker::PhantomData, sync::Arc};
 
 /// Convenience bound that bundles all runtime-API traits required by the native client.
 pub trait ReviveRuntimeApiT<Block: BlockT, Moment: codec::Codec>:
@@ -64,11 +63,7 @@ impl<T, Block: BlockT, Moment: codec::Codec> ReviveRuntimeApiT<Block, Moment> fo
 {
 }
 
-/// The opaque block type used by Asset Hub (and most Substrate parachains).
-pub type OpaqueBlock = sp_runtime::generic::Block<
-	sp_runtime::generic::Header<u32, sp_runtime::traits::BlakeTwo256>,
-	sp_runtime::OpaqueExtrinsic,
->;
+pub use crate::substrate_client::OpaqueBlock;
 
 #[inline]
 fn native_err(e: impl std::fmt::Display) -> ClientError {
@@ -136,7 +131,7 @@ where
 		+ Sync
 		+ 'static,
 	Client::Api: ReviveRuntimeApiT<Block, Moment>,
-	Pool: TransactionPool<Block = Block> + Send + Sync + 'static,
+	Pool: TransactionPool<Block = Block, Hash = H256> + Send + Sync + 'static,
 {
 	/// Create a new native client.
 	#[allow(deprecated)]
@@ -149,10 +144,22 @@ where
 		let best_hash = client.info().best_hash;
 		let runtime_api = client.runtime_api();
 
-		let block_gas_limit: u64 = runtime_api
-			.block_gas_limit(best_hash)
-			.map(|v: U256| v.min(U256::from(u64::MAX)).as_u64())
-			.unwrap_or(u64::MAX);
+		let block_gas_limit: u64 = if Self::versioned_api_available(&client, best_hash) {
+			runtime_api
+				.block_gas_limit_versioned(
+					best_hash,
+					BlockGasLimitVersionedInputPayload::from(BlockGasLimitInputPayloadV1),
+				)
+				.ok()
+				.and_then(|output| BlockGasLimitOutputPayloadV1::try_from(output).ok())
+				.map(|output| output.block_gas_limit.min(U256::from(u64::MAX)).as_u64())
+				.unwrap_or(u64::MAX)
+		} else {
+			runtime_api
+				.block_gas_limit(best_hash)
+				.map(|v: U256| v.min(U256::from(u64::MAX)).as_u64())
+				.unwrap_or(u64::MAX)
+		};
 
 		let pallet_revive_index = Self::discover_pallet_index(&client, best_hash)?;
 
@@ -187,6 +194,18 @@ where
 	) -> Self {
 		self.fetch_extrinsic_weight = Some(Arc::new(f));
 		self
+	}
+
+	/// Whether the runtime at the given block exposes the versioned revive runtime
+	/// API (`ReviveApi` api version 2 or newer). Used to decide, per block, whether
+	/// the versioned or the deprecated unversioned runtime API functions are called.
+	fn versioned_api_available(client: &Arc<Client>, at: Block::Hash) -> bool {
+		client
+			.runtime_api()
+			.api_version::<dyn ReviveApi<Block, H160, Balance, u32, u128, Moment>>(at)
+			.ok()
+			.flatten()
+			.is_some_and(|version| version >= 2)
 	}
 
 	/// Read the pallet index of `pallet-revive` from the runtime metadata.
@@ -239,7 +258,7 @@ where
 		+ Sync
 		+ 'static,
 	Client::Api: ReviveRuntimeApiT<Block, Moment>,
-	Pool: TransactionPool<Block = Block> + Send + Sync + 'static,
+	Pool: TransactionPool<Block = Block, Hash = H256> + Send + Sync + 'static,
 {
 	type BlockInfo = NativeNormalizedBlock;
 
@@ -291,13 +310,31 @@ where
 			.is_pending()
 			.then(|| Moment::from(sp_timestamp::Timestamp::current().as_millis()));
 
-		let config = DryRunConfigV1 { timestamp_override, state_overrides, ..Default::default() };
-
-		self.client
-			.runtime_api()
-			.eth_transact_with_config(block_hash, tx, config)
-			.map_err(native_err)?
-			.map_err(ClientError::TransactError)
+		if Self::versioned_api_available(&self.client, block_hash) {
+			let input = TransactVersionedInputPayload::from(TransactInputPayloadV1 {
+				tx,
+				timestamp_override,
+				perform_balance_checks: false,
+				state_overrides,
+			});
+			let output = self
+				.client
+				.runtime_api()
+				.eth_transact_versioned(block_hash, input)
+				.map_err(native_err)?
+				.map_err(ClientError::TransactError)?;
+			Ok(TransactOutputPayloadV1::try_from(output)
+				.map_err(|_| native_err("v1 input must produce v1 output"))?
+				.transact_info)
+		} else {
+			let config =
+				DryRunConfigV1 { timestamp_override, state_overrides, ..Default::default() };
+			self.client
+				.runtime_api()
+				.eth_transact_with_config(block_hash, tx, config)
+				.map_err(native_err)?
+				.map_err(ClientError::TransactError)
+		}
 	}
 
 	async fn estimate_gas(
@@ -310,17 +347,45 @@ where
 			.is_pending()
 			.then(|| Moment::from(sp_timestamp::Timestamp::current().as_millis()));
 
-		let config = DryRunConfigV1 { timestamp_override, ..Default::default() };
-
-		self.client
-			.runtime_api()
-			.eth_estimate_gas(block_hash, tx, config)
-			.map_err(native_err)?
-			.map_err(ClientError::TransactError)
+		if Self::versioned_api_available(&self.client, block_hash) {
+			let input = EstimateGasVersionedInputPayload::from(EstimateGasInputPayloadV1 {
+				tx,
+				timestamp_override,
+				state_overrides: None,
+			});
+			let output = self
+				.client
+				.runtime_api()
+				.eth_estimate_gas_versioned(block_hash, input)
+				.map_err(native_err)?
+				.map_err(ClientError::TransactError)?;
+			Ok(EstimateGasOutputPayloadV1::try_from(output)
+				.map_err(|_| native_err("v1 input must produce v1 output"))?
+				.gas_estimate)
+		} else {
+			let config = DryRunConfigV1 { timestamp_override, ..Default::default() };
+			self.client
+				.runtime_api()
+				.eth_estimate_gas(block_hash, tx, config)
+				.map_err(native_err)?
+				.map_err(ClientError::TransactError)
+		}
 	}
 
 	async fn gas_price(&self, block_hash: SubstrateBlockHash) -> Result<U256, ClientError> {
-		self.client.runtime_api().gas_price(block_hash).map_err(native_err)
+		if Self::versioned_api_available(&self.client, block_hash) {
+			let input = GasPriceVersionedInputPayload::from(GasPriceInputPayloadV1);
+			let output = self
+				.client
+				.runtime_api()
+				.gas_price_versioned(block_hash, input)
+				.map_err(native_err)?;
+			Ok(GasPriceOutputPayloadV1::try_from(output)
+				.map_err(|_| native_err("v1 input must produce v1 output"))?
+				.gas_price)
+		} else {
+			self.client.runtime_api().gas_price(block_hash).map_err(native_err)
+		}
 	}
 
 	async fn balance(
@@ -328,7 +393,19 @@ where
 		block_hash: SubstrateBlockHash,
 		address: H160,
 	) -> Result<U256, ClientError> {
-		self.client.runtime_api().balance(block_hash, address).map_err(native_err)
+		if Self::versioned_api_available(&self.client, block_hash) {
+			let input = BalanceVersionedInputPayload::from(BalanceInputPayloadV1 { address });
+			let output = self
+				.client
+				.runtime_api()
+				.balance_versioned(block_hash, input)
+				.map_err(native_err)?;
+			Ok(BalanceOutputPayloadV1::try_from(output)
+				.map_err(|_| native_err("v1 input must produce v1 output"))?
+				.balance)
+		} else {
+			self.client.runtime_api().balance(block_hash, address).map_err(native_err)
+		}
 	}
 
 	async fn nonce(
@@ -336,11 +413,25 @@ where
 		block_hash: SubstrateBlockHash,
 		address: H160,
 	) -> Result<U256, ClientError> {
-		self.client
-			.runtime_api()
-			.nonce(block_hash, address)
-			.map(|n: u32| U256::from(n))
-			.map_err(native_err)
+		if Self::versioned_api_available(&self.client, block_hash) {
+			let input = NonceVersionedInputPayload::from(NonceInputPayloadV1 { address });
+			let output = self
+				.client
+				.runtime_api()
+				.nonce_versioned(block_hash, input)
+				.map_err(native_err)?;
+			Ok(U256::from(
+				NonceOutputPayloadV1::try_from(output)
+					.map_err(|_| native_err("v1 input must produce v1 output"))?
+					.nonce,
+			))
+		} else {
+			self.client
+				.runtime_api()
+				.nonce(block_hash, address)
+				.map(|n: u32| U256::from(n))
+				.map_err(native_err)
+		}
 	}
 
 	async fn code(
@@ -348,7 +439,19 @@ where
 		block_hash: SubstrateBlockHash,
 		address: H160,
 	) -> Result<Vec<u8>, ClientError> {
-		self.client.runtime_api().code(block_hash, address).map_err(native_err)
+		if Self::versioned_api_available(&self.client, block_hash) {
+			let input = CodeVersionedInputPayload::from(CodeInputPayloadV1 { address });
+			let output = self
+				.client
+				.runtime_api()
+				.code_versioned(block_hash, input)
+				.map_err(native_err)?;
+			Ok(CodeOutputPayloadV1::try_from(output)
+				.map_err(|_| native_err("v1 input must produce v1 output"))?
+				.code)
+		} else {
+			self.client.runtime_api().code(block_hash, address).map_err(native_err)
+		}
 	}
 
 	async fn get_storage(
@@ -357,15 +460,43 @@ where
 		address: H160,
 		key: [u8; 32],
 	) -> Result<Option<Vec<u8>>, ClientError> {
-		self.client
-			.runtime_api()
-			.get_storage(block_hash, address, key)
-			.map_err(native_err)?
-			.map_err(|_| ClientError::ContractNotFound)
+		if Self::versioned_api_available(&self.client, block_hash) {
+			let input = GetStorageVersionedInputPayload::from(GetStorageInputPayloadV1 {
+				address,
+				key: StorageKeyV1::Fixed(key),
+			});
+			let output = self
+				.client
+				.runtime_api()
+				.get_storage_versioned(block_hash, input)
+				.map_err(native_err)?
+				.map_err(|_| ClientError::ContractNotFound)?;
+			Ok(GetStorageOutputPayloadV1::try_from(output)
+				.map_err(|_| native_err("v1 input must produce v1 output"))?
+				.storage)
+		} else {
+			self.client
+				.runtime_api()
+				.get_storage(block_hash, address, key)
+				.map_err(native_err)?
+				.map_err(|_| ClientError::ContractNotFound)
+		}
 	}
 
 	async fn eth_block(&self, block_hash: SubstrateBlockHash) -> Result<EthBlock, ClientError> {
-		self.client.runtime_api().eth_block(block_hash).map_err(native_err)
+		if Self::versioned_api_available(&self.client, block_hash) {
+			let input = BlockVersionedInputPayload::from(BlockInputPayloadV1);
+			let output = self
+				.client
+				.runtime_api()
+				.eth_block_versioned(block_hash, input)
+				.map_err(native_err)?;
+			Ok(BlockOutputPayloadV1::try_from(output)
+				.map_err(|_| native_err("v1 input must produce v1 output"))?
+				.block)
+		} else {
+			self.client.runtime_api().eth_block(block_hash).map_err(native_err)
+		}
 	}
 
 	async fn eth_block_hash(
@@ -373,14 +504,40 @@ where
 		block_hash: SubstrateBlockHash,
 		number: U256,
 	) -> Result<Option<H256>, ClientError> {
-		self.client.runtime_api().eth_block_hash(block_hash, number).map_err(native_err)
+		if Self::versioned_api_available(&self.client, block_hash) {
+			let input = BlockHashVersionedInputPayload::from(BlockHashInputPayloadV1 {
+				block_number: number,
+			});
+			let output = self
+				.client
+				.runtime_api()
+				.eth_block_hash_versioned(block_hash, input)
+				.map_err(native_err)?;
+			Ok(BlockHashOutputPayloadV1::try_from(output)
+				.map_err(|_| native_err("v1 input must produce v1 output"))?
+				.block_hash)
+		} else {
+			self.client.runtime_api().eth_block_hash(block_hash, number).map_err(native_err)
+		}
 	}
 
 	async fn eth_receipt_data(
 		&self,
 		block_hash: SubstrateBlockHash,
 	) -> Result<Vec<ReceiptGasInfoV1>, ClientError> {
-		self.client.runtime_api().eth_receipt_data(block_hash).map_err(native_err)
+		if Self::versioned_api_available(&self.client, block_hash) {
+			let input = ReceiptDataVersionedInputPayload::from(ReceiptDataInputPayloadV1);
+			let output = self
+				.client
+				.runtime_api()
+				.eth_receipt_data_versioned(block_hash, input)
+				.map_err(native_err)?;
+			Ok(ReceiptDataOutputPayloadV1::try_from(output)
+				.map_err(|_| native_err("v1 input must produce v1 output"))?
+				.receipt_data)
+		} else {
+			self.client.runtime_api().eth_receipt_data(block_hash).map_err(native_err)
+		}
 	}
 
 	async fn trace_block(
@@ -442,11 +599,27 @@ where
 
 		let at = self.client.info().best_hash;
 
-		self.pool
-			.submit_one(at, sc_transaction_pool_api::TransactionSource::External, opaque_xt)
+		let mut status_stream = self
+			.pool
+			.submit_and_watch(at, sc_transaction_pool_api::TransactionSource::External, opaque_xt)
 			.await
-			.map(|_| sc_transaction_pool_api::TransactionStatus::Ready)
-			.map_err(native_err)
+			.map_err(native_err)?;
+
+		// Mirror the subxt client: wait for the first pool status and reject
+		// transactions the pool reports as failed.
+		tokio::time::timeout(std::time::Duration::from_secs(5), async {
+			match status_stream.next().await {
+				Some(
+					status @ (SubmitResult::Usurped(_) |
+					SubmitResult::Dropped |
+					SubmitResult::Invalid),
+				) => Err(ClientError::SubmitError(crate::client::SubmitError::from(status))),
+				Some(status) => Ok(status),
+				None => Err(ClientError::SubmitError(crate::client::SubmitError::StreamEnded)),
+			}
+		})
+		.await
+		.map_err(|_| ClientError::Timeout)?
 	}
 
 	async fn sync_state(
@@ -488,105 +661,99 @@ where
 		self.automine
 	}
 
-	async fn subscribe_blocks<F, Fut>(
+	async fn subscribe_blocks(
 		&self,
 		subscription_type: SubscriptionType,
-		callback: F,
-	) -> Result<(), ClientError>
-	where
-		F: Fn(NativeNormalizedBlock) -> Fut + Send + Sync,
-		Fut: Future<Output = Result<(), ClientError>> + Send,
-	{
+	) -> Result<tokio::sync::mpsc::Receiver<NativeNormalizedBlock>, ClientError> {
 		log::debug!(
 			target: crate::LOG_TARGET,
 			"NativeSubstrateClient::subscribe_blocks ({subscription_type:?}): \
 			 native notification stream active"
 		);
 
-		match subscription_type {
-			SubscriptionType::BestBlocks => {
-				let mut stream = self.client.import_notification_stream();
-				while let Some(notification) = stream.next().await {
-					if !notification.is_new_best {
-						continue;
-					}
-
-					let hash = notification.hash;
-					let block_info = match self.block_info_from_hash(hash) {
-						Ok(Some(b)) => b,
-						Ok(None) => {
-							log::warn!(
-								target: crate::LOG_TARGET,
-								"NativeSubstrateClient: best-block notification for unknown hash {:?}",
-								hash
-							);
+		let (tx, rx) = tokio::sync::mpsc::channel(crate::client::NOTIFIER_CAPACITY);
+		let this = self.clone();
+		tokio::spawn(async move {
+			match subscription_type {
+				SubscriptionType::BestBlocks => {
+					let mut stream = this.client.import_notification_stream();
+					while let Some(notification) = stream.next().await {
+						if !notification.is_new_best {
 							continue;
-						},
-						Err(err) => {
-							log::error!(
-								target: crate::LOG_TARGET,
-								"NativeSubstrateClient: failed to fetch best-block info: {err:?}"
-							);
-							continue;
-						},
-					};
+						}
 
-					log::trace!(
-						target: crate::LOG_TARGET,
-						"NativeSubstrateClient: new best block #{} ({:?})",
-						block_info.number,
-						block_info.hash
-					);
+						let hash = notification.hash;
+						let block_info = match this.block_info_from_hash(hash) {
+							Ok(Some(b)) => b,
+							Ok(None) => {
+								log::warn!(
+									target: crate::LOG_TARGET,
+									"NativeSubstrateClient: best-block notification for unknown hash {:?}",
+									hash
+								);
+								continue;
+							},
+							Err(err) => {
+								log::error!(
+									target: crate::LOG_TARGET,
+									"NativeSubstrateClient: failed to fetch best-block info: {err:?}"
+								);
+								continue;
+							},
+						};
 
-					if let Err(err) = callback(block_info).await {
-						log::error!(
+						log::trace!(
 							target: crate::LOG_TARGET,
-							"NativeSubstrateClient: best-block callback error: {err:?}"
+							"NativeSubstrateClient: new best block #{} ({:?})",
+							block_info.number,
+							block_info.hash
 						);
+
+						if tx.send(block_info).await.is_err() {
+							break;
+						}
 					}
-				}
-			},
+				},
 
-			SubscriptionType::FinalizedBlocks => {
-				let mut stream = self.client.finality_notification_stream();
-				while let Some(notification) = stream.next().await {
-					let hash = notification.hash;
-					let block_info = match self.block_info_from_hash(hash) {
-						Ok(Some(b)) => b,
-						Ok(None) => {
-							log::warn!(
-								target: crate::LOG_TARGET,
-								"NativeSubstrateClient: finalized-block notification for unknown hash {:?}",
-								hash
-							);
-							continue;
-						},
-						Err(err) => {
-							log::error!(
-								target: crate::LOG_TARGET,
-								"NativeSubstrateClient: failed to fetch finalized-block info: {err:?}"
-							);
-							continue;
-						},
-					};
+				SubscriptionType::FinalizedBlocks => {
+					let mut stream = this.client.finality_notification_stream();
+					while let Some(notification) = stream.next().await {
+						let hash = notification.hash;
+						let block_info = match this.block_info_from_hash(hash) {
+							Ok(Some(b)) => b,
+							Ok(None) => {
+								log::warn!(
+									target: crate::LOG_TARGET,
+									"NativeSubstrateClient: finalized-block notification for unknown hash {:?}",
+									hash
+								);
+								continue;
+							},
+							Err(err) => {
+								log::error!(
+									target: crate::LOG_TARGET,
+									"NativeSubstrateClient: failed to fetch finalized-block info: {err:?}"
+								);
+								continue;
+							},
+						};
 
-					log::trace!(
-						target: crate::LOG_TARGET,
-						"NativeSubstrateClient: finalized block #{} ({:?})",
-						block_info.number,
-						block_info.hash
-					);
-
-					if let Err(err) = callback(block_info).await {
-						log::error!(
+						log::trace!(
 							target: crate::LOG_TARGET,
-							"NativeSubstrateClient: finalized-block callback error: {err:?}"
+							"NativeSubstrateClient: finalized block #{} ({:?})",
+							block_info.number,
+							block_info.hash
 						);
+
+						if tx.send(block_info).await.is_err() {
+							break;
+						}
 					}
-				}
-			},
-		}
-		Ok(())
+				},
+			}
+		});
+
+		Ok(rx)
 	}
 
 	async fn signed_block(
@@ -628,5 +795,15 @@ where
 			.enumerate()
 			.map(|(index, ext)| RawExtrinsic { payload: ext.encode(), index })
 			.collect())
+	}
+
+	async fn block_events(
+		&self,
+		_block_hash: SubstrateBlockHash,
+	) -> Result<Option<crate::receipt_extractor::BlockEvents>, ClientError> {
+		// The native client does not decode per-extrinsic events yet; receipts are
+		// built without contract logs until in-process event scanning is added in a
+		// follow up. Returning `Ok(None)` keeps that explicit at the call site.
+		Ok(None)
 	}
 }

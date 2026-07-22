@@ -15,10 +15,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 use crate::{
-	Address, BlockInfoProvider, BlockNumberOrTag, Bytes, ClientError, Filter, FilterBlockOption,
-	Log, ReceiptExtractor, ReceiptInfo,
+	Address, BlockInfoProvider, BlockNumberOrTag, Bytes, ChainMetadata, ClientError, Filter,
+	FilterBlockOption, Log, ReceiptExtractor, ReceiptInfo, SyncLabel, SyncStateKey,
 	block_info_provider::{BlockInfo, test::MockBlockInfoProvider},
-	block_sync::{ChainMetadata, SyncCheckpoint, SyncLabel, SyncStateKey},
+	block_sync::SyncCheckpoint,
 	client::SubstrateBlockNumber,
 };
 use futures::future::OptionFuture;

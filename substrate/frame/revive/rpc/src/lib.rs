@@ -37,6 +37,7 @@ use thiserror::Error;
 use tokio_stream::wrappers::{BroadcastStream, errors::BroadcastStreamRecvError};
 
 pub mod block_sync;
+pub(crate) use block_sync::{ChainMetadata, SyncLabel, SyncStateKey};
 pub mod cli;
 pub mod client;
 pub mod example;

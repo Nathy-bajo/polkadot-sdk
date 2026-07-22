@@ -647,7 +647,7 @@ use pallet_revive_types::runtime_api::{
 };
 use sp_core::H256;
 use sp_weights::Weight;
-use std::{future::Future, sync::Arc, time::Duration};
+use std::{sync::Arc, time::Duration};
 use subxt::{
 	OnlineClient,
 	backend::{StreamOf, StreamOfResults},
@@ -1103,47 +1103,65 @@ impl SubstrateClient for SubxtClient {
 			.unwrap_or(false)
 	}
 
-	async fn subscribe_blocks<F, Fut>(
+	async fn subscribe_blocks(
 		&self,
 		subscription_type: SubscriptionType,
-		callback: F,
-	) -> Result<(), ClientError>
-	where
-		F: Fn(SubxtBlockInfo) -> Fut + Send + Sync,
-		Fut: Future<Output = Result<(), ClientError>> + Send,
-	{
+	) -> Result<tokio::sync::mpsc::Receiver<SubxtBlockInfo>, ClientError> {
 		let mut block_stream = match subscription_type {
 			SubscriptionType::BestBlocks => self.api.stream_best_blocks().await,
 			SubscriptionType::FinalizedBlocks => self.api.stream_blocks().await,
 		}?;
 
-		while let Some(block) = block_stream.next().await {
-			let block = match block {
-				Ok(b) => b,
-				Err(err) => {
-					let err = subxt::Error::from(err);
-					if err.is_disconnected_will_reconnect() {
-						log::warn!(
+		let (tx, rx) = tokio::sync::mpsc::channel(crate::client::NOTIFIER_CAPACITY);
+		tokio::spawn(async move {
+			while let Some(block) = block_stream.next().await {
+				let block = match block {
+					Ok(b) => b,
+					Err(err) => {
+						let err = subxt::Error::from(err);
+						if err.is_disconnected_will_reconnect() {
+							log::warn!(
+								target: crate::LOG_TARGET,
+								"RPC connection lost ({subscription_type:?}): {err:?}"
+							);
+							continue;
+						}
+						log::error!(
 							target: crate::LOG_TARGET,
-							"RPC connection lost ({subscription_type:?}): {err:?}"
+							"block subscription failed ({subscription_type:?}): {err:?}"
+						);
+						break;
+					},
+				};
+
+				let block = match block.at().await {
+					Ok(b) => b,
+					Err(err) => {
+						log::error!(
+							target: crate::LOG_TARGET,
+							"failed to resolve block ({subscription_type:?}): {err:?}"
 						);
 						continue;
-					}
-					return Err(err.into());
-				},
-			};
+					},
+				};
+				let info = match block_info_from_subxt(&block).await {
+					Ok(info) => info,
+					Err(err) => {
+						log::error!(
+							target: crate::LOG_TARGET,
+							"failed to build block info ({subscription_type:?}): {err:?}"
+						);
+						continue;
+					},
+				};
 
-			let block = block.at().await?;
-			let info = block_info_from_subxt(&block).await?;
-
-			if let Err(err) = callback(info).await {
-				log::error!(
-					target: crate::LOG_TARGET,
-					"block callback failed ({subscription_type:?}): {err:?}"
-				);
+				if tx.send(info).await.is_err() {
+					break;
+				}
 			}
-		}
-		Ok(())
+		});
+
+		Ok(rx)
 	}
 
 	async fn signed_block(
